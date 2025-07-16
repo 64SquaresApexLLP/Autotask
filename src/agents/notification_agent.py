@@ -91,7 +91,58 @@ class NotificationAgent:
         except Exception as e:
             logger.error(f"Failed to send confirmation email to {user_email}: {str(e)}")
             return False
-    
+
+    def send_technician_assignment(self, technician_email: str, ticket_data: Dict, ticket_number: str) -> bool:
+        """
+        Send a ticket assignment notification to the technician.
+        
+        Args:
+            technician_email (str): Technician's email address
+            ticket_data (dict): Ticket information
+            ticket_number (str): Generated ticket number
+            
+        Returns:
+            bool: True if email sent successfully, False otherwise
+        """
+        if not self.enabled:
+            logger.warning("Email notifications are disabled due to missing SMTP configuration")
+            return False
+            
+        if not technician_email or not technician_email.strip():
+            logger.warning("No technician email provided for notification")
+            return False
+            
+        try:
+            # Create email message
+            msg = MIMEMultipart('alternative')
+            msg['Subject'] = f"New Ticket Assignment - #{ticket_number}"
+            msg['From'] = f"{self.from_name} <{self.from_email}>"
+            msg['To'] = technician_email
+            
+            # Create email content
+            html_content = self._create_assignment_email_html(ticket_data, ticket_number)
+            text_content = self._create_assignment_email_text(ticket_data, ticket_number)
+            
+            # Attach both text and HTML versions
+            text_part = MIMEText(text_content, 'plain')
+            html_part = MIMEText(html_content, 'html')
+            
+            msg.attach(text_part)
+            msg.attach(html_part)
+            
+            # Send email
+            with smtplib.SMTP(self.smtp_server, self.smtp_port) as server:
+                server.starttls()
+                server.login(self.smtp_username, self.smtp_password)
+                server.send_message(msg)
+                
+            logger.info(f"Assignment email sent successfully to {technician_email} for ticket #{ticket_number}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to send assignment email to {technician_email}: {str(e)}")
+            return False
+
     def _create_confirmation_email_html(self, ticket_data: Dict, ticket_number: str) -> str:
         """
         Create HTML version of the confirmation email.
@@ -171,7 +222,7 @@ class NotificationAgent:
         </html>
         """
         return html_content
-    
+
     def _create_confirmation_email_text(self, ticket_data: Dict, ticket_number: str) -> str:
         """
         Create plain text version of the confirmation email.
@@ -219,5 +270,139 @@ Phone: {os.getenv('SUPPORT_PHONE', '9723100860')}
 ---
 This is an automated message from TeamLogic Support System.
 Please do not reply to this email. For assistance, contact our support team.
+        """
+        return text_content.strip()
+
+    def _create_assignment_email_html(self, ticket_data: Dict, ticket_number: str) -> str:
+        """
+        Create HTML version of the technician assignment email.
+        """
+        classified_data = ticket_data.get('classified_data', {})
+        resolution_note = ticket_data.get('resolution_note', 'No resolution note available')
+        
+        # Get classification labels
+        issue_type = classified_data.get('ISSUETYPE', {}).get('Label', 'N/A')
+        priority = classified_data.get('PRIORITY', {}).get('Label', 'N/A')
+        ticket_type = classified_data.get('TICKETTYPE', {}).get('Label', 'N/A')
+        
+        # Format resolution note for HTML
+        resolution_html = resolution_note.replace('\n', '<br>')
+        
+        html_content = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <style>
+                body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
+                .header {{ background-color: #e74c3c; color: white; padding: 20px; text-align: center; }}
+                .content {{ padding: 20px; }}
+                .ticket-info {{ background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0; }}
+                .priority-high {{ background-color: #ffebee; border-left: 4px solid #f44336; }}
+                .priority-medium {{ background-color: #fff3e0; border-left: 4px solid #ff9800; }}
+                .priority-low {{ background-color: #e8f5e8; border-left: 4px solid #4caf50; }}
+                .footer {{ background-color: #f8f9fa; padding: 15px; text-align: center; font-size: 12px; color: #666; }}
+                .ticket-number {{ font-size: 24px; font-weight: bold; color: #fff; }}
+                .description {{ background-color: #f5f5f5; padding: 15px; border-radius: 5px; margin: 10px 0; }}
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                <h1>🎫 New Ticket Assignment</h1>
+                <div class="ticket-number">#{ticket_number}</div>
+            </div>
+            
+            <div class="content">
+                <h2>A new ticket has been assigned to you!</h2>
+                
+                <div class="ticket-info priority-{priority.lower()}">
+                    <h3>Ticket Details</h3>
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <tr><td style="padding: 5px; font-weight: bold;">Ticket Number:</td><td style="padding: 5px;">#{ticket_number}</td></tr>
+                        <tr><td style="padding: 5px; font-weight: bold;">Title:</td><td style="padding: 5px;">{ticket_data.get('title', 'N/A')}</td></tr>
+                        <tr><td style="padding: 5px; font-weight: bold;">Customer:</td><td style="padding: 5px;">{ticket_data.get('name', 'N/A')}</td></tr>
+                        <tr><td style="padding: 5px; font-weight: bold;">Customer Email:</td><td style="padding: 5px;">{ticket_data.get('email', 'N/A')}</td></tr>
+                        <tr><td style="padding: 5px; font-weight: bold;">Date Created:</td><td style="padding: 5px;">{ticket_data.get('date', 'N/A')} {ticket_data.get('time', 'N/A')}</td></tr>
+                        <tr><td style="padding: 5px; font-weight: bold;">Due Date:</td><td style="padding: 5px;">{ticket_data.get('due_date', 'N/A')}</td></tr>
+                        <tr><td style="padding: 5px; font-weight: bold;">Priority:</td><td style="padding: 5px; color: #e74c3c; font-weight: bold;">{priority}</td></tr>
+                        <tr><td style="padding: 5px; font-weight: bold;">Issue Type:</td><td style="padding: 5px;">{issue_type}</td></tr>
+                        <tr><td style="padding: 5px; font-weight: bold;">Ticket Type:</td><td style="padding: 5px;">{ticket_type}</td></tr>
+                    </table>
+                </div>
+                
+                <div class="description">
+                    <h3>📝 Issue Description</h3>
+                    <p>{ticket_data.get('description', 'No description provided')}</p>
+                </div>
+                
+                <div class="description">
+                    <h3>🔧 AI Suggested Resolution</h3>
+                    <p>{resolution_html}</p>
+                </div>
+                
+                <h3>⚡ Action Required</h3>
+                <ol>
+                    <li>Review the ticket details and AI suggestions above</li>
+                    <li>Contact the customer if additional information is needed</li>
+                    <li>Update ticket status as you work on the resolution</li>
+                    <li>Close the ticket once resolved with resolution notes</li>
+                </ol>
+                
+                <p><strong>Need help?</strong> Contact the support team lead or check the knowledge base.</p>
+            </div>
+            
+            <div class="footer">
+                <p>This is an automated assignment from TeamLogic Support System.<br>
+                Please acknowledge receipt and begin working on this ticket.</p>
+            </div>
+        </body>
+        </html>
+        """
+        return html_content
+
+    def _create_assignment_email_text(self, ticket_data: Dict, ticket_number: str) -> str:
+        """
+        Create plain text version of the technician assignment email.
+        """
+        classified_data = ticket_data.get('classified_data', {})
+        resolution_note = ticket_data.get('resolution_note', 'No resolution note available')
+        
+        # Get classification labels
+        issue_type = classified_data.get('ISSUETYPE', {}).get('Label', 'N/A')
+        priority = classified_data.get('PRIORITY', {}).get('Label', 'N/A')
+        ticket_type = classified_data.get('TICKETTYPE', {}).get('Label', 'N/A')
+        
+        text_content = f"""
+NEW TICKET ASSIGNMENT - #{ticket_number}
+
+A new ticket has been assigned to you!
+
+TICKET DETAILS:
+- Ticket Number: #{ticket_number}
+- Title: {ticket_data.get('title', 'N/A')}
+- Customer: {ticket_data.get('name', 'N/A')}
+- Customer Email: {ticket_data.get('email', 'N/A')}
+- Date Created: {ticket_data.get('date', 'N/A')} {ticket_data.get('time', 'N/A')}
+- Due Date: {ticket_data.get('due_date', 'N/A')}
+- Priority: {priority}
+- Issue Type: {issue_type}
+- Ticket Type: {ticket_type}
+
+ISSUE DESCRIPTION:
+{ticket_data.get('description', 'No description provided')}
+
+AI SUGGESTED RESOLUTION:
+{resolution_note}
+
+ACTION REQUIRED:
+1. Review the ticket details and AI suggestions above
+2. Contact the customer if additional information is needed
+3. Update ticket status as you work on the resolution
+4. Close the ticket once resolved with resolution notes
+
+Need help? Contact the support team lead or check the knowledge base.
+
+---
+This is an automated assignment from TeamLogic Support System.
+Please acknowledge receipt and begin working on this ticket.
         """
         return text_content.strip()
