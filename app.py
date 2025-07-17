@@ -1,6 +1,6 @@
 """
-Refactored TeamLogic-AutoTask Application
-Main entry point that orchestrates all modular components.
+TeamLogic-AutoTask Application
+Main entry point - now modular and streamlined.
 """
 
 import warnings
@@ -14,21 +14,25 @@ import plotly.express as px
 from datetime import datetime, timedelta, date
 from collections import Counter
 from typing import List, Dict
+import threading
+import time
+import schedule
+import pytz
+import re
 import imaplib
 import email
 from email.header import decode_header
 from email.utils import parsedate_to_datetime, parseaddr
-import pytz
-import re
-import threading
-import time
-import schedule
 
-# Import modular components
+# Core imports
+from login import login_page
 from config import *
+from src.database.ticket_db import TicketDB
+from src.database.snowflake_db import SnowflakeConnection
 from src.agents import IntakeClassificationAgent
 from src.data import DataManager
-from src.ui import apply_custom_css, create_sidebar, format_time_elapsed, format_date_display, get_duration_icon
+from src.ui import apply_custom_css, format_time_elapsed, format_date_display, get_duration_icon
+from src.core import EmailProcessor, TicketHandlers, PageControllers
 
 # Email integration config (based on test.py)
 EMAIL_ACCOUNT = 'rohankul2017@gmail.com'
@@ -69,7 +73,7 @@ def validate_email(email_address: str) -> bool:
     return re.match(email_pattern, email_address.strip()) is not None
 
 @st.cache_resource
-def get_agent(account, user, password, warehouse, database, schema, role, passcode, data_ref):
+def get_agent(account, user, password, warehouse, database, schema, role, passcode, data_ref, _db_connection=None):
     """Initializes and returns the IntakeClassificationAgent."""
     try:
         agent = IntakeClassificationAgent(
@@ -81,9 +85,10 @@ def get_agent(account, user, password, warehouse, database, schema, role, passco
             sf_schema=schema,
             sf_role=role,
             sf_passcode=passcode,
-            data_ref_file=data_ref
+            data_ref_file=data_ref,
+            db_connection=_db_connection
         )
-        if not agent.conn:
+        if not agent.db_connection or not agent.db_connection.conn:
             st.error("Failed to establish Snowflake connection. Double-check your credentials and network access.")
             return None
         return agent
@@ -92,12 +97,7 @@ def get_agent(account, user, password, warehouse, database, schema, role, passco
         st.exception(e)
         return None
 
-def connect_email():
-    """Connect to email server using IMAP."""
-    mail = imaplib.IMAP4_SSL(IMAP_SERVER)
-    mail.login(EMAIL_ACCOUNT, EMAIL_PASSWORD)
-    mail.select(FOLDER)
-    return mail
+# Email processing now handled by EmailProcessor class
 
 def should_process_as_ticket(msg):
     """Determine if an email should be processed as a support ticket."""
@@ -181,115 +181,13 @@ def should_process_as_ticket(msg):
         return True
 
 def fetch_and_process_emails(agent):
-    """Fetch and process emails from last 5 minutes only, create tickets, and return a summary."""
-    processed = []
+    """Fetch and process emails using the modular EmailProcessor."""
+    email_processor = EmailProcessor(EMAIL_ACCOUNT, EMAIL_PASSWORD, IMAP_SERVER)
+    data_manager = DataManager(DATA_REF_FILE, KNOWLEDGEBASE_FILE)
+    return email_processor.process_recent_emails(agent, data_manager, RECENT_MINUTES)
 
-    # Check if email credentials are configured
-    if not EMAIL_PASSWORD:
-        return "❌ Email password not configured. Please set SUPPORT_EMAIL_PASSWORD in environment variables."
 
-    try:
-        print("🔍 Connecting to email server...")
-        mail = connect_email()
 
-        # Search for very recent emails (last 5 minutes) - both seen and unseen for testing
-        from datetime import datetime, timedelta
-        cutoff_time = datetime.now() - timedelta(minutes=RECENT_MINUTES)
-        cutoff_date = cutoff_time.strftime("%d-%b-%Y")
-
-        print(f"📧 Fetching emails from last {RECENT_MINUTES} minutes (since {cutoff_time.strftime('%H:%M')})...")
-
-        # Get all recent emails (both seen and unseen) for better testing
-        # In production, you might want to use only UNSEEN
-        status, messages = mail.search(None, f'(SINCE {cutoff_date})')
-        email_ids = messages[0].split()
-
-        if not email_ids:
-            print(f"✅ No emails found since {cutoff_date}.")
-            mail.logout()
-            return processed
-
-        # Initialize image processor quietly
-        try:
-            from src.processors import ImageProcessor
-            image_processor = ImageProcessor()
-        except ImportError:
-            image_processor = None
-
-        # Filter emails by actual receive time (last 5 minutes)
-        recent_email_ids = []
-        cutoff_time = datetime.now() - timedelta(minutes=RECENT_MINUTES)
-
-        for email_id in reversed(email_ids):  # Start with most recent
-            try:
-                # Get email date without processing the full message
-                status, msg_data = mail.fetch(email_id, "(RFC822)")
-                for response_part in msg_data:
-                    if isinstance(response_part, tuple):
-                        msg = email.message_from_bytes(response_part[1])
-                        email_date = msg.get("Date")
-
-                        if email_date:
-                            try:
-                                received_dt = parsedate_to_datetime(email_date)
-                                # Convert to local timezone for comparison
-                                if received_dt.tzinfo is None:
-                                    received_dt = received_dt.replace(tzinfo=IST)
-                                else:
-                                    received_dt = received_dt.astimezone(IST)
-
-                                # Only include emails from last 5 minutes
-                                if received_dt >= cutoff_time.replace(tzinfo=IST):
-                                    recent_email_ids.append((email_id, msg, received_dt))
-                            except Exception:
-                                # If we can't parse date, include it to be safe
-                                recent_email_ids.append((email_id, msg, None))
-                        break
-            except Exception:
-                continue
-
-        if not recent_email_ids:
-            mail.logout()
-            return processed
-
-        print(f"📧 Processing {len(recent_email_ids)} recent emails...")
-
-        for email_id, msg, received_dt in recent_email_ids:
-            try:
-                # Quick filter: Only process emails that look like support tickets
-                if should_process_as_ticket(msg):
-                    # Process email with or without images
-                    email_result = process_email_with_images(msg, agent, image_processor)
-
-                    if email_result:
-                        # Add timestamp info
-                        if received_dt:
-                            email_result['received_time'] = received_dt.strftime('%H:%M:%S')
-                        processed.append(email_result)
-                        print(f"✅ Processed: {email_result.get('subject', 'No subject')}")
-
-                # Check if email was already seen before marking
-                flags_status, flags_data = mail.fetch(email_id, "(FLAGS)")
-                flags = flags_data[0].decode() if flags_data and flags_data[0] else ""
-                was_unseen = "\\Seen" not in flags
-
-                # Only mark as seen if it was previously unseen
-                if was_unseen:
-                    mail.store(email_id, '+FLAGS', '\\Seen')
-
-            except Exception:
-                continue
-
-        mail.logout()
-        if processed:
-            print(f"✅ Completed processing {len(processed)} emails")
-
-    except Exception as e:
-        error_msg = f"❌ Email processing error: {e}"
-        print(error_msg)
-        return error_msg
-
-    return processed
 
 def log_email_status(level, message):
     """Log email processing status"""
@@ -596,333 +494,9 @@ def extract_due_date_nlp(text, received_dt):
     fallback = received_dt + timedelta(hours=DEFAULT_DUE_OFFSET_HOURS)
     return fallback.strftime('%Y-%m-%d')
 
-def main_page(agent, data_manager):
-    """Main page with ticket submission form and quick stats using cached knowledgebase."""
-    st.title(PAGE_TITLE)
-    st.markdown("""
-    <div class="card" style="background-color: var(--accent);">
-    Submit a new support ticket and let our AI agent automatically classify it for faster resolution.
-    </div>
-    """, unsafe_allow_html=True)
+# Note: main_page function moved to PageControllers class
 
-    # --- Quick Stats using cached knowledgebase ---
-    kb_data = load_kb_data()
-    total_tickets = len(kb_data)
-    st.markdown(f"**Total Tickets:** {total_tickets}")
-    # Optionally, show a preview of the most recent ticket
-    if kb_data:
-        last_ticket = kb_data[-1]['new_ticket']
-        st.markdown(f"**Most Recent Ticket:** {last_ticket.get('title', 'N/A')} ({last_ticket.get('date', 'N/A')} {last_ticket.get('time', 'N/A')})")
-
-    with st.container():
-        st.subheader("📝 New Ticket Submission")
-        with st.form("new_ticket_form", clear_on_submit=True):
-            col1, col2 = st.columns([1, 1], gap="large")
-            with col1:
-                st.markdown("### Basic Information")
-                ticket_name = st.text_input("Your Name*", placeholder="e.g., Jane Doe")
-                ticket_title = st.text_input("Ticket Title*", placeholder="e.g., Network drive inaccessible")
-                user_email = st.text_input("Your Email (Optional)", placeholder="e.g., jane.doe@company.com", help="Provide your email to receive a confirmation with resolution steps")
-
-                # Real-time email validation feedback
-                if user_email and user_email.strip():
-                    if validate_email(user_email):
-                        st.success("✅ Valid email format")
-                    else:
-                        st.error("❌ Invalid email format")
-            with col2:
-                today = datetime.now().date()
-                due_date = st.date_input("Due Date", value=today + timedelta(days=7))
-                initial_priority = st.selectbox("Initial Priority*", options=PRIORITY_OPTIONS)
-
-            ticket_description = st.text_area(
-                "Description*",
-                placeholder="Please describe your issue in detail...",
-                height=150
-            )
-
-            submitted = st.form_submit_button("Submit Ticket", type="primary")
-
-            if submitted:
-                required_fields = {
-                    "Name": ticket_name,
-                    "Title": ticket_title,
-                    "Description": ticket_description,
-                    "Priority": initial_priority
-                }
-                missing_fields = [field for field, value in required_fields.items() if not value]
-
-                # Validate email format if provided
-                email_valid = validate_email(user_email)
-
-                if missing_fields:
-                    st.warning(f"⚠️ Please fill in all required fields: {', '.join(missing_fields)}")
-                elif not email_valid:
-                    st.error("⚠️ Please enter a valid email address or leave the email field empty.")
-                else:
-                    # Check if agent is properly initialized
-                    if agent is None:
-                        st.error("❌ Database connection failed. Cannot generate proper resolutions without historical data.")
-                        st.info("🔑 **Expired MFA Code** - Get a fresh 6-digit code from your authenticator app")
-                        st.info("🌐 **Network Issues** - Check your internet connection")
-                        st.info("🔐 **Invalid Credentials** - Verify username/password")
-                        st.warning("⚠️ **Resolution generation requires database access to historical tickets.**")
-                        st.info("💡 Please fix the connection issue and try again for proper resolution generation.")
-                        return
-                    else:
-                        with st.spinner("🔍 Analyzing your ticket..."):
-                            try:
-                                processed_ticket = agent.process_new_ticket(
-                                    ticket_name=ticket_name,
-                                    ticket_description=ticket_description,
-                                    ticket_title=ticket_title,
-                                    due_date=due_date.strftime("%Y-%m-%d"),
-                                    priority_initial=initial_priority,
-                                    user_email=user_email if user_email.strip() else None
-                                )
-
-                                if processed_ticket:
-                                    ticket_number = processed_ticket.get('ticket_number', 'N/A')
-                                    st.success(f"✅ Ticket #{ticket_number} processed, classified, and resolution generated successfully!")
-                                    if user_email and user_email.strip():
-                                        st.info(f"📧 A confirmation email with resolution steps has been sent to {user_email}")
-                                    classified_data = processed_ticket.get('classified_data', {})
-                                    extracted_metadata = processed_ticket.get('extracted_metadata', {})
-                                    resolution_note = processed_ticket.get('resolution_note', 'No resolution note generated')
-
-                                    # Display ticket summary
-                                    with st.expander("📋 Classified Ticket Summary", expanded=True):
-                                        cols = st.columns(4)
-                                        cols[0].metric("Ticket Number", f"#{ticket_number}")
-                                        cols[1].metric("Issue Type", classified_data.get('ISSUETYPE', {}).get('Label', 'N/A'))
-                                        cols[2].metric("Type", classified_data.get('TICKETTYPE', {}).get('Label', 'N/A'))
-                                        cols[3].metric("Priority", classified_data.get('PRIORITY', {}).get('Label', 'N/A'))
-
-                                        st.markdown(f"""
-                                        <div class="card">
-                                        <table style="width:100%">
-                                            <tr><td><strong>Ticket Title</strong></td><td>{processed_ticket.get('title', 'N/A')}</td></tr>
-                                            <tr><td><strong>Main Issue</strong></td><td>{extracted_metadata.get('main_issue', 'N/A')}</td></tr>
-                                            <tr><td><strong>Affected System</strong></td><td>{extracted_metadata.get('affected_system', 'N/A')}</td></tr>
-                                            <tr><td><strong>Urgency Level</strong></td><td>{extracted_metadata.get('urgency_level', 'N/A')}</td></tr>
-                                            <tr><td><strong>Error Messages</strong></td><td>{extracted_metadata.get('error_messages', 'N/A')}</td></tr>
-                                        </table>
-                                        </div>
-                                        """, unsafe_allow_html=True)
-
-                                    # Display full classification details
-                                    with st.expander("📊 Full Classification Details", expanded=False):
-                                        st.markdown("""
-                                        <div class="card">
-                                        <h4>Ticket Classification Details</h4>
-                                        """, unsafe_allow_html=True)
-
-                                        # Tabular display for classification fields
-                                        class_fields = [
-                                            ("ISSUETYPE", "Issue Type"),
-                                            ("SUBISSUETYPE", "Sub-Issue Type"),
-                                            ("TICKETCATEGORY", "Ticket Category"),
-                                            ("TICKETTYPE", "Ticket Type"),
-                                            ("STATUS", "Status"),
-                                            ("PRIORITY", "Priority")
-                                        ]
-                                        table_data = []
-                                        for field, label in class_fields:
-                                            val = classified_data.get(field, {})
-                                            table_data.append({
-                                                "Field": label,
-                                                "Label": val.get('Label', 'N/A')
-                                            })
-                                        df = pd.DataFrame(table_data)
-                                        st.table(df)
-                                        st.markdown(f"**Ticket Title:** {processed_ticket.get('title', 'N/A')}")
-                                        st.markdown(f"**Description:** {processed_ticket.get('description', 'N/A')}")
-                                        st.markdown("</div>", unsafe_allow_html=True)
-
-                                    # Display Resolution Note in a prominent section
-                                    with st.expander("🔧 Generated Resolution Note", expanded=True):
-                                        # Process the resolution note for HTML display
-                                        processed_note = resolution_note.replace('**', '<strong>').replace('</strong>', '</strong>').replace('\n', '<br>')
-                                        st.markdown(f"""
-                                        <div class="card" style="background-color: #1e4620; border-left: 4px solid #28a745;">
-                                        <h4 style="color: #d4edda; margin-bottom: 15px;">💡 Recommended Resolution</h4>
-                                        <div style="color: #d4edda; line-height: 1.6;">
-                                        {processed_note}
-                                        </div>
-                                        </div>
-                                        """, unsafe_allow_html=True)
-
-                                    # Assignment information
-                                    assignment_result = result.get('assignment_result', {})
-                                    assigned_technician = assignment_result.get('assigned_technician', 'IT Manager')
-                                    technician_email = assignment_result.get('technician_email', 'itmanager@company.com')
-
-                                    # Next steps
-                                    st.markdown(f"""
-                                    <div class="card" style="background-color: var(--accent);">
-                                    <h4>Next Steps</h4>
-                                    <ol>
-                                        <li>Your ticket <b>#{ticket_number}</b> has been assigned to <b>{assigned_technician}</b> from the <b>{classified_data.get('ISSUETYPE', {}).get('Label', 'N/A')}</b> team</li>
-                                        <li>Assigned technician contact: <b>{technician_email}</b></li>
-                                        <li>A resolution note has been automatically generated based on similar historical tickets</li>
-                                        <li>{'You have received a confirmation email with the resolution steps' if user_email and user_email.strip() else 'Provide your email next time to receive confirmation emails with resolution steps'}</li>
-                                        <li>The assigned technician will contact you within 2 business hours</li>
-                                        <li>Priority level: <b>{classified_data.get('PRIORITY', {}).get('Label', 'N/A')}</b> - Response time varies accordingly</li>
-                                        <li>Try the suggested resolution steps above before escalating</li>
-                                        <li>Reference your ticket using number <b>#{ticket_number}</b> for all future communications</li>
-                                    </ol>
-                                    </div>
-                                    """, unsafe_allow_html=True)
-                                else:
-                                    st.error("Failed to process the ticket. Please check the logs for details.")
-                            except Exception as e:
-                                st.error(f"An unexpected error occurred: {e}")
-
-    # About section
-    st.markdown("---")
-    st.markdown("""
-    <div class="card">
-    <h3>About This System</h3>
-    <p>This AI-powered intake, classification, assignment, and resolution system automatically:</p>
-    <ul>
-        <li>Extracts metadata from new tickets using AI</li>
-        <li>Classifies tickets into predefined categories</li>
-        <li>Assigns tickets to the most suitable technician based on skills and workload</li>
-        <li>Generates resolution notes based on similar historical tickets</li>
-        <li>Routes tickets to the appropriate support teams</li>
-        <li>Provides confidence-based resolution suggestions</li>
-        <li>Stores all data for continuous improvement</li>
-    </ul>
-    <p><strong>Workflow:</strong> Intake → Classification → Assignment → Resolution Generation</p>
-    </div>
-    """, unsafe_allow_html=True)
-
-    # --- Email-to-ticket integration section ---
-    with st.expander("📧 Email Processing with Image Analysis", expanded=False):
-        st.markdown("""
-        **Enhanced Email Processing Features:**
-        - 📎 **Image Attachment Processing**: Automatically extracts text and metadata from screenshots
-        - 🔍 **Error Detection**: Identifies error dialogs and technical issues in images
-        - 🏷️ **Smart Classification**: Uses image content for better ticket categorization
-        - ⚡ **Priority Assignment**: Higher priority for tickets with error screenshots
-        - ⚡ **Real-Time Processing**: Only processes emails from last 5 minutes
-        - 🎯 **Intelligent Filtering**: Skips newsletters, promotions, and non-support emails
-        """)
-
-        # Automatic Email Processing Section
-        st.markdown("### 🔄 Automatic Email Processing")
-
-        col1, col2, col3 = st.columns([2, 2, 2])
-
-        with col1:
-            if st.button("🚀 Start Auto Processing", type="primary"):
-                with st.spinner("Starting automatic email processing..."):
-                    result = start_automatic_email_processing(agent)
-                    if "✅" in result:
-                        st.success(result)
-                    else:
-                        st.error(result)
-
-        with col2:
-            if st.button("🛑 Stop Auto Processing"):
-                result = stop_automatic_email_processing()
-                if "✅" in result:
-                    st.success(result)
-                else:
-                    st.warning(result)
-
-        with col3:
-            if st.button("🔄 Refresh Status"):
-                st.rerun()
-
-        # Status Display
-        st.markdown("### 📊 Auto Processing Status")
-        status_col1, status_col2, status_col3, status_col4 = st.columns(4)
-
-        with status_col1:
-            status_icon = "🟢" if EMAIL_PROCESSING_STATUS["is_running"] else "🔴"
-            st.metric("Status", f"{status_icon} {'Running' if EMAIL_PROCESSING_STATUS['is_running'] else 'Stopped'}")
-
-        with status_col2:
-            st.metric("Total Processed", EMAIL_PROCESSING_STATUS["total_processed"])
-
-        with status_col3:
-            st.metric("Errors", EMAIL_PROCESSING_STATUS["error_count"])
-
-        with status_col4:
-            last_processed = EMAIL_PROCESSING_STATUS["last_processed"] or "Never"
-            if last_processed != "Never":
-                last_processed = last_processed.split(" ")[1]  # Show only time
-            st.metric("Last Processed", last_processed)
-
-        # Recent Activity Log
-        if EMAIL_PROCESSING_STATUS["recent_logs"]:
-            st.markdown("### 📝 Recent Activity")
-            for log in EMAIL_PROCESSING_STATUS["recent_logs"][-5:]:  # Show last 5 logs
-                level_icon = {"INFO": "ℹ️", "SUCCESS": "✅", "ERROR": "❌"}.get(log["level"], "📝")
-                st.text(f"{level_icon} [{log['timestamp'].split(' ')[1]}] {log['message']}")
-
-        # Recently Auto-Processed Emails
-        if 'auto_processed_emails' in st.session_state and st.session_state.auto_processed_emails:
-            st.markdown("### 📧 Recently Auto-Processed Emails")
-            recent_emails = st.session_state.auto_processed_emails[-10:]  # Show last 10
-
-            for i, email_info in enumerate(recent_emails):
-                with st.container():
-                    col1, col2, col3 = st.columns([3, 2, 1])
-                    with col1:
-                        st.write(f"**{email_info.get('subject', 'No subject')}**")
-                        st.write(f"From: {email_info.get('from', 'Unknown')}")
-                        if email_info.get('ticket_number'):
-                            st.write(f"🎫 Ticket: #{email_info.get('ticket_number')}")
-                    with col2:
-                        st.write(f"Due: {email_info.get('due_date', 'N/A')}")
-                        if email_info.get('has_images'):
-                            st.write(f"🖼️ {email_info.get('image_count', 0)} images")
-                    with col3:
-                        if email_info.get('has_images'):
-                            st.success("📎 Images")
-                        else:
-                            st.info("📝 Text")
-
-        st.markdown("---")
-
-        # Manual Processing Section
-        st.markdown("### 🔧 Manual Email Processing")
-        if st.button("📧 Process Emails Now (Manual)", type="secondary"):
-            with st.spinner("Checking support inbox and processing emails with image analysis..."):
-                results = fetch_and_process_emails(agent)
-                if isinstance(results, str):
-                    st.error(results)
-                elif results:
-                    st.success(f"✅ Processed {len(results)} new email(s) into tickets.")
-
-                    # Show detailed results
-                    for r in results:
-                        col1, col2, col3 = st.columns([3, 2, 1])
-                        with col1:
-                            st.write(f"**{r['subject']}**")
-                            st.write(f"From: {r['from']}")
-                            if r.get('ticket_number'):
-                                st.write(f"🎫 Ticket: #{r.get('ticket_number')}")
-                        with col2:
-                            st.write(f"Due: {r['due_date']}")
-                            if r.get('has_images'):
-                                st.write(f"🖼️ {r.get('image_count', 0)} images processed")
-                        with col3:
-                            if r.get('has_images'):
-                                st.success("📎 Images")
-                            else:
-                                st.info("📝 Text only")
-                else:
-                    st.info("No new support emails found.")
-
-@st.cache_data
-def load_kb_data():
-    if os.path.exists(KNOWLEDGEBASE_FILE):
-        with open(KNOWLEDGEBASE_FILE, 'r') as f:
-            return json.load(f)
-    return []
+# Note: Orphaned code from old main_page function removed
 
 def filter_tickets_by_duration(kb_data, duration, now):
     from datetime import timedelta
@@ -1086,6 +660,7 @@ def recent_tickets_page(data_manager):
             with col4:
                 preview_tickets = filter_tickets_by_date_range(kb_data, st.session_state.get('start_date', datetime.now().date()), st.session_state.get('end_date', datetime.now().date()))
                 st.metric("Tickets Found", len(preview_tickets))
+
         with tab3:
             st.markdown("### Select Specific Date")
             col1, col2, col3 = st.columns([2, 1, 1])
@@ -1531,27 +1106,46 @@ def resolutions_page():
             st.markdown("**Resolution Note:**")
             st.code(t.get('resolution_note', 'No resolution note generated'), language=None)
 
-# --- Update sidebar navigation ---
-def create_sidebar(data_manager):
+def create_user_sidebar(data_manager):
+    """Create sidebar for regular users."""
     with st.sidebar:
+        # User info and logout
+        user_info = st.session_state.get('user', {})
+        st.markdown(f"### Welcome, {user_info.get('name', 'User')}!")
+        st.caption(f"User ID: {user_info.get('id', 'N/A')}")
+
+        if st.button("🚪 Logout", key="user_logout"):
+            for key in ['user', 'technician', 'role', 'page']:
+                if key in st.session_state:
+                    del st.session_state[key]
+            st.rerun()
+
+        st.markdown("---")
         st.markdown("## Navigation")
-        nav_options = {
+
+        # User Dashboard navigation
+        user_pages = {
             "🏠 Home": "main",
-            "🕒 Recent Tickets": "recent_tickets",
-            "📊 Dashboard": "dashboard",
-            "📝 Resolutions": "resolutions"
+            "📋 My Tickets": "user_my_tickets",
+            "📊 Ticket Status": "user_ticket_status",
+            "❓ Help": "user_help"
         }
-        for option, page in nav_options.items():
-            if st.button(option, key=f"nav_{page}", help=page, use_container_width=True):
-                st.session_state.page = page
-                st.rerun()
+
         current_page = st.session_state.get('page', 'main')
+
+        for label, page_key in user_pages.items():
+            if st.button(label, key=f"nav_{page_key}", use_container_width=True):
+                st.session_state.page = page_key
+                st.rerun()
+
         st.markdown(f"""
         <div style="margin: 20px 0; padding: 10px; background-color: var(--accent); border-radius: 6px;">
         <small>Current page:</small><br>
         <strong>{current_page.replace('_', ' ').title()}</strong>
         </div>
         """, unsafe_allow_html=True)
+
+        st.markdown("---")
         st.markdown("### Quick Stats")
         try:
             if os.path.exists('Knowledgebase.json'):
@@ -1563,6 +1157,7 @@ def create_sidebar(data_manager):
         except:
             total_tickets = 0
         st.metric("Total Tickets", total_tickets)
+
         st.markdown("---")
         st.markdown("""
         <div style="padding: 10px;">
@@ -1572,6 +1167,89 @@ def create_sidebar(data_manager):
         ✉️ inquire@64-squares.com</p>
         </div>
         """, unsafe_allow_html=True)
+
+def create_technician_sidebar(data_manager):
+    """Create sidebar for technicians."""
+    with st.sidebar:
+        # Technician info and logout
+        tech_info = st.session_state.get('technician', {})
+        st.markdown(f"### Welcome, {tech_info.get('name', 'Technician')}!")
+        st.caption(f"Tech ID: {tech_info.get('id', 'N/A')}")
+
+        if st.button("🚪 Logout", key="tech_logout"):
+            for key in ['user', 'technician', 'role', 'page']:
+                if key in st.session_state:
+                    del st.session_state[key]
+            st.rerun()
+
+        st.markdown("---")
+        st.markdown("## Navigation")
+
+        # Technician Dashboard navigation
+        technician_pages = {
+            "🔧 Dashboard": "technician_dashboard",
+            "📋 My Tickets": "technician_my_tickets",
+            "🚨 Urgent Tickets": "technician_urgent_tickets",
+            "📊 Analytics": "technician_analytics",
+            "📋 All Tickets": "technician_all_tickets"
+        }
+
+        current_page = st.session_state.get('page', 'technician_dashboard')
+
+        for label, page_key in technician_pages.items():
+            if st.button(label, key=f"nav_{page_key}", use_container_width=True):
+                st.session_state.page = page_key
+                st.rerun()
+
+        st.markdown(f"""
+        <div style="margin: 20px 0; padding: 10px; background-color: var(--accent); border-radius: 6px;">
+        <small>Current page:</small><br>
+        <strong>{current_page.replace('_', ' ').title()}</strong>
+        </div>
+        """, unsafe_allow_html=True)
+
+        st.markdown("---")
+        st.markdown("### Quick Actions")
+        if st.button("🔄 Refresh Data", key="tech_refresh"):
+            st.rerun()
+
+        st.markdown("---")
+        st.markdown("### Today's Performance")
+        # Get technician's tickets for metrics
+        try:
+            if os.path.exists('Knowledgebase.json'):
+                with open('Knowledgebase.json', 'r') as f:
+                    kb_data = json.load(f)
+                tech_email = f"{tech_info.get('name', '').lower()}@company.com"  # Placeholder
+                my_tickets = [entry['new_ticket'] for entry in kb_data
+                            if entry['new_ticket'].get('assignment_result', {}).get('technician_email') == tech_email]
+                assigned_count = sum(1 for t in my_tickets if t.get('status', '').lower() in ['assigned', 'open'])
+                completed_count = sum(1 for t in my_tickets if t.get('status', '').lower() in ['resolved', 'closed'])
+                in_progress_count = sum(1 for t in my_tickets if t.get('status', '').lower() == 'in progress')
+                completion_rate = int((completed_count / len(my_tickets)) * 100) if my_tickets else 0
+            else:
+                assigned_count = completed_count = in_progress_count = completion_rate = 0
+        except:
+            assigned_count = completed_count = in_progress_count = completion_rate = 0
+
+        st.metric("Assigned", assigned_count)
+        st.metric("In Progress", in_progress_count)
+        st.metric("Completed", completed_count)
+        st.metric("Completion Rate", f"{completion_rate}%")
+
+@st.cache_resource
+def get_snowflake_conn():
+    conn = SnowflakeConnection(
+        sf_account=SF_ACCOUNT,
+        sf_user=SF_USER,
+        sf_password=SF_PASSWORD,
+        sf_warehouse=SF_WAREHOUSE,
+        sf_database=SF_DATABASE,
+        sf_schema=SF_SCHEMA,
+        sf_role=SF_ROLE,
+        sf_passcode=SF_PASSCODE
+    )
+    return conn
 
 # --- Main App Logic ---
 def main():
@@ -1587,29 +1265,90 @@ def main():
     # Apply custom CSS
     apply_custom_css()
 
+    # Check authentication status
+    if 'user' not in st.session_state and 'technician' not in st.session_state:
+        # Show login page if not authenticated
+        login_page()
+        return
+
     # Initialize data manager
     data_manager = DataManager(DATA_REF_FILE, KNOWLEDGEBASE_FILE)
 
+    # Use singleton Snowflake connection
+    snowflake_conn = get_snowflake_conn()
+    # Optionally, keep the connection alive
+    try:
+        snowflake_conn.conn.cursor().execute("SELECT 1")
+    except Exception as e:
+        st.warning(f"Snowflake keep-alive failed: {e}")
+
     # Initialize agent
-    agent = get_agent(SF_ACCOUNT, SF_USER, SF_PASSWORD, SF_WAREHOUSE, SF_DATABASE, SF_SCHEMA, SF_ROLE, SF_PASSCODE, DATA_REF_FILE)
+    agent = get_agent(SF_ACCOUNT, SF_USER, SF_PASSWORD, SF_WAREHOUSE, SF_DATABASE, SF_SCHEMA, SF_ROLE, SF_PASSCODE, DATA_REF_FILE, _db_connection=snowflake_conn)
 
-    # Initialize session state
-    if "page" not in st.session_state:
-        st.session_state.page = "main"
+    # Initialize DB (for TicketDB)
+    ticket_db = TicketDB(conn=snowflake_conn)
 
-    # Create sidebar
-    create_sidebar(data_manager)
+    # Determine user role and show appropriate interface
+    user_role = st.session_state.get('role', None)
 
-    # Route to appropriate page
-    if st.session_state.page == "main":
-        main_page(agent, data_manager)
-    elif st.session_state.page == "recent_tickets":
-        recent_tickets_page(data_manager)
-    elif st.session_state.page == "dashboard":
-        dashboard_page(data_manager)
-    elif st.session_state.page == "resolutions":
-        resolutions_page()
+    if user_role == 'user':
+        # User Dashboard Interface
+        show_user_dashboard(agent, data_manager, ticket_db)
+    elif user_role == 'technician':
+        # Technician Dashboard Interface
+        show_technician_dashboard(agent, data_manager, ticket_db)
+    else:
+        st.error("Invalid user role. Please log in again.")
+        if st.button("Logout"):
+            for key in ['user', 'technician', 'role']:
+                if key in st.session_state:
+                    del st.session_state[key]
+            st.rerun()
 
+def show_user_dashboard(agent, data_manager, ticket_db):
+    """Show user dashboard using modular PageControllers."""
+    PageControllers.show_user_dashboard(agent, data_manager, ticket_db)
+
+def show_technician_dashboard(agent, data_manager, ticket_db):
+    """Show technician dashboard using modular PageControllers."""
+    PageControllers.show_technician_dashboard(agent, data_manager, ticket_db)
+
+def technician_dashboard_all_tickets_page(ticket_db):
+    """Show all tickets from the database for the technician dashboard (admin/global view)."""
+    st.title("Technician Dashboard - All Tickets")
+    all_tickets = []
+    try:
+        # Try to fetch all tickets from the database using the existing connection
+        query = 'SELECT * FROM TEST_DB.PUBLIC.TICKETS'
+        all_tickets = ticket_db.conn.execute_query(query)
+    except Exception as e:
+        st.error(f"Error fetching tickets: {e}")
+
+    if all_tickets:
+        for t in all_tickets:
+            with st.expander(f"{t['TICKETNUMBER']} - {t['TITLE']}"):
+                st.write(f"Description: {t['DESCRIPTION']}")
+                st.write(f"Type: {t['TICKETTYPE']}")
+                st.write(f"Category: {t['TICKETCATEGORY']}")
+                st.write(f"Issue Type: {t['ISSUETYPE']}")
+                st.write(f"Sub-Issue Type: {t['SUBISSUETYPE']}")
+                st.write(f"Due: {t['DUEDATETIME']}")
+                st.write(f"Status: {t.get('STATUS', 'Open')}")
+                st.write(f"Assigned Technician: {t.get('TECHNICIANEMAIL', 'Unassigned')}")
+                # Status update
+                new_status = st.selectbox("Update Status", ["Assigned", "In Progress", "Resolved", "Closed"], key=f"status_{t['TICKETNUMBER']}")
+                if st.button("Update Status", key=f"update_{t['TICKETNUMBER']}"):
+                    ticket_db.update_ticket_status(t['TICKETNUMBER'], new_status)
+                    st.success(f"Status updated to {new_status}")
+                    st.rerun()
+                # Add note
+                note = st.text_area("Add Work Note", key=f"note_{t['TICKETNUMBER']}")
+                if st.button("Save Note", key=f"save_note_{t['TICKETNUMBER']}"):
+                    ticket_db.add_work_note(t['TICKETNUMBER'], note)
+                    st.success("Note added.")
+                    st.rerun()
+    else:
+        st.info("No tickets found.")
 
 if __name__ == "__main__":
     main()

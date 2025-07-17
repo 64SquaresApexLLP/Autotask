@@ -27,49 +27,29 @@ class IntakeClassificationAgent:
     This class orchestrates all the modular components to maintain the same functionality.
     """
 
-    def __init__(self, sf_account: str, sf_user: str, sf_password: str, sf_warehouse: str,
-                 sf_database: str, sf_schema: str, sf_role: str, sf_passcode: str,
-                 data_ref_file: str = 'data.txt'):
+    def __init__(self, sf_account: str = None, sf_user: str = None, sf_password: str = None, sf_warehouse: str = None,
+                 sf_database: str = None, sf_schema: str = None, sf_role: str = None, sf_passcode: str = None,
+                 data_ref_file: str = 'data.txt', db_connection=None):
         """
         Initializes the agent with Snowflake connection details and loads reference data.
-
-        Args:
-            sf_account (str): Snowflake account identifier.
-            sf_user (str): Snowflake username.
-            sf_password (str): Snowflake password.
-            sf_warehouse (str): Snowflake warehouse to use.
-            sf_database (str): Snowflake database to use.
-            sf_schema (str): Snowflake schema to use.
-            sf_role (str): Snowflake role to use.
-            sf_passcode (str): Snowflake MFA passcode (if applicable).
-            data_ref_file (str): Path to the data.txt file containing reference mappings.
+        If db_connection is provided, use it; otherwise, create a new one.
         """
-        # Initialize database connection
-        self.db_connection = SnowflakeConnection(
-            sf_account, sf_user, sf_password, sf_warehouse,
-            sf_database, sf_schema, sf_role, sf_passcode
-        )
-
-        # Initialize data manager
+        if db_connection is not None:
+            self.db_connection = db_connection
+        else:
+            self.db_connection = SnowflakeConnection(
+                sf_account, sf_user, sf_password, sf_warehouse,
+                sf_database, sf_schema, sf_role, sf_passcode
+            )
         self.data_manager = DataManager(data_ref_file)
-
-        # Initialize AI processor
         self.ai_processor = AIProcessor(self.db_connection, self.data_manager.reference_data)
-
-        # Initialize ticket processor
         self.ticket_processor = TicketProcessor(self.data_manager.reference_data)
-
-        # Initialize notification agent
         self.notification_agent = NotificationAgent()
-
-        # Initialize assignment agent with Google Calendar integration
         google_calendar_credentials_path = "credentials/google-calendar-credentials.json"
         self.assignment_agent = AssignmentAgentIntegration(
             self.db_connection,
             google_calendar_credentials_path=google_calendar_credentials_path
         )
-
-        # Expose connection and reference data for backward compatibility
         self.conn = self.db_connection.conn
         self.reference_data = self.data_manager.reference_data
 
@@ -143,10 +123,18 @@ class IntakeClassificationAgent:
 
     def find_similar_tickets(self, extracted_metadata: Dict) -> List[Dict]:
         """
-        Searches the Snowflake database for similar tickets based on extracted metadata.
+        Searches the Snowflake database for similar tickets using embedding similarity (Cortex AI_Similarity).
         """
-        search_conditions, params = self.ticket_processor.find_similar_tickets_conditions(extracted_metadata)
-        return self.db_connection.find_similar_tickets(search_conditions, params)
+        # Generate embedding for the incoming ticket using Cortex
+        title = extracted_metadata.get('main_issue', '') or ''
+        description = extracted_metadata.get('error_messages', '') or ''
+        ticket_text = f"{title} {description}"
+        embedding = self.db_connection.call_cortex_llm(f"Generate an embedding for: {ticket_text}", model='embedding-001', expect_json=True)
+        if not embedding:
+            print("Failed to generate embedding for ticket. Returning no similar tickets.")
+            return []
+        # Use the new embedding similarity search
+        return self.db_connection.find_similar_tickets_by_embedding(embedding, top_n=5)
 
     def classify_ticket(self, new_ticket_data: Dict, extracted_metadata: Dict,
                        similar_tickets: List[Dict], model: str = 'mixtral-8x7b') -> Optional[Dict]:
@@ -162,14 +150,11 @@ class IntakeClassificationAgent:
         """
         return self.ai_processor.generate_resolution_note(ticket_data, classified_data, extracted_metadata)
 
-    def save_to_knowledgebase(self, new_ticket_full_data: Dict, similar_tickets_metadata: List[Dict]):
-        """
-        Saves the new ticket's full data and similar tickets' metadata to Knowledgebase.json.
-        """
-        self.data_manager.save_to_knowledgebase(new_ticket_full_data, similar_tickets_metadata)
+    # Note: save_to_knowledgebase method removed - tickets are now saved directly to database
 
     def process_new_ticket(self, ticket_name: str, ticket_description: str, ticket_title: str,
                           due_date: str, priority_initial: str, user_email: Optional[str] = None,
+                          user_id: Optional[str] = None, phone_number: Optional[str] = None,
                           extract_model: str = 'llama3-8b', classify_model: str = 'mixtral-8x7b') -> Optional[Dict]:
         """
         Orchestrates the entire process for a new incoming ticket.
@@ -181,6 +166,8 @@ class IntakeClassificationAgent:
             due_date (str): Due date for the ticket (e.g., "YYYY-MM-DD").
             priority_initial (str): Initial priority set by the user (e.g., "Medium").
             user_email (str, optional): User's email address for notifications.
+            user_id (str, optional): User's unique identifier.
+            phone_number (str, optional): User's phone number.
             extract_model (str): Model to use for metadata extraction.
             classify_model (str): Model to use for classification.
 
@@ -244,6 +231,8 @@ class IntakeClassificationAgent:
             **new_ticket_raw,
             "ticket_number": ticket_number,
             "user_email": user_email if user_email and user_email.strip() else "",
+            "user_id": user_id if user_id and user_id.strip() else "",
+            "phone_number": phone_number if phone_number and phone_number.strip() else "",
             "extracted_metadata": extracted_metadata,
             "classified_data": classified_data,
             "resolution_note": resolution_note
@@ -266,26 +255,7 @@ class IntakeClassificationAgent:
                 "technician_email": "itmanager@company.com"
             }
 
-        # Prepare similar tickets for knowledge base
-        similar_tickets_for_kb = []
-        for ticket in similar_tickets:
-            kb_ticket = {k: v for k, v in ticket.items() if k in ['TITLE', 'DESCRIPTION', 'ISSUETYPE', 'SUBISSUETYPE', 'TICKETCATEGORY', 'TICKETTYPE', 'PRIORITY', 'STATUS']}
-
-            for field in ['ISSUETYPE', 'SUBISSUETYPE', 'TICKETCATEGORY', 'TICKETTYPE', 'PRIORITY', 'STATUS']:
-                if field in kb_ticket:
-                    ref_field_name = field.lower()
-                    if ref_field_name in self.reference_data and str(kb_ticket[field]) in self.reference_data[ref_field_name]:
-                        kb_ticket[field] = {
-                            "Value": kb_ticket[field],
-                            "Label": self.reference_data[ref_field_name][str(kb_ticket[field])]
-                        }
-                    else:
-                        kb_ticket[field] = {"Value": kb_ticket[field], "Label": "Unknown/N/A"}
-
-            similar_tickets_for_kb.append(kb_ticket)
-
-        # Save to knowledge base
-        self.save_to_knowledgebase(final_ticket_data, similar_tickets_for_kb)
+        # Note: Knowledgebase saving removed - tickets are now saved directly to database
 
         # Send notification email if user email is provided
         if user_email and user_email.strip():

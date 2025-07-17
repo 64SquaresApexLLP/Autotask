@@ -112,48 +112,7 @@ def apply_custom_css():
     """, unsafe_allow_html=True)
 
 
-def create_sidebar(data_manager: DataManager):
-    """Create the navigation sidebar."""
-    with st.sidebar:
-        st.markdown("## Navigation")
-
-        # Simple navigation buttons
-        if st.button("🏠 Home", key="nav_main", use_container_width=True):
-            st.session_state.page = "main"
-            st.rerun()
-
-        if st.button("🕒 Recent Tickets", key="nav_recent_tickets", use_container_width=True):
-            st.session_state.page = "recent_tickets"
-            st.rerun()
-
-        if st.button("📊 Dashboard", key="nav_dashboard", use_container_width=True):
-            st.session_state.page = "dashboard"
-            st.rerun()
-
-        # Show current page
-        current_page = st.session_state.get('page', 'main')
-        st.markdown(f"**Current:** {current_page.replace('_', ' ').title()}")
-
-        st.markdown("---")
-
-        # Quick Stats
-        st.markdown("### Quick Stats")
-        try:
-            if os.path.exists(KNOWLEDGEBASE_FILE):
-                with open(KNOWLEDGEBASE_FILE, 'r') as f:
-                    kb_data = json.load(f)
-                total_tickets = len(kb_data)
-            else:
-                total_tickets = 0
-        except:
-            total_tickets = 0
-        st.metric("Total Tickets", total_tickets)
-
-        # Contact Information
-        st.markdown("---")
-        st.markdown("### Need Help?")
-        st.markdown(f"📞 **Phone:** {SUPPORT_PHONE}")
-        st.markdown(f"✉️ **Email:** {SUPPORT_EMAIL}")
+# Sidebar functionality moved to app.py for role-based navigation
 
 
 def format_time_elapsed(created_at):

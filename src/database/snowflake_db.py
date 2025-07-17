@@ -160,23 +160,56 @@ class SnowflakeConnection:
 
         return json_str.strip()
 
-    def find_similar_tickets(self, search_conditions: List[str], params: List[str]) -> List[Dict]:
-        """
-        Searches for similar tickets based on provided conditions.
+    # def find_similar_tickets(self, search_conditions: List[str], params: List[str]) -> List[Dict]:
+    #     """
+    #     Searches for similar tickets based on provided conditions.
 
+    #     Args:
+    #         search_conditions (list): List of SQL WHERE conditions
+    #         params (list): List of parameters for the conditions
+
+    #     Returns:
+    #         list: List of similar tickets
+    #     """
+    #     where_clause = ""
+    #     if search_conditions:
+    #         where_clause = "WHERE " + " OR ".join(search_conditions)
+
+    #     query = f"""
+    #     SELECT
+    #         TITLE,
+    #         DESCRIPTION,
+    #         ISSUETYPE,
+    #         SUBISSUETYPE,
+    #         TICKETCATEGORY,
+    #         TICKETTYPE,
+    #         PRIORITY,
+    #         STATUS
+    #     FROM TEST_DB.PUBLIC.COMPANY_4130_DATA
+    #     {where_clause}
+    #     LIMIT 50;
+    #     """
+        print(f"Searching for similar tickets...")
+        return self.execute_query(query, tuple(params))
+
+    def find_similar_tickets_by_embedding(self, ticket_embedding: list, top_n: int = 5) -> List[Dict]:
+        """
+        Finds the most similar tickets using embedding similarity via Cortex AI_Similarity.
         Args:
-            search_conditions (list): List of SQL WHERE conditions
-            params (list): List of parameters for the conditions
-
+            ticket_embedding (list): The embedding vector for the incoming ticket
+            top_n (int): Number of top similar tickets to return
         Returns:
-            list: List of similar tickets
+            list: List of similar tickets with similarity scores
         """
-        where_clause = ""
-        if search_conditions:
-            where_clause = "WHERE " + " OR ".join(search_conditions)
+        if not self.conn:
+            print("Not connected to Snowflake. Please check connection.")
+            return []
 
-        query = f"""
+        # Convert embedding to string for SQL
+        embedding_str = str(ticket_embedding)
+        query = f'''
         SELECT
+            TICKET_ID,
             TITLE,
             DESCRIPTION,
             ISSUETYPE,
@@ -184,13 +217,16 @@ class SnowflakeConnection:
             TICKETCATEGORY,
             TICKETTYPE,
             PRIORITY,
-            STATUS
+            STATUS,
+            EMBEDDING,
+            SNOWFLAKE.CORTEX.AI_SIMILARITY(EMBEDDING, PARSE_JSON(%s)) AS SIMILARITY
         FROM TEST_DB.PUBLIC.COMPANY_4130_DATA
-        {where_clause}
-        LIMIT 50;
-        """
-        print(f"Searching for similar tickets...")
-        return self.execute_query(query, tuple(params))
+        WHERE EMBEDDING IS NOT NULL
+        ORDER BY SIMILARITY DESC
+        LIMIT {top_n};
+        '''
+        print(f"Searching for similar tickets using embedding similarity...")
+        return self.execute_query(query, (embedding_str,))
 
     def fetch_reference_tickets(self) -> pd.DataFrame:
         """

@@ -315,3 +315,15 @@ class DataManager:
                 continue
 
         return sorted(filtered_tickets, key=lambda x: x["created_at"], reverse=True)
+
+def load_kb_data():
+    from config import KNOWLEDGEBASE_FILE
+    if os.path.exists(KNOWLEDGEBASE_FILE):
+        with open(KNOWLEDGEBASE_FILE, 'r') as f:
+            return json.load(f)
+    return []
+
+def save_kb_data(kb_data):
+    from config import KNOWLEDGEBASE_FILE
+    with open(KNOWLEDGEBASE_FILE, 'w') as f:
+        json.dump(kb_data, f, indent=2)
