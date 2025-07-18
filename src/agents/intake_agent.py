@@ -46,6 +46,7 @@ class IntakeClassificationAgent:
         self.ticket_processor = TicketProcessor(self.data_manager.reference_data)
         self.notification_agent = NotificationAgent()
         google_calendar_credentials_path = "credentials/google-calendar-credentials.json"
+        # Check if credentials file exists, if not, assignment agent will work without calendar integration
         self.assignment_agent = AssignmentAgentIntegration(
             self.db_connection,
             google_calendar_credentials_path=google_calendar_credentials_path

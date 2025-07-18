@@ -17,7 +17,7 @@ SF_WAREHOUSE = os.getenv('SF_WAREHOUSE')
 SF_DATABASE = os.getenv('SF_DATABASE')
 SF_SCHEMA = os.getenv('SF_SCHEMA')
 SF_ROLE = os.getenv('SF_ROLE')
-SF_PASSCODE = os.getenv('SF_PASSCODE')
+SF_PASSCODE = os.getenv('SF_PASSCODE', '')  # MFA passcode - will be entered dynamically in app
 
 
 # File Paths

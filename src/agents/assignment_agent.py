@@ -159,6 +159,9 @@ class AssignmentAgentIntegration:
         try:
             if not os.path.exists(self.google_calendar_credentials_path):
                 logger.warning(f"Google Calendar credentials file not found: {self.google_calendar_credentials_path}")
+                logger.info("Calendar integration disabled. Technician availability will be assumed as available.")
+                logger.info("To enable calendar integration, place your Google Calendar service account credentials at:")
+                logger.info(f"  {self.google_calendar_credentials_path}")
                 return
 
             credentials = service_account.Credentials.from_service_account_file(
@@ -169,6 +172,7 @@ class AssignmentAgentIntegration:
             logger.info("Google Calendar service initialized successfully")
         except Exception as e:
             logger.error(f"Failed to initialize Google Calendar service: {str(e)}")
+            logger.info("Calendar integration disabled. Technician availability will be assumed as available.")
             self.calendar_service = None
 
     # ========================================

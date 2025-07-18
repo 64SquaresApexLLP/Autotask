@@ -1251,6 +1251,33 @@ def get_snowflake_conn():
     )
     return conn
 
+def show_mfa_reconnection_sidebar(snowflake_conn):
+    """Show MFA reconnection options in sidebar if connection failed."""
+    if not snowflake_conn or not snowflake_conn.is_connected():
+        with st.sidebar:
+            st.error("🔐 Snowflake Connection Issue")
+            st.write("**Common causes:**")
+            st.write("• Expired MFA code")
+            st.write("• Network connectivity")
+            st.write("• Invalid credentials")
+
+            with st.expander("🔄 Reconnect with new MFA code"):
+                new_passcode = st.text_input(
+                    "Enter fresh 6-digit MFA code:",
+                    max_chars=6,
+                    help="Get a new code from your authenticator app"
+                )
+                if st.button("Reconnect") and new_passcode:
+                    if len(new_passcode) == 6 and new_passcode.isdigit():
+                        with st.spinner("Reconnecting..."):
+                            if snowflake_conn.reconnect_with_new_passcode(new_passcode):
+                                st.success("✅ Reconnected successfully!")
+                                st.rerun()
+                            else:
+                                st.error("❌ Reconnection failed. Check your code and try again.")
+                    else:
+                        st.error("Please enter a valid 6-digit numeric code.")
+
 # --- Main App Logic ---
 def main():
     """Main application entry point."""
@@ -1276,11 +1303,16 @@ def main():
 
     # Use singleton Snowflake connection
     snowflake_conn = get_snowflake_conn()
-    # Optionally, keep the connection alive
-    try:
-        snowflake_conn.conn.cursor().execute("SELECT 1")
-    except Exception as e:
-        st.warning(f"Snowflake keep-alive failed: {e}")
+
+    # Show MFA reconnection sidebar if needed
+    show_mfa_reconnection_sidebar(snowflake_conn)
+
+    # Check connection health
+    if snowflake_conn and snowflake_conn.is_connected():
+        try:
+            snowflake_conn.conn.cursor().execute("SELECT 1")
+        except Exception as e:
+            st.warning(f"Snowflake keep-alive failed: {e}")
 
     # Initialize agent
     agent = get_agent(SF_ACCOUNT, SF_USER, SF_PASSWORD, SF_WAREHOUSE, SF_DATABASE, SF_SCHEMA, SF_ROLE, SF_PASSCODE, DATA_REF_FILE, _db_connection=snowflake_conn)

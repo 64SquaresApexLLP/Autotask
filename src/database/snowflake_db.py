@@ -46,20 +46,56 @@ class SnowflakeConnection:
     def _connect_to_snowflake(self):
         """Establishes a connection to Snowflake."""
         try:
-            self.conn = snowflake.connector.connect(
-                user=self.sf_user,
-                password=self.sf_password,
-                account=self.sf_account,
-                warehouse=self.sf_warehouse,
-                database=self.sf_database,
-                schema=self.sf_schema,
-                role=self.sf_role,
-                passcode=self.sf_passcode
-            )
+            # First try without MFA passcode for non-MFA accounts
+            connection_params = {
+                'user': self.sf_user,
+                'password': self.sf_password,
+                'account': self.sf_account,
+                'warehouse': self.sf_warehouse,
+                'database': self.sf_database,
+                'schema': self.sf_schema,
+                'role': self.sf_role
+            }
+
+            # Only add passcode if it's provided and not empty
+            if self.sf_passcode and self.sf_passcode.strip():
+                connection_params['passcode'] = self.sf_passcode
+
+            self.conn = snowflake.connector.connect(**connection_params)
             print("Successfully connected to Snowflake.")
         except Exception as e:
+            error_msg = str(e)
             print(f"Error connecting to Snowflake: {e}")
+
+            # Provide specific guidance for common MFA errors
+            if "TOTP Invalid" in error_msg or "Too many failed MFA login attempts" in error_msg:
+                print("MFA Error: Please check your authenticator app for a fresh 6-digit code.")
+                print("If you've exceeded attempts, wait a few minutes before trying again.")
+            elif "Failed to connect to DB" in error_msg:
+                print("Connection Error: Check your network connection and Snowflake account details.")
+
             self.conn = None
+
+    def reconnect_with_new_passcode(self, new_passcode: str):
+        """Reconnect to Snowflake with a new MFA passcode."""
+        self.sf_passcode = new_passcode
+        if self.conn:
+            try:
+                self.conn.close()
+            except:
+                pass
+        self._connect_to_snowflake()
+        return self.conn is not None
+
+    def is_connected(self) -> bool:
+        """Check if the connection is still active."""
+        if not self.conn:
+            return False
+        try:
+            self.conn.cursor().execute("SELECT 1")
+            return True
+        except:
+            return False
 
     def execute_query(self, query: str, params: Optional[tuple] = None) -> List[Dict]:
         """
