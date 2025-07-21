@@ -10,14 +10,13 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Snowflake Connection Configuration (loaded from .env)
+# Using SSO authentication with externalbrowser
 SF_ACCOUNT = os.getenv('SF_ACCOUNT')
 SF_USER = os.getenv('SF_USER')
-SF_PASSWORD = os.getenv('SF_PASSWORD')
 SF_WAREHOUSE = os.getenv('SF_WAREHOUSE')
 SF_DATABASE = os.getenv('SF_DATABASE')
 SF_SCHEMA = os.getenv('SF_SCHEMA')
 SF_ROLE = os.getenv('SF_ROLE')
-SF_PASSCODE = os.getenv('SF_PASSCODE', '')  # MFA passcode - will be entered dynamically in app
 
 
 # File Paths

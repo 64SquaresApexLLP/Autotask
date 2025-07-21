@@ -15,70 +15,61 @@ class SnowflakeConnection:
     Manages Snowflake database connections and operations.
     """
 
-    def __init__(self, sf_account: str, sf_user: str, sf_password: str,
-                 sf_warehouse: str, sf_database: str, sf_schema: str,
-                 sf_role: str, sf_passcode: str):
+    def __init__(self, sf_account: str, sf_user: str, sf_warehouse: str,
+                 sf_database: str, sf_schema: str, sf_role: str):
         """
-        Initialize Snowflake connection parameters.
+        Initialize Snowflake connection parameters for SSO authentication.
 
         Args:
             sf_account (str): Snowflake account identifier
             sf_user (str): Snowflake username
-            sf_password (str): Snowflake password
             sf_warehouse (str): Snowflake warehouse to use
             sf_database (str): Snowflake database to use
             sf_schema (str): Snowflake schema to use
             sf_role (str): Snowflake role to use
-            sf_passcode (str): Snowflake MFA passcode
         """
         self.sf_account = sf_account
         self.sf_user = sf_user
-        self.sf_password = sf_password
         self.sf_warehouse = sf_warehouse
         self.sf_database = sf_database
         self.sf_schema = sf_schema
         self.sf_role = sf_role
-        self.sf_passcode = sf_passcode
         self.conn = None
 
         self._connect_to_snowflake()
 
     def _connect_to_snowflake(self):
-        """Establishes a connection to Snowflake."""
+        """Establishes a connection to Snowflake using SSO (externalbrowser) authentication."""
         try:
-            # First try without MFA passcode for non-MFA accounts
+            # Use SSO authentication with externalbrowser
             connection_params = {
                 'user': self.sf_user,
-                'password': self.sf_password,
                 'account': self.sf_account,
+                'authenticator': 'externalbrowser',
                 'warehouse': self.sf_warehouse,
                 'database': self.sf_database,
                 'schema': self.sf_schema,
                 'role': self.sf_role
             }
 
-            # Only add passcode if it's provided and not empty
-            if self.sf_passcode and self.sf_passcode.strip():
-                connection_params['passcode'] = self.sf_passcode
-
             self.conn = snowflake.connector.connect(**connection_params)
-            print("Successfully connected to Snowflake.")
+            print("Successfully connected to Snowflake using SSO.")
         except Exception as e:
             error_msg = str(e)
             print(f"Error connecting to Snowflake: {e}")
 
-            # Provide specific guidance for common MFA errors
-            if "TOTP Invalid" in error_msg or "Too many failed MFA login attempts" in error_msg:
-                print("MFA Error: Please check your authenticator app for a fresh 6-digit code.")
-                print("If you've exceeded attempts, wait a few minutes before trying again.")
-            elif "Failed to connect to DB" in error_msg:
+            # Provide specific guidance for common SSO errors
+            if "Failed to connect to DB" in error_msg:
                 print("Connection Error: Check your network connection and Snowflake account details.")
+            elif "Authentication failed" in error_msg:
+                print("SSO Authentication Error: Please ensure you have proper SSO access configured.")
+            elif "Browser" in error_msg:
+                print("Browser Error: Please ensure your browser can open for SSO authentication.")
 
             self.conn = None
 
-    def reconnect_with_new_passcode(self, new_passcode: str):
-        """Reconnect to Snowflake with a new MFA passcode."""
-        self.sf_passcode = new_passcode
+    def reconnect(self):
+        """Reconnect to Snowflake using SSO authentication."""
         if self.conn:
             try:
                 self.conn.close()

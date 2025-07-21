@@ -27,19 +27,20 @@ class IntakeClassificationAgent:
     This class orchestrates all the modular components to maintain the same functionality.
     """
 
-    def __init__(self, sf_account: str = None, sf_user: str = None, sf_password: str = None, sf_warehouse: str = None,
-                 sf_database: str = None, sf_schema: str = None, sf_role: str = None, sf_passcode: str = None,
+    def __init__(self, sf_account: str = None, sf_user: str = None, sf_warehouse: str = None,
+                 sf_database: str = None, sf_schema: str = None, sf_role: str = None,
                  data_ref_file: str = 'data.txt', db_connection=None):
         """
         Initializes the agent with Snowflake connection details and loads reference data.
         If db_connection is provided, use it; otherwise, create a new one.
+        Uses SSO authentication for Snowflake connection.
         """
         if db_connection is not None:
             self.db_connection = db_connection
         else:
             self.db_connection = SnowflakeConnection(
-                sf_account, sf_user, sf_password, sf_warehouse,
-                sf_database, sf_schema, sf_role, sf_passcode
+                sf_account, sf_user, sf_warehouse,
+                sf_database, sf_schema, sf_role
             )
         self.data_manager = DataManager(data_ref_file)
         self.ai_processor = AIProcessor(self.db_connection, self.data_manager.reference_data)

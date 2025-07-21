@@ -73,23 +73,21 @@ def validate_email(email_address: str) -> bool:
     return re.match(email_pattern, email_address.strip()) is not None
 
 @st.cache_resource
-def get_agent(account, user, password, warehouse, database, schema, role, passcode, data_ref, _db_connection=None):
-    """Initializes and returns the IntakeClassificationAgent."""
+def get_agent(account, user, warehouse, database, schema, role, data_ref, _db_connection=None):
+    """Initializes and returns the IntakeClassificationAgent with SSO authentication."""
     try:
         agent = IntakeClassificationAgent(
             sf_account=account,
             sf_user=user,
-            sf_password=password,
             sf_warehouse=warehouse,
             sf_database=database,
             sf_schema=schema,
             sf_role=role,
-            sf_passcode=passcode,
             data_ref_file=data_ref,
             db_connection=_db_connection
         )
         if not agent.db_connection or not agent.db_connection.conn:
-            st.error("Failed to establish Snowflake connection. Double-check your credentials and network access.")
+            st.error("Failed to establish Snowflake connection. Please ensure SSO is properly configured and you have network access.")
             return None
         return agent
     except Exception as e:
@@ -1242,41 +1240,32 @@ def get_snowflake_conn():
     conn = SnowflakeConnection(
         sf_account=SF_ACCOUNT,
         sf_user=SF_USER,
-        sf_password=SF_PASSWORD,
         sf_warehouse=SF_WAREHOUSE,
         sf_database=SF_DATABASE,
         sf_schema=SF_SCHEMA,
-        sf_role=SF_ROLE,
-        sf_passcode=SF_PASSCODE
+        sf_role=SF_ROLE
     )
     return conn
 
-def show_mfa_reconnection_sidebar(snowflake_conn):
-    """Show MFA reconnection options in sidebar if connection failed."""
+def show_sso_reconnection_sidebar(snowflake_conn):
+    """Show SSO reconnection options in sidebar if connection failed."""
     if not snowflake_conn or not snowflake_conn.is_connected():
         with st.sidebar:
             st.error("🔐 Snowflake Connection Issue")
             st.write("**Common causes:**")
-            st.write("• Expired MFA code")
+            st.write("• SSO session expired")
             st.write("• Network connectivity")
             st.write("• Invalid credentials")
 
-            with st.expander("🔄 Reconnect with new MFA code"):
-                new_passcode = st.text_input(
-                    "Enter fresh 6-digit MFA code:",
-                    max_chars=6,
-                    help="Get a new code from your authenticator app"
-                )
-                if st.button("Reconnect") and new_passcode:
-                    if len(new_passcode) == 6 and new_passcode.isdigit():
-                        with st.spinner("Reconnecting..."):
-                            if snowflake_conn.reconnect_with_new_passcode(new_passcode):
-                                st.success("✅ Reconnected successfully!")
-                                st.rerun()
-                            else:
-                                st.error("❌ Reconnection failed. Check your code and try again.")
-                    else:
-                        st.error("Please enter a valid 6-digit numeric code.")
+            with st.expander("🔄 Reconnect with SSO"):
+                st.write("Click the button below to reconnect using SSO authentication.")
+                if st.button("Reconnect with SSO"):
+                    with st.spinner("Reconnecting..."):
+                        if snowflake_conn.reconnect():
+                            st.success("✅ Reconnected successfully!")
+                            st.rerun()
+                        else:
+                            st.error("❌ Reconnection failed. Please check your SSO access and try again.")
 
 # --- Main App Logic ---
 def main():
@@ -1304,8 +1293,8 @@ def main():
     # Use singleton Snowflake connection
     snowflake_conn = get_snowflake_conn()
 
-    # Show MFA reconnection sidebar if needed
-    show_mfa_reconnection_sidebar(snowflake_conn)
+    # Show SSO reconnection sidebar if needed
+    show_sso_reconnection_sidebar(snowflake_conn)
 
     # Check connection health
     if snowflake_conn and snowflake_conn.is_connected():
@@ -1315,7 +1304,7 @@ def main():
             st.warning(f"Snowflake keep-alive failed: {e}")
 
     # Initialize agent
-    agent = get_agent(SF_ACCOUNT, SF_USER, SF_PASSWORD, SF_WAREHOUSE, SF_DATABASE, SF_SCHEMA, SF_ROLE, SF_PASSCODE, DATA_REF_FILE, _db_connection=snowflake_conn)
+    agent = get_agent(SF_ACCOUNT, SF_USER, SF_WAREHOUSE, SF_DATABASE, SF_SCHEMA, SF_ROLE, DATA_REF_FILE, _db_connection=snowflake_conn)
 
     # Initialize DB (for TicketDB)
     ticket_db = TicketDB(conn=snowflake_conn)
