@@ -125,18 +125,31 @@ class IntakeClassificationAgent:
 
     def find_similar_tickets(self, extracted_metadata: Dict) -> List[Dict]:
         """
-        Searches the Snowflake database for similar tickets using embedding similarity (Cortex AI_Similarity).
+        Searches the Snowflake database for similar tickets using metadata-based similarity.
         """
-        # Generate embedding for the incoming ticket using Cortex
-        title = extracted_metadata.get('main_issue', '') or ''
-        description = extracted_metadata.get('error_messages', '') or ''
-        ticket_text = f"{title} {description}"
-        embedding = self.db_connection.call_cortex_llm(f"Generate an embedding for: {ticket_text}", model='embedding-001', expect_json=True)
-        if not embedding:
-            print("Failed to generate embedding for ticket. Returning no similar tickets.")
-            return []
-        # Use the new embedding similarity search
-        return self.db_connection.find_similar_tickets_by_embedding(embedding, top_n=5)
+        print("Searching for similar tickets using extracted metadata...")
+
+        # Extract key information for similarity search
+        main_issue = extracted_metadata.get('main_issue', '') or ''
+        affected_system = extracted_metadata.get('affected_system', '') or ''
+        technical_keywords = extracted_metadata.get('technical_keywords', '') or ''
+        error_messages = extracted_metadata.get('error_messages', '') or ''
+
+        # Use the database method to find similar tickets
+        similar_tickets = self.db_connection.find_similar_tickets_by_metadata(
+            main_issue=main_issue,
+            affected_system=affected_system,
+            technical_keywords=technical_keywords,
+            error_messages=error_messages,
+            top_n=10
+        )
+
+        if similar_tickets:
+            print(f"Found {len(similar_tickets)} similar tickets based on metadata")
+        else:
+            print("No similar tickets found based on metadata")
+
+        return similar_tickets
 
     def classify_ticket(self, new_ticket_data: Dict, extracted_metadata: Dict,
                        similar_tickets: List[Dict], model: str = 'mixtral-8x7b') -> Optional[Dict]:

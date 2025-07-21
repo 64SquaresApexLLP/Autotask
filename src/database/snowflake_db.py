@@ -219,6 +219,104 @@ class SnowflakeConnection:
         print(f"Searching for similar tickets...")
         return self.execute_query(query, tuple(params))
 
+    def find_similar_tickets_by_metadata(self, main_issue: str, affected_system: str,
+                                       technical_keywords: str, error_messages: str,
+                                       top_n: int = 10) -> List[Dict]:
+        """
+        Finds similar tickets based on extracted metadata using text similarity.
+
+        Args:
+            main_issue (str): Main issue description
+            affected_system (str): Affected system/application
+            technical_keywords (str): Technical keywords
+            error_messages (str): Error messages
+            top_n (int): Number of similar tickets to return
+
+        Returns:
+            list: List of similar tickets
+        """
+        if not self.conn:
+            print("Not connected to Snowflake. Please check connection.")
+            return []
+
+        # Build search conditions based on available metadata
+        search_conditions = []
+        params = []
+
+        # Search by title similarity (main issue)
+        if main_issue.strip():
+            search_conditions.append("UPPER(TITLE) LIKE UPPER(%s)")
+            params.append(f"%{main_issue}%")
+
+        # Search by description similarity (error messages, technical keywords)
+        description_terms = []
+        if error_messages.strip():
+            description_terms.extend(error_messages.split())
+        if technical_keywords.strip():
+            description_terms.extend(technical_keywords.split())
+
+        if description_terms:
+            # Create OR conditions for description and resolution terms
+            desc_conditions = []
+            for term in description_terms[:5]:  # Limit to first 5 terms to avoid too complex query
+                if len(term) > 3:  # Only use meaningful terms
+                    desc_conditions.append("UPPER(DESCRIPTION) LIKE UPPER(%s)")
+                    desc_conditions.append("UPPER(RESOLUTION) LIKE UPPER(%s)")
+                    params.append(f"%{term}%")
+                    params.append(f"%{term}%")
+
+            if desc_conditions:
+                search_conditions.append(f"({' OR '.join(desc_conditions)})")
+
+        # If no search conditions, return recent tickets as fallback
+        if not search_conditions:
+            print("No specific search criteria found, returning recent tickets...")
+            query = f"""
+            SELECT
+                TICKETNUMBER,
+                TITLE,
+                DESCRIPTION,
+                ISSUETYPE,
+                SUBISSUETYPE,
+                TICKETCATEGORY,
+                TICKETTYPE,
+                PRIORITY,
+                STATUS,
+                RESOLUTION
+            FROM TEST_DB.PUBLIC.COMPANY_4130_DATA
+            WHERE TITLE IS NOT NULL AND DESCRIPTION IS NOT NULL
+            ORDER BY TICKETNUMBER DESC
+            LIMIT {top_n}
+            """
+            return self.execute_query(query)
+
+        # Build the main query with search conditions
+        where_clause = " OR ".join(search_conditions)
+        query = f"""
+        SELECT
+            TICKETNUMBER,
+            TITLE,
+            DESCRIPTION,
+            ISSUETYPE,
+            SUBISSUETYPE,
+            TICKETCATEGORY,
+            TICKETTYPE,
+            PRIORITY,
+            STATUS,
+            RESOLUTION
+        FROM TEST_DB.PUBLIC.COMPANY_4130_DATA
+        WHERE ({where_clause})
+        AND TITLE IS NOT NULL
+        AND DESCRIPTION IS NOT NULL
+        ORDER BY TICKETNUMBER DESC
+        LIMIT {top_n}
+        """
+
+        print(f"Searching for similar tickets with {len(search_conditions)} conditions...")
+        results = self.execute_query(query, tuple(params))
+
+        return results or []
+
     def find_similar_tickets_by_embedding(self, ticket_embedding: list, top_n: int = 5) -> List[Dict]:
         """
         Finds the most similar tickets using embedding similarity via Cortex AI_Similarity.
