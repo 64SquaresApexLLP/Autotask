@@ -4,6 +4,7 @@ Test script to verify that the Submit New Ticket page is working correctly.
 
 import sys
 import os
+import streamlit as st
 
 def test_page_controllers_import():
     """Test that PageControllers can be imported and has the main_page method."""

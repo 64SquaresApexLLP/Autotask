@@ -11,12 +11,10 @@ class TicketDB:
             self.conn = SnowflakeConnection(
                 sf_account=SF_ACCOUNT,
                 sf_user=SF_USER,
-                sf_password=SF_PASSWORD,
                 sf_warehouse=SF_WAREHOUSE,
                 sf_database=SF_DATABASE,
                 sf_schema=SF_SCHEMA,
-                sf_role=SF_ROLE,
-                sf_passcode=SF_PASSCODE
+                sf_role=SF_ROLE
             )
 
     def insert_ticket(self, ticket_data: dict):

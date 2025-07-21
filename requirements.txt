@@ -12,7 +12,7 @@ plotly
 pytz
 schedule
 snowflake-connector-python
-dotenv
+python-dotenv
 scikit-learn
 
 # Google Calendar API Dependencies

@@ -67,18 +67,21 @@ teamlogic-autotask/
 3. **Configure environment variables**
    Create a `.env` file with:
    ```env
-   # Snowflake Configuration
+   # Snowflake Configuration for SSO Authentication
    SF_ACCOUNT=your_account
    SF_USER=your_username
-   SF_PASSWORD=your_password
    SF_WAREHOUSE=your_warehouse
    SF_DATABASE=your_database
    SF_SCHEMA=your_schema
    SF_ROLE=your_role
-   SF_PASSCODE=your_mfa_code
 
    # Email Configuration
+   EMAIL_ACCOUNT=your_email_account
    SUPPORT_EMAIL_PASSWORD=your_app_password
+   IMAP_SERVER=imap.gmail.com
+   EMAIL_FOLDER=inbox
+
+   # Support Contact Info
    SUPPORT_PHONE=your_phone
    SUPPORT_EMAIL=your_email
    ```

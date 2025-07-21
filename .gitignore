@@ -67,6 +67,9 @@ assignment_agent.log
 *.tmp
 *.temp
 
+# Virtual Environment
+.venv
+
 
 credentials.json
 credentials/

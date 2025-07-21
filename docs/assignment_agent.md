@@ -55,10 +55,9 @@ The assignment agent is configured through environment variables and database se
 # Calendar Integration
 GOOGLE_CALENDAR_CREDENTIALS = 'credentials/google-calendar-credentials.json'
 
-# Database Connection
+# Database Connection (SSO Authentication)
 SF_ACCOUNT = 'your-snowflake-account'
 SF_USER = 'your-username'
-SF_PASSWORD = 'your-password'
 
 # Assignment Rules
 DEFAULT_ASSIGNMENT_TIMEOUT = 300  # 5 minutes
