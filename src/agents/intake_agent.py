@@ -7,6 +7,7 @@ import json
 import uuid
 import hashlib
 import os
+import pandas as pd
 from datetime import datetime
 from typing import Dict, List, Optional
 
@@ -123,33 +124,309 @@ class IntakeClassificationAgent:
         """
         return self.ai_processor.extract_metadata(title, description, model)
 
-    def find_similar_tickets(self, extracted_metadata: Dict) -> List[Dict]:
+    def find_similar_tickets(self, title: str, description: str, extracted_metadata: Dict) -> List[Dict]:
         """
-        Searches the Snowflake database for similar tickets using metadata-based similarity.
+        Searches the Snowflake database for similar tickets using Snowflake Cortex AI semantic similarity.
         """
-        print("Searching for similar tickets using extracted metadata...")
+        print("Searching for similar tickets using Snowflake Cortex AI semantic similarity...")
 
-        # Extract key information for similarity search
-        main_issue = extracted_metadata.get('main_issue', '') or ''
-        affected_system = extracted_metadata.get('affected_system', '') or ''
-        technical_keywords = extracted_metadata.get('technical_keywords', '') or ''
-        error_messages = extracted_metadata.get('error_messages', '') or ''
-
-        # Use the database method to find similar tickets
-        similar_tickets = self.db_connection.find_similar_tickets_by_metadata(
-            main_issue=main_issue,
-            affected_system=affected_system,
-            technical_keywords=technical_keywords,
-            error_messages=error_messages,
+        # Use the internal method to find similar tickets with semantic similarity
+        similar_tickets = self._find_similar_tickets_by_metadata(
+            title=title,
+            description=description,
             top_n=10
         )
 
         if similar_tickets:
-            print(f"Found {len(similar_tickets)} similar tickets based on metadata")
+            print(f"Found {len(similar_tickets)} similar tickets based on semantic similarity")
         else:
-            print("No similar tickets found based on metadata")
+            print("No similar tickets found based on semantic similarity")
 
         return similar_tickets
+
+    def _find_similar_tickets_by_metadata(self, title: str, description: str,
+                                       main_issue: str = "", affected_system: str = "",
+                                       technical_keywords: str = "", error_messages: str = "",
+                                       top_n: int = 10) -> List[Dict]:
+        """
+        Finds similar tickets using Snowflake Cortex AI semantic similarity matching.
+
+        This method leverages Snowflake's native AI_SIMILARITY() function to find
+        semantically similar tickets based on the combined title and description text,
+        rather than using traditional keyword-based pattern matching.
+
+        Args:
+            title (str): New ticket title
+            description (str): New ticket description
+            main_issue (str): Main issue description (legacy parameter, optional)
+            affected_system (str): Affected system/application (legacy parameter, optional)
+            technical_keywords (str): Technical keywords (legacy parameter, optional)
+            error_messages (str): Error messages (legacy parameter, optional)
+            top_n (int): Number of similar tickets to return (max 10)
+
+        Returns:
+            list: List of similar tickets ordered by semantic similarity score (highest first)
+        """
+        if not self.db_connection.conn:
+            print("Not connected to Snowflake. Please check connection.")
+            return []
+
+        # Combine title and description for the new ticket
+        new_ticket_text = f"{title.strip()} {description.strip()}".strip()
+
+        if not new_ticket_text:
+            print("No ticket text provided for similarity search.")
+            return []
+
+        # Escape single quotes for SQL
+        escaped_ticket_text = new_ticket_text.replace("'", "''")
+
+        # Use Snowflake Cortex AI_SIMILARITY for semantic matching
+        # Note: AI_SIMILARITY returns values between 0 and 1, where 1 is most similar
+        query = f"""
+        SELECT
+            TICKETNUMBER,
+            TITLE,
+            DESCRIPTION,
+            ISSUETYPE,
+            SUBISSUETYPE,
+            TICKETCATEGORY,
+            TICKETTYPE,
+            PRIORITY,
+            STATUS,
+            RESOLUTION,
+            SNOWFLAKE.CORTEX.AI_SIMILARITY(
+                COALESCE(TITLE, '') || ' ' || COALESCE(DESCRIPTION, ''),
+                '{escaped_ticket_text}'
+            ) AS SIMILARITY_SCORE
+        FROM TEST_DB.PUBLIC.COMPANY_4130_DATA
+        WHERE TITLE IS NOT NULL
+        AND DESCRIPTION IS NOT NULL
+        AND TRIM(TITLE) != ''
+        AND TRIM(DESCRIPTION) != ''
+        AND LENGTH(TRIM(TITLE || ' ' || DESCRIPTION)) > 10
+        ORDER BY SIMILARITY_SCORE DESC
+        LIMIT {min(top_n, 10)}
+        """
+
+        print(f"Searching for top {min(top_n, 10)} semantically similar tickets using Snowflake Cortex AI...")
+        print(f"New ticket text: '{new_ticket_text[:100]}{'...' if len(new_ticket_text) > 100 else ''}'")
+
+        try:
+            results = self.db_connection.execute_query(query)
+
+            if results:
+                print(f"Found {len(results)} similar tickets based on semantic similarity")
+
+                # Log similarity scores for debugging
+                for i, ticket in enumerate(results[:3]):  # Show top 3 scores
+                    score = ticket.get('SIMILARITY_SCORE', 'N/A')
+                    title = ticket.get('TITLE', 'N/A')[:50]
+                    if isinstance(score, (int, float)):
+                        print(f"  #{i+1}: Score={score:.4f}, Title='{title}...'")
+                    else:
+                        print(f"  #{i+1}: Score={score}, Title='{title}...'")
+
+                # Filter results by minimum similarity threshold
+                # AI_SIMILARITY typically returns values between 0 and 1
+                min_similarity_threshold = 0.1  # Adjust this threshold as needed
+                filtered_results = []
+
+                for ticket in results:
+                    score = ticket.get('SIMILARITY_SCORE')
+                    if isinstance(score, (int, float)) and score >= min_similarity_threshold:
+                        filtered_results.append(ticket)
+                    elif not isinstance(score, (int, float)):
+                        # Include tickets where score couldn't be calculated
+                        filtered_results.append(ticket)
+
+                if filtered_results:
+                    print(f"After filtering by similarity threshold ({min_similarity_threshold}): {len(filtered_results)} tickets")
+                    return filtered_results
+                else:
+                    print(f"No tickets met minimum similarity threshold of {min_similarity_threshold}")
+                    # Try a hybrid approach with keyword matching for better results
+                    return self._hybrid_similarity_search(new_ticket_text, top_n)
+            else:
+                print("No similar tickets found using semantic similarity")
+                return self._hybrid_similarity_search(new_ticket_text, top_n)
+
+        except Exception as e:
+            print(f"Error in semantic similarity search: {e}")
+            print("Falling back to hybrid search...")
+            return self._hybrid_similarity_search(new_ticket_text, top_n)
+
+    def _hybrid_similarity_search(self, ticket_text: str, top_n: int = 10) -> List[Dict]:
+        """
+        Hybrid approach combining semantic similarity with keyword matching for better results.
+
+        Args:
+            ticket_text (str): Combined title and description text
+            top_n (int): Number of tickets to return
+
+        Returns:
+            list: List of similar tickets
+        """
+        print("Using hybrid similarity search (semantic + keyword matching)...")
+
+        # Extract key terms from the ticket text for keyword matching
+        import re
+        # Remove common stop words and extract meaningful terms
+        stop_words = {'the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'is', 'are', 'was', 'were', 'be', 'been', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might', 'can', 'cannot', 'not', 'no', 'yes', 'this', 'that', 'these', 'those', 'i', 'you', 'he', 'she', 'it', 'we', 'they', 'me', 'him', 'her', 'us', 'them', 'my', 'your', 'his', 'her', 'its', 'our', 'their', 'a', 'an'}
+
+        # Extract meaningful keywords (length > 3, not stop words)
+        words = re.findall(r'\b\w+\b', ticket_text.lower())
+        keywords = [word for word in words if len(word) > 3 and word not in stop_words]
+
+        if not keywords:
+            # Fallback to recent tickets if no keywords found
+            return self._get_recent_tickets(top_n)
+
+        # Take top 5 most relevant keywords
+        keywords = keywords[:5]
+        print(f"Using keywords for hybrid search: {keywords}")
+
+        # Build hybrid query combining semantic similarity with keyword matching
+        escaped_ticket_text = ticket_text.replace("'", "''")
+        keyword_conditions = []
+
+        for keyword in keywords:
+            escaped_keyword = keyword.replace("'", "''")
+            keyword_conditions.append(f"(UPPER(TITLE) LIKE UPPER('%{escaped_keyword}%') OR UPPER(DESCRIPTION) LIKE UPPER('%{escaped_keyword}%'))")
+
+        keyword_filter = " OR ".join(keyword_conditions)
+
+        query = f"""
+        SELECT
+            TICKETNUMBER,
+            TITLE,
+            DESCRIPTION,
+            ISSUETYPE,
+            SUBISSUETYPE,
+            TICKETCATEGORY,
+            TICKETTYPE,
+            PRIORITY,
+            STATUS,
+            RESOLUTION,
+            SNOWFLAKE.CORTEX.AI_SIMILARITY(
+                COALESCE(TITLE, '') || ' ' || COALESCE(DESCRIPTION, ''),
+                '{escaped_ticket_text}'
+            ) AS SIMILARITY_SCORE
+        FROM TEST_DB.PUBLIC.COMPANY_4130_DATA
+        WHERE TITLE IS NOT NULL
+        AND DESCRIPTION IS NOT NULL
+        AND TRIM(TITLE) != ''
+        AND TRIM(DESCRIPTION) != ''
+        AND ({keyword_filter})
+        ORDER BY SIMILARITY_SCORE DESC
+        LIMIT {min(top_n * 2, 20)}
+        """
+
+        try:
+            results = self.db_connection.execute_query(query)
+            if results:
+                print(f"Hybrid search found {len(results)} tickets")
+                # Return top N results
+                return results[:top_n]
+            else:
+                print("Hybrid search found no results, falling back to recent tickets")
+                return self._get_recent_tickets(top_n)
+        except Exception as e:
+            print(f"Error in hybrid search: {e}")
+            return self._get_recent_tickets(top_n)
+
+    def _get_recent_tickets(self, top_n: int = 10) -> List[Dict]:
+        """
+        Fallback method to get recent tickets when similarity search fails.
+
+        Args:
+            top_n (int): Number of tickets to return
+
+        Returns:
+            list: List of recent tickets
+        """
+        print("Falling back to recent tickets...")
+        query = f"""
+        SELECT
+            TICKETNUMBER,
+            TITLE,
+            DESCRIPTION,
+            ISSUETYPE,
+            SUBISSUETYPE,
+            TICKETCATEGORY,
+            TICKETTYPE,
+            PRIORITY,
+            STATUS,
+            RESOLUTION
+        FROM TEST_DB.PUBLIC.COMPANY_4130_DATA
+        WHERE TITLE IS NOT NULL AND DESCRIPTION IS NOT NULL
+        ORDER BY TICKETNUMBER DESC
+        LIMIT {min(top_n, 10)}
+        """
+        return self.db_connection.execute_query(query) or []
+
+    def fetch_reference_tickets(self) -> pd.DataFrame:
+        """
+        Fetches actual historical tickets with real, detailed resolutions.
+
+        Returns:
+            pd.DataFrame: DataFrame containing historical tickets with resolutions
+        """
+
+        query = """
+            SELECT TITLE, DESCRIPTION, ISSUETYPE, SUBISSUETYPE, PRIORITY, RESOLUTION
+            FROM TEST_DB.PUBLIC.COMPANY_4130_DATA
+            WHERE RESOLUTION IS NOT NULL
+            AND RESOLUTION != ''
+            AND RESOLUTION != 'N/A'
+            AND RESOLUTION != 'None'
+            AND RESOLUTION NOT LIKE '%contact%'
+            AND RESOLUTION NOT LIKE '%escalate%'
+            AND RESOLUTION NOT LIKE '%call%'
+            AND LENGTH(RESOLUTION) > 50
+            AND TITLE IS NOT NULL
+            AND DESCRIPTION IS NOT NULL
+            AND LENGTH(TITLE) > 10
+            AND LENGTH(DESCRIPTION) > 20
+            ORDER BY LENGTH(RESOLUTION) DESC, RANDOM()
+            LIMIT 200
+        """
+        print("Fetching actual historical tickets with real resolutions...")
+        results = self.db_connection.execute_query(query)
+
+        if results:
+            df = pd.DataFrame(results)
+            print(f"Fetched {len(df)} historical tickets")
+
+            # Additional filtering for actual technical resolutions
+            df = df[df['RESOLUTION'].str.len() > 50]
+
+            # Filter out generic responses
+            generic_patterns = [
+                'please try', 'contact support', 'escalate to', 'call helpdesk',
+                'generic solution', 'standard procedure', 'follow up with'
+            ]
+
+            for pattern in generic_patterns:
+                df = df[~df['RESOLUTION'].str.contains(pattern, case=False, na=False)]
+
+            # Keep only resolutions with actual technical content
+            technical_indicators = [
+                'restart', 'configure', 'install', 'update', 'check', 'verify',
+                'run', 'execute', 'open', 'close', 'delete', 'create', 'modify',
+                'setting', 'option', 'parameter', 'file', 'folder', 'registry',
+                'service', 'process', 'application', 'system'
+            ]
+
+            technical_mask = df['RESOLUTION'].str.contains('|'.join(technical_indicators), case=False, na=False)
+            df = df[technical_mask]
+
+            print(f"After filtering for actual technical resolutions: {len(df)} tickets available")
+
+            return df
+        else:
+            print("No historical tickets found")
+            return pd.DataFrame()
 
     def classify_ticket(self, new_ticket_data: Dict, extracted_metadata: Dict,
                        similar_tickets: List[Dict], model: str = 'mixtral-8x7b') -> Optional[Dict]:
@@ -216,8 +493,8 @@ class IntakeClassificationAgent:
         print("Extracted Metadata:")
         print(json.dumps(extracted_metadata, indent=2))
 
-        # Find similar tickets
-        similar_tickets = self.find_similar_tickets(extracted_metadata)
+        # Find similar tickets using semantic similarity
+        similar_tickets = self.find_similar_tickets(ticket_title, ticket_description, extracted_metadata)
         if similar_tickets:
             print(f"\nFound {len(similar_tickets)} similar tickets:")
             for i, ticket in enumerate(similar_tickets):
