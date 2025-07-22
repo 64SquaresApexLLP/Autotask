@@ -103,3 +103,30 @@ EMAIL_FOLDER = os.getenv('EMAIL_FOLDER', 'inbox')
 # Contact Information (loaded from .env)
 SUPPORT_PHONE = os.getenv('SUPPORT_PHONE', '9723100860')
 SUPPORT_EMAIL = os.getenv('SUPPORT_EMAIL', 'rohankul2017@gmail.com')
+
+# Notification Configuration
+MANAGER_EMAIL = os.getenv('MANAGER_EMAIL', 'itmanager@company.com')
+FALLBACK_TECHNICIAN_EMAIL = os.getenv('FALLBACK_TECHNICIAN_EMAIL', 'support@company.com')
+
+# Email Notification Types
+EMAIL_NOTIFICATION_TYPES = [
+    'confirmation',      # Customer ticket confirmation
+    'assignment',        # Technician assignment notification
+    'status_update',     # Status change notifications
+    'escalation',        # Escalation notifications
+    'resolution',        # Resolution notifications
+    'reminder',          # Reminder notifications
+    'feedback_request'   # Feedback request notifications
+]
+
+# Email Recipient Types
+EMAIL_RECIPIENT_TYPES = [
+    'customer',          # End user who submitted ticket
+    'technician',        # Assigned technician
+    'manager',           # IT manager or supervisor
+    'team'               # Team notifications
+]
+
+# Notification Triggers
+HIGH_PRIORITY_NOTIFICATIONS = ['Critical', 'High', 'Desktop/User Down']
+ESCALATION_KEYWORDS = ['fallback', 'failed', 'error', 'escalated']

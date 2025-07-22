@@ -272,18 +272,29 @@ class IntakeClassificationAgent:
 
         # Note: Knowledgebase saving removed - tickets are now saved directly to database
 
-        # Send notification email if user email is provided
+        # Send comprehensive notifications
+        print(f"\n--- Sending Notifications ---")
+
+        # Send customer confirmation email
         if user_email and user_email.strip():
-            print(f"\n--- Sending Confirmation Email to {user_email} ---")
-            email_sent = self.notification_agent.send_ticket_confirmation(
+            print(f"Sending confirmation email to customer: {user_email}")
+            confirmation_sent = self.notification_agent.send_ticket_confirmation(
                 user_email=user_email,
                 ticket_data=final_ticket_data,
                 ticket_number=ticket_number
             )
-            if email_sent:
-                print("✅ Confirmation email sent successfully")
+            if confirmation_sent:
+                print("✅ Customer confirmation email sent successfully")
             else:
-                print("❌ Failed to send confirmation email")
+                print("❌ Failed to send customer confirmation email")
+
+        # Send assignment notifications (technician, customer update, manager if needed)
+        assignment_notifications = self.notification_agent.send_assignment_notifications(final_ticket_data)
+
+        # Log notification results
+        for notification_type, success in assignment_notifications.items():
+            status = "✅ Success" if success else "❌ Failed"
+            print(f"{status}: {notification_type.replace('_', ' ').title()}")
 
         print(f"\n--- Ticket Processing Complete (#{ticket_number}) ---")
         return final_ticket_data
