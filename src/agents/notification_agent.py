@@ -90,9 +90,9 @@ class NotificationAgent:
             # Build LLM prompt with ticket context
             prompt = self._build_llm_prompt(notification_type, ticket_data, recipient_type)
 
-            # Call LLM to generate content
+            # Call LLM to generate content with improved JSON handling
             logger.info(f"Generating {notification_type} email for {recipient_type} using LLM...")
-            llm_response = self.db_connection.call_cortex_llm(prompt, model=self.llm_model, expect_json=True)
+            llm_response = self._call_llm_with_json_fix(prompt)
 
             if llm_response and isinstance(llm_response, dict):
                 return {
@@ -116,23 +116,28 @@ class NotificationAgent:
         extracted_metadata = ticket_data.get('extracted_metadata', {})
         assignment_result = ticket_data.get('assignment_result', {})
 
-        # Build ticket context
+        # Build comprehensive ticket context with all required metadata
         ticket_context = f"""
-TICKET INFORMATION:
+TICKET INFORMATION (All fields must be included in the notification):
 - Ticket Number: #{ticket_data.get('ticket_number', 'N/A')}
 - Title: {ticket_data.get('title', 'N/A')}
-- Customer: {ticket_data.get('name', 'N/A')} ({ticket_data.get('user_email', 'N/A')})
-- Description: {ticket_data.get('description', 'N/A')}
-- Priority: {classified_data.get('PRIORITY', {}).get('Label', 'N/A')}
+- Submitted By: {ticket_data.get('name', 'N/A')} ({ticket_data.get('user_email', 'N/A')})
+- Date Created: {ticket_data.get('date', 'N/A')} {ticket_data.get('time', 'N/A')}
+- Due Date: {ticket_data.get('due_date', 'N/A')}
+- Priority: {classified_data.get('PRIORITY', {}).get('Label', ticket_data.get('priority', 'N/A'))}
 - Issue Type: {classified_data.get('ISSUETYPE', {}).get('Label', 'N/A')}
 - Ticket Type: {classified_data.get('TICKETTYPE', {}).get('Label', 'N/A')}
-- Due Date: {ticket_data.get('due_date', 'N/A')}
-- Date Created: {ticket_data.get('date', 'N/A')} {ticket_data.get('time', 'N/A')}
+- Description: {ticket_data.get('description', 'N/A')}
 - Main Issue: {extracted_metadata.get('main_issue', 'N/A')}
 - Affected Systems: {', '.join(extracted_metadata.get('affected_systems', [])) if extracted_metadata.get('affected_systems') else 'N/A'}
 - Error Messages: {extracted_metadata.get('error_messages', 'N/A')}
+
+TECHNICIAN INFORMATION:
+- Assigned Technician Name: {assignment_result.get('assigned_technician', 'N/A')}
+- Technician Email: {assignment_result.get('technician_email', 'N/A')}
+
+RESOLUTION INFORMATION:
 - Resolution Note: {ticket_data.get('resolution_note', 'N/A')}
-- Assigned Technician: {assignment_result.get('assigned_technician', 'N/A')}
 """
 
         # Get notification-specific instructions
@@ -141,7 +146,7 @@ TICKET INFORMATION:
         # Get recipient-specific tone
         recipient_tone = self._get_recipient_tone(recipient_type)
 
-        # Build complete prompt
+        # Build complete prompt with explicit JSON formatting instructions
         prompt = f"""
 You are an expert email communication specialist for an IT support system. Generate a professional, contextual email notification.
 
@@ -153,25 +158,89 @@ TONE: {recipient_tone}
 
 {notification_instructions}
 
-RESPONSE FORMAT (JSON):
+CRITICAL: Respond with VALID JSON only. Use proper escaping for quotes and backslashes.
+
+RESPONSE FORMAT (VALID JSON):
 {{
     "subject": "Clear, specific email subject line",
-    "html_content": "Complete HTML email with professional styling, proper structure, and all relevant information",
-    "text_content": "Well-formatted plain text version of the email"
+    "html_content": "Complete HTML email with professional styling and all metadata",
+    "text_content": "Well-formatted plain text version with all metadata"
 }}
 
 REQUIREMENTS:
 - Use professional, clear language appropriate for IT support
-- Include all relevant ticket information from the context
-- Make HTML version visually appealing with proper styling
-- Ensure text version is well-formatted and readable
+- MANDATORY: Include ALL metadata fields in structured format
+- Make HTML version visually appealing with metadata tables
+- Ensure text version is well-formatted with clear metadata sections
 - Use appropriate tone for recipient type: {recipient_tone}
 - Include TeamLogic Support branding
-- Make content actionable and informative
-- Follow email accessibility best practices
+- IMPORTANT: Use "html_content" and "text_content" (no backslashes!)
 """
 
         return prompt
+
+    def _call_llm_with_json_fix(self, prompt: str) -> Dict:
+        """
+        Call LLM and fix common JSON issues in the response.
+
+        Args:
+            prompt (str): The prompt to send to the LLM
+
+        Returns:
+            dict: Parsed LLM response or None if failed
+        """
+        try:
+            # Get raw response from LLM
+            raw_response = self.db_connection.call_cortex_llm(prompt, model=self.llm_model, expect_json=False)
+
+            if not raw_response:
+                return None
+
+            # Fix common JSON issues
+            fixed_json = self._fix_json_response(raw_response)
+
+            if fixed_json:
+                import json
+                return json.loads(fixed_json)
+            else:
+                return None
+
+        except Exception as e:
+            logger.error(f"LLM call with JSON fix failed: {str(e)}")
+            return None
+
+    def _fix_json_response(self, raw_response: str) -> str:
+        """
+        Fix common JSON formatting issues in LLM responses.
+
+        Args:
+            raw_response (str): Raw response from LLM
+
+        Returns:
+            str: Fixed JSON string or None if unfixable
+        """
+        try:
+            import re
+
+            # Extract JSON block if it exists
+            json_match = re.search(r'\{[\s\S]*\}', raw_response)
+            if not json_match:
+                return None
+
+            json_str = json_match.group(0)
+
+            # Fix the most common issue: html\_content -> html_content
+            json_str = json_str.replace('html\\_content', 'html_content')
+            json_str = json_str.replace('text\\_content', 'text_content')
+
+            # Fix other common escape issues
+            json_str = json_str.replace('\\_', '_')
+
+            return json_str
+
+        except Exception as e:
+            logger.warning(f"Failed to fix JSON response: {str(e)}")
+            return None
 
     def _get_notification_instructions(self, notification_type: str, ticket_data: Dict) -> str:
         """Get specific instructions for each notification type."""
@@ -181,21 +250,28 @@ REQUIREMENTS:
 INSTRUCTIONS: Generate a customer confirmation email that:
 1. Thanks the customer warmly for submitting their ticket
 2. Confirms receipt with clear ticket number reference
-3. Summarizes the issue in customer-friendly language
-4. Includes AI-generated resolution steps if available
+3. MUST include ALL metadata fields in a structured format:
+   - Ticket Number, Title, Submitted By (name and email), Date Created, Due Date
+   - Priority, Issue Type, Ticket Type, Assigned Technician (name and email)
+4. Summarizes the issue in customer-friendly language
 5. Sets clear expectations for response time and next steps
 6. Provides contact information for urgent issues
 7. Uses an empathetic and reassuring tone
+8. Format metadata in a clear, professional table or structured layout
 """,
             'assignment': """
 INSTRUCTIONS: Generate a technician assignment email that:
 1. Clearly states a new ticket has been assigned
-2. Provides comprehensive ticket details and context
-3. Includes customer contact information
-4. Shows AI-suggested resolution steps
+2. MUST include ALL metadata fields in a structured format:
+   - Ticket Number, Title, Submitted By (name and email), Date Created, Due Date
+   - Priority, Issue Type, Ticket Type, Technician Name, Technician Email
+3. MUST include the complete AI-generated resolution steps in a prominent section
+4. Provides comprehensive ticket details and customer contact information
 5. Outlines specific actions required and deadlines
 6. Uses a professional and action-oriented tone
 7. Includes escalation procedures if needed
+8. Format metadata in a clear, professional table or structured layout
+9. Highlight the resolution steps as actionable guidance for the technician
 """,
             'status_update': f"""
 INSTRUCTIONS: Generate a status update email that:
@@ -241,68 +317,187 @@ INSTRUCTIONS: Generate a resolution email that:
     def _generate_basic_template(self, notification_type: str, ticket_data: Dict, recipient_type: str) -> Dict[str, str]:
         """Generate basic email template when LLM is not available."""
 
+        # Extract all required metadata
         ticket_number = ticket_data.get('ticket_number', 'N/A')
         title = ticket_data.get('title', 'N/A')
         customer_name = ticket_data.get('name', 'N/A')
+        customer_email = ticket_data.get('user_email', 'N/A')
+        date_created = f"{ticket_data.get('date', 'N/A')} {ticket_data.get('time', 'N/A')}"
+        due_date = ticket_data.get('due_date', 'N/A')
+
+        # Extract classification data
+        classified_data = ticket_data.get('classified_data', {})
+        priority = classified_data.get('PRIORITY', {}).get('Label', ticket_data.get('priority', 'N/A'))
+        issue_type = classified_data.get('ISSUETYPE', {}).get('Label', 'N/A')
+        ticket_type = classified_data.get('TICKETTYPE', {}).get('Label', 'N/A')
+
+        # Extract technician information
+        assignment_result = ticket_data.get('assignment_result', {})
+        technician_name = assignment_result.get('assigned_technician', 'N/A')
+        technician_email = assignment_result.get('technician_email', 'N/A')
+
+        # Extract resolution information
+        resolution_note = ticket_data.get('resolution_note', 'N/A')
 
         if notification_type == 'confirmation':
-            return {
-                'subject': f"Ticket Confirmation - #{ticket_number}",
-                'html_content': f"""
-                <h2>Ticket Confirmation</h2>
-                <p>Dear {customer_name},</p>
-                <p>Your support ticket #{ticket_number} has been received.</p>
-                <p><strong>Issue:</strong> {title}</p>
-                <p>Our team will review your ticket and respond within 2 business hours.</p>
-                <p>Best regards,<br>TeamLogic Support</p>
-                """,
-                'text_content': f"""
-Ticket Confirmation - #{ticket_number}
-
-Dear {customer_name},
-
-Your support ticket #{ticket_number} has been received.
-
-Issue: {title}
-
-Our team will review your ticket and respond within 2 business hours.
-
-Best regards,
-TeamLogic Support
-                """
-            }
+            return self._generate_customer_confirmation_template(
+                ticket_number, title, customer_name, customer_email, date_created,
+                due_date, priority, issue_type, ticket_type, technician_name, technician_email
+            )
         elif notification_type == 'assignment':
-            return {
-                'subject': f"New Ticket Assignment - #{ticket_number}",
-                'html_content': f"""
-                <h2>New Ticket Assignment</h2>
-                <p>A new ticket has been assigned to you:</p>
-                <p><strong>Ticket:</strong> #{ticket_number}</p>
-                <p><strong>Issue:</strong> {title}</p>
-                <p><strong>Customer:</strong> {customer_name}</p>
-                <p>Please review and begin working on this ticket.</p>
-                <p>TeamLogic Support System</p>
-                """,
-                'text_content': f"""
-New Ticket Assignment - #{ticket_number}
-
-A new ticket has been assigned to you:
-
-Ticket: #{ticket_number}
-Issue: {title}
-Customer: {customer_name}
-
-Please review and begin working on this ticket.
-
-TeamLogic Support System
-                """
-            }
+            return self._generate_technician_assignment_template(
+                ticket_number, title, customer_name, customer_email, date_created,
+                due_date, priority, issue_type, ticket_type, technician_name, technician_email, resolution_note
+            )
         else:
             return {
                 'subject': f"Ticket #{ticket_number} - {notification_type.title()}",
                 'html_content': f"<p>Ticket #{ticket_number} - {notification_type.title()}</p>",
                 'text_content': f"Ticket #{ticket_number} - {notification_type.title()}"
             }
+
+    def _generate_customer_confirmation_template(self, ticket_number: str, title: str, customer_name: str,
+                                               customer_email: str, date_created: str, due_date: str,
+                                               priority: str, issue_type: str, ticket_type: str,
+                                               technician_name: str, technician_email: str) -> Dict[str, str]:
+        """Generate enhanced customer confirmation template with all required metadata."""
+
+        return {
+            'subject': f"🎫 Ticket Confirmation - #{ticket_number}",
+            'html_content': f"""
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <h2 style="color: #2c3e50;">🎫 Ticket Confirmation</h2>
+                <p>Dear {customer_name},</p>
+                <p>Thank you for contacting TeamLogic Support. Your support ticket has been successfully received and assigned the following details:</p>
+
+                <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
+                    <h3 style="color: #495057; margin-top: 0;">📋 Ticket Details</h3>
+                    <p style="line-height: 1.6; margin: 0;">
+                        <strong>Ticket Number:</strong> #{ticket_number}<br>
+                        <strong>Title:</strong> {title}<br>
+                        <strong>Submitted By:</strong> {customer_name} ({customer_email})<br>
+                        <strong>Date Created:</strong> {date_created}<br>
+                        <strong>Due Date:</strong> {due_date}<br>
+                        <strong>Priority:</strong> {priority}<br>
+                        <strong>Issue Type:</strong> {issue_type}<br>
+                        <strong>Ticket Type:</strong> {ticket_type}<br>
+                        <strong>Assigned Technician:</strong> {technician_name}
+                    </p>
+                </div>
+
+                <p>Our team will review your ticket and respond within 2 business hours.</p>
+                <p>If you have any urgent concerns, please contact us immediately.</p>
+
+                <p>Best regards,<br>
+                <strong>TeamLogic Support</strong></p>
+            </div>
+            """,
+            'text_content': f"""
+🎫 Ticket Confirmation
+
+Dear {customer_name},
+
+Thank you for contacting TeamLogic Support. Your support ticket has been successfully received and assigned the following details:
+
+📋 Ticket Details
+Ticket Number: #{ticket_number}
+Title: {title}
+Submitted By: {customer_name} ({customer_email})
+Date Created: {date_created}
+Due Date: {due_date}
+Priority: {priority}
+Issue Type: {issue_type}
+Ticket Type: {ticket_type}
+Assigned Technician: {technician_name}
+
+Our team will review your ticket and respond within 2 business hours.
+If you have any urgent concerns, please contact us immediately.
+
+Best regards,
+TeamLogic Support
+            """
+        }
+
+    def _generate_technician_assignment_template(self, ticket_number: str, title: str, customer_name: str,
+                                               customer_email: str, date_created: str, due_date: str,
+                                               priority: str, issue_type: str, ticket_type: str,
+                                               technician_name: str, technician_email: str, resolution_note: str) -> Dict[str, str]:
+        """Generate enhanced technician assignment template with all required metadata including resolution."""
+
+        return {
+            'subject': f"🔧 New Ticket Assignment - #{ticket_number}",
+            'html_content': f"""
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <h2 style="color: #2c3e50;">🔧 New Ticket Assignment</h2>
+                <p>A new support ticket has been assigned to you. Please review the details below and begin working on this ticket.</p>
+
+                <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
+                    <h3 style="color: #495057; margin-top: 0;">📋 Ticket Details</h3>
+                    <div style="line-height: 1.6;">
+                        <strong>Ticket Number:</strong> #{ticket_number}<br>
+                        <strong>Title:</strong> {title}<br>
+                        <strong>Submitted By:</strong> {customer_name} ({customer_email})<br>
+                        <strong>Date Created:</strong> {date_created}<br>
+                        <strong>Due Date:</strong> {due_date}<br>
+                        <strong>Priority:</strong> {priority}<br>
+                        <strong>Issue Type:</strong> {issue_type}<br>
+                        <strong>Ticket Type:</strong> {ticket_type}<br>
+                        <strong>Assigned Technician:</strong> {technician_name} ({technician_email})
+                    </div>
+                </div>
+
+                <div style="background-color: #e8f5e8; padding: 15px; border-radius: 5px; margin: 15px 0;">
+                    <h3 style="color: #2d5a2d; margin-top: 0;">AI-Generated Resolution Steps</h3>
+                    <div style="white-space: pre-wrap; font-family: 'Courier New', monospace; background-color: white; padding: 10px; border-radius: 3px;">
+{resolution_note}
+                    </div>
+                </div>
+
+                <p><strong>Next Steps:</strong></p>
+                <ul>
+                    <li>Review the ticket details and AI-generated resolution steps</li>
+                    <li>Contact the customer if additional information is needed</li>
+                    <li>Begin troubleshooting based on the suggested resolution</li>
+                    <li>Update the ticket status as you progress</li>
+                </ul>
+
+                <p>Please ensure this ticket is resolved by the due date: <strong>{due_date}</strong></p>
+
+                <p>Best regards,<br>
+                <strong>TeamLogic Support System</strong></p>
+            </div>
+            """,
+            'text_content': f"""
+🔧 New Ticket Assignment
+
+A new support ticket has been assigned to you. Please review the details below and begin working on this ticket.
+
+📋 Ticket Details
+Ticket Number: #{ticket_number}
+Title: {title}
+Submitted By: {customer_name} ({customer_email})
+Date Created: {date_created}
+Due Date: {due_date}
+Priority: {priority}
+Issue Type: {issue_type}
+Ticket Type: {ticket_type}
+Assigned Technician: {technician_name} ({technician_email})
+
+🔧 AI-Generated Resolution Steps:
+{resolution_note}
+
+📝 Next Steps:
+- Review the ticket details and AI-generated resolution steps
+- Contact the customer if additional information is needed
+- Begin troubleshooting based on the suggested resolution
+- Update the ticket status as you progress
+
+Please ensure this ticket is resolved by the due date: {due_date}
+
+Best regards,
+TeamLogic Support System
+            """
+        }
 
     def send_email(self, recipient_email: str, email_content: Dict[str, str]) -> bool:
         """
