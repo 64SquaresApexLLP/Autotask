@@ -899,7 +899,7 @@ class ImageProcessor:
             print(f"Failed to convert image to base64: {e}")
             return None
 
-    def save_processed_image_data(self, image_result: Dict, output_path: str = None) -> bool:
+    def save_processed_image_data(self, image_result: Dict, output_path: Optional[str] = None) -> bool:
         """
         Save processed image data to JSON file.
 

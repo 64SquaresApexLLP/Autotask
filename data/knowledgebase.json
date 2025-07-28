@@ -7314,5 +7314,1537 @@
                 }
             }
         ]
+    },
+    {
+        "new_ticket": {
+            "ticket_number": "T20250728.125323",
+            "title": "Network Connectivity Issue",
+            "description": "Cannot connect to the company WiFi network",
+            "name": "John Doe",
+            "user_email": "user@company.com",
+            "date": "2025-07-28",
+            "time": "12:53:23",
+            "due_date": "2024-12-20",
+            "priority": "High",
+            "classified_data": {
+                "STATUS": {
+                    "Label": "Open"
+                },
+                "PRIORITY": {
+                    "Label": "High"
+                },
+                "ISSUETYPE": {
+                    "Label": "Network"
+                },
+                "TICKETCATEGORY": {
+                    "Label": "Connectivity"
+                }
+            },
+            "assignment_result": {
+                "assigned_technician": "David Wilson",
+                "technician_email": "david.wilson@company.com"
+            },
+            "resolution_note": "Standard troubleshooting steps for network issues. Check system logs and perform diagnostic tests."
+        },
+        "similar_tickets_found": []
+    },
+    {
+        "new_ticket": {
+            "ticket_number": "T20250728.125333",
+            "title": "Test Printer Issue",
+            "description": "The office printer is showing error code E-04 and won't print any documents. This is affecting the entire marketing team.",
+            "name": "Test User",
+            "user_email": "test.user@company.com",
+            "date": "2025-07-28",
+            "time": "12:53:33",
+            "due_date": "2025-07-31",
+            "priority": "Medium",
+            "classified_data": {
+                "STATUS": {
+                    "Label": "Open"
+                },
+                "PRIORITY": {
+                    "Label": "Medium"
+                },
+                "ISSUETYPE": {
+                    "Label": "Hardware"
+                },
+                "TICKETCATEGORY": {
+                    "Label": "Equipment"
+                }
+            },
+            "assignment_result": {
+                "assigned_technician": "Mike Johnson",
+                "technician_email": "mike.johnson@company.com"
+            },
+            "resolution_note": "Standard troubleshooting steps for hardware issues. Check system logs and perform diagnostic tests."
+        },
+        "similar_tickets_found": []
+    },
+    {
+        "new_ticket": {
+            "name": "Test User",
+            "description": "My computer won't start. The power button doesn't respond and there are no lights.",
+            "title": "Computer won't start",
+            "date": "2025-07-28",
+            "time": "16:09:27",
+            "due_date": "2024-12-31",
+            "priority": "High",
+            "ticket_number": "T20250728.0006",
+            "user_email": "test@company.com",
+            "extracted_metadata": {
+                "main_issue": "Computer won't start",
+                "affected_system": "Computer",
+                "urgency_level": "High",
+                "error_messages": "Power button doesn't respond, no lights",
+                "technical_keywords": "power button, no lights",
+                "user_actions": "None mentioned",
+                "resolution_indicators": "Hardware issue, possibly related to power supply or motherboard",
+                "STATUS": "Open"
+            },
+            "classified_data": {
+                "ISSUETYPE": {
+                    "Value": "6",
+                    "Label": "Network"
+                },
+                "SUBISSUETYPE": {
+                    "Value": "38",
+                    "Label": "Edge/IE"
+                },
+                "TICKETCATEGORY": {
+                    "Value": "3",
+                    "Label": "Standard"
+                },
+                "TICKETTYPE": {
+                    "Value": "1",
+                    "Label": "Service Request"
+                },
+                "STATUS": {
+                    "Value": "1",
+                    "Label": "New"
+                },
+                "PRIORITY": {
+                    "Value": "2",
+                    "Label": "Medium"
+                }
+            },
+            "resolution_note": "1. Unplug the computer from the power source and wait for about a minute.\n2. After waiting, plug the computer back into a known working power outlet and ensure the power cord is securely connected to the computer.\n3. Check if there are any visible lights or indicators on the computer, such as the power LED or any other status lights.\n4. If there are still no signs of life, try using an alternative power cord or power adapter if available.\n5. If the issue persists, it's possible that the power supply unit (PSU) may be faulty. In this case, you should contact a professional IT support technician for further assistance.\n6. If the computer does power on but doesn't start up properly, you may need to consult your computer's manual or contact the manufacturer's support for further assistance.",
+            "assignment_result": {
+                "ticket_number": "T20250728.0006",
+                "assigned_technician": "Rohan Kulkarni",
+                "technician_email": "rohankool2017@gmail.com",
+                "assignment_date": "2025-07-28",
+                "assignment_time": "16:09:41",
+                "priority": "Medium",
+                "issue_type": "Network",
+                "sub_issue_type": "Edge/IE",
+                "requester_name": "Test User",
+                "requester_email": "test@company.com",
+                "due_date": "2024-12-31",
+                "status": "Assigned"
+            }
+        },
+        "similar_tickets_found": [
+            {
+                "TITLE": "Undeliverable mail: Autotask MS Exchange Activation",
+                "DESCRIPTION": "From <MAILER-DAEMON@inbound.appriver.com>: Failed to deliver to 'cbarangan@teamlogicit.com'\r\nmail loop: too many hops (too many 'Received:' header fields)\r\n\r\n**Created via Incoming Email Processor**\r\nFrom: <MAILER-DAEMON@inbound.appriver.com>\r\nTo: <supportnscottsdaleaz@teamlogicit.com>",
+                "ISSUETYPE": {
+                    "Value": null,
+                    "Label": "Unknown/N/A"
+                },
+                "SUBISSUETYPE": {
+                    "Value": null,
+                    "Label": "Unknown/N/A"
+                },
+                "TICKETCATEGORY": {
+                    "Value": "3",
+                    "Label": "Standard"
+                },
+                "TICKETTYPE": {
+                    "Value": "1",
+                    "Label": "Service Request"
+                },
+                "PRIORITY": {
+                    "Value": "1",
+                    "Label": "High"
+                },
+                "STATUS": {
+                    "Value": "5",
+                    "Label": "Complete"
+                }
+            },
+            {
+                "TITLE": "Network Analysis",
+                "DESCRIPTION": "Jim met PMI's President (Jack Johnson) at a BNI meeting. He subsequently met with Jack on 2/15 at PMI. The recommendation coming out of that meeting was to perform a network analysis and report out our findings. Chris is scheduled to perform the analysis on 2/23.",
+                "ISSUETYPE": {
+                    "Value": "4",
+                    "Label": "Hardware"
+                },
+                "SUBISSUETYPE": {
+                    "Value": null,
+                    "Label": "Unknown/N/A"
+                },
+                "TICKETCATEGORY": {
+                    "Value": "3",
+                    "Label": "Standard"
+                },
+                "TICKETTYPE": {
+                    "Value": "1",
+                    "Label": "Service Request"
+                },
+                "PRIORITY": {
+                    "Value": "2",
+                    "Label": "Medium"
+                },
+                "STATUS": {
+                    "Value": "5",
+                    "Label": "Complete"
+                }
+            },
+            {
+                "TITLE": "Network Analysis",
+                "DESCRIPTION": "Chris performed a Network assessment and now we're writing a proposal. We'll complete the proposal by 3/11 and present to the prospective client on 3/15.",
+                "ISSUETYPE": {
+                    "Value": null,
+                    "Label": "Unknown/N/A"
+                },
+                "SUBISSUETYPE": {
+                    "Value": null,
+                    "Label": "Unknown/N/A"
+                },
+                "TICKETCATEGORY": {
+                    "Value": "3",
+                    "Label": "Standard"
+                },
+                "TICKETTYPE": {
+                    "Value": "1",
+                    "Label": "Service Request"
+                },
+                "PRIORITY": {
+                    "Value": "1",
+                    "Label": "High"
+                },
+                "STATUS": {
+                    "Value": "5",
+                    "Label": "Complete"
+                }
+            },
+            {
+                "TITLE": "Virtual Office",
+                "DESCRIPTION": "Jim met Becca at his BNI meeting. She expressed a desire to \"virtualize\" her office. Meaning she and her assistant want the same capabilities outside the office that they have inside. She has about 500MB of data that she wants to store securely in the cloud. I met with Becca and Marnie (her assistant) on 2/17 and subsequently provided her with a proposal. She approved and would like all the services outlined. Yet to be scheduled is the time for Chris to go on site and set everything up for them.",
+                "ISSUETYPE": {
+                    "Value": "6",
+                    "Label": "Network"
+                },
+                "SUBISSUETYPE": {
+                    "Value": null,
+                    "Label": "Unknown/N/A"
+                },
+                "TICKETCATEGORY": {
+                    "Value": "3",
+                    "Label": "Standard"
+                },
+                "TICKETTYPE": {
+                    "Value": "1",
+                    "Label": "Service Request"
+                },
+                "PRIORITY": {
+                    "Value": "1",
+                    "Label": "High"
+                },
+                "STATUS": {
+                    "Value": "5",
+                    "Label": "Complete"
+                }
+            },
+            {
+                "TITLE": "Site Survey",
+                "DESCRIPTION": "Roger Whitehouse called the office 2/22 and requested that we come help with his internet issues. It's a 125 room hotel in McCormick Ranch and they recently switched over to CenturyLink Fiber. Although Roger also indicated wireless access has been spotty for years. He said the service in \"1990's technology\". ",
+                "ISSUETYPE": {
+                    "Value": "6",
+                    "Label": "Network"
+                },
+                "SUBISSUETYPE": {
+                    "Value": null,
+                    "Label": "Unknown/N/A"
+                },
+                "TICKETCATEGORY": {
+                    "Value": "3",
+                    "Label": "Standard"
+                },
+                "TICKETTYPE": {
+                    "Value": "1",
+                    "Label": "Service Request"
+                },
+                "PRIORITY": {
+                    "Value": "2",
+                    "Label": "Medium"
+                },
+                "STATUS": {
+                    "Value": "5",
+                    "Label": "Complete"
+                }
+            },
+            {
+                "TITLE": "Can't Print to Ricoh in hall",
+                "DESCRIPTION": "Trying to print checks from QBs",
+                "ISSUETYPE": {
+                    "Value": "5",
+                    "Label": "Software/SaaS"
+                },
+                "SUBISSUETYPE": {
+                    "Value": "38",
+                    "Label": "Edge/IE"
+                },
+                "TICKETCATEGORY": {
+                    "Value": "3",
+                    "Label": "Standard"
+                },
+                "TICKETTYPE": {
+                    "Value": "1",
+                    "Label": "Service Request"
+                },
+                "PRIORITY": {
+                    "Value": "4",
+                    "Label": "Critical"
+                },
+                "STATUS": {
+                    "Value": "5",
+                    "Label": "Complete"
+                }
+            },
+            {
+                "TITLE": "Site Survey",
+                "DESCRIPTION": "Client requesting quote for 3 home run lines to be run from the 1st floor to their office on the 3rd floor",
+                "ISSUETYPE": {
+                    "Value": null,
+                    "Label": "Unknown/N/A"
+                },
+                "SUBISSUETYPE": {
+                    "Value": null,
+                    "Label": "Unknown/N/A"
+                },
+                "TICKETCATEGORY": {
+                    "Value": "3",
+                    "Label": "Standard"
+                },
+                "TICKETTYPE": {
+                    "Value": "1",
+                    "Label": "Service Request"
+                },
+                "PRIORITY": {
+                    "Value": "1",
+                    "Label": "High"
+                },
+                "STATUS": {
+                    "Value": "5",
+                    "Label": "Complete"
+                }
+            },
+            {
+                "TITLE": "Initial Meeting and needs assessment",
+                "DESCRIPTION": null,
+                "ISSUETYPE": {
+                    "Value": null,
+                    "Label": "Unknown/N/A"
+                },
+                "SUBISSUETYPE": {
+                    "Value": null,
+                    "Label": "Unknown/N/A"
+                },
+                "TICKETCATEGORY": {
+                    "Value": "3",
+                    "Label": "Standard"
+                },
+                "TICKETTYPE": {
+                    "Value": "1",
+                    "Label": "Service Request"
+                },
+                "PRIORITY": {
+                    "Value": "2",
+                    "Label": "Medium"
+                },
+                "STATUS": {
+                    "Value": "5",
+                    "Label": "Complete"
+                }
+            },
+            {
+                "TITLE": "payroll - feb 2016",
+                "DESCRIPTION": null,
+                "ISSUETYPE": {
+                    "Value": null,
+                    "Label": "Unknown/N/A"
+                },
+                "SUBISSUETYPE": {
+                    "Value": null,
+                    "Label": "Unknown/N/A"
+                },
+                "TICKETCATEGORY": {
+                    "Value": "3",
+                    "Label": "Standard"
+                },
+                "TICKETTYPE": {
+                    "Value": "1",
+                    "Label": "Service Request"
+                },
+                "PRIORITY": {
+                    "Value": "3",
+                    "Label": "Low"
+                },
+                "STATUS": {
+                    "Value": "5",
+                    "Label": "Complete"
+                }
+            },
+            {
+                "TITLE": "Issue with Dropbox/Office 365",
+                "DESCRIPTION": "Spoke with Zahra, possible issue with DropBox",
+                "ISSUETYPE": {
+                    "Value": "8",
+                    "Label": "Server"
+                },
+                "SUBISSUETYPE": {
+                    "Value": null,
+                    "Label": "Unknown/N/A"
+                },
+                "TICKETCATEGORY": {
+                    "Value": "3",
+                    "Label": "Standard"
+                },
+                "TICKETTYPE": {
+                    "Value": "2",
+                    "Label": "Incident"
+                },
+                "PRIORITY": {
+                    "Value": "1",
+                    "Label": "High"
+                },
+                "STATUS": {
+                    "Value": "5",
+                    "Label": "Complete"
+                }
+            },
+            {
+                "TITLE": "Turn up fiber connection",
+                "DESCRIPTION": null,
+                "ISSUETYPE": {
+                    "Value": "5",
+                    "Label": "Software/SaaS"
+                },
+                "SUBISSUETYPE": {
+                    "Value": "41",
+                    "Label": "Browser"
+                },
+                "TICKETCATEGORY": {
+                    "Value": "3",
+                    "Label": "Standard"
+                },
+                "TICKETTYPE": {
+                    "Value": "4",
+                    "Label": "Change Request"
+                },
+                "PRIORITY": {
+                    "Value": "1",
+                    "Label": "High"
+                },
+                "STATUS": {
+                    "Value": "5",
+                    "Label": "Complete"
+                }
+            },
+            {
+                "TITLE": "Change account type in Exchange to Exchange (outlook.com by activesync)",
+                "DESCRIPTION": null,
+                "ISSUETYPE": {
+                    "Value": null,
+                    "Label": "Unknown/N/A"
+                },
+                "SUBISSUETYPE": {
+                    "Value": null,
+                    "Label": "Unknown/N/A"
+                },
+                "TICKETCATEGORY": {
+                    "Value": "3",
+                    "Label": "Standard"
+                },
+                "TICKETTYPE": {
+                    "Value": "4",
+                    "Label": "Change Request"
+                },
+                "PRIORITY": {
+                    "Value": "2",
+                    "Label": "Medium"
+                },
+                "STATUS": {
+                    "Value": "5",
+                    "Label": "Complete"
+                }
+            },
+            {
+                "TITLE": "Cannot see shared calendar",
+                "DESCRIPTION": "Becca shared her calendar but Marni is unable to view it without navigating to the link",
+                "ISSUETYPE": {
+                    "Value": null,
+                    "Label": "Unknown/N/A"
+                },
+                "SUBISSUETYPE": {
+                    "Value": null,
+                    "Label": "Unknown/N/A"
+                },
+                "TICKETCATEGORY": {
+                    "Value": "3",
+                    "Label": "Standard"
+                },
+                "TICKETTYPE": {
+                    "Value": "2",
+                    "Label": "Incident"
+                },
+                "PRIORITY": {
+                    "Value": "2",
+                    "Label": "Medium"
+                },
+                "STATUS": {
+                    "Value": "5",
+                    "Label": "Complete"
+                }
+            },
+            {
+                "TITLE": "Issue with sharing - OneDrive",
+                "DESCRIPTION": null,
+                "ISSUETYPE": {
+                    "Value": null,
+                    "Label": "Unknown/N/A"
+                },
+                "SUBISSUETYPE": {
+                    "Value": null,
+                    "Label": "Unknown/N/A"
+                },
+                "TICKETCATEGORY": {
+                    "Value": "3",
+                    "Label": "Standard"
+                },
+                "TICKETTYPE": {
+                    "Value": "1",
+                    "Label": "Service Request"
+                },
+                "PRIORITY": {
+                    "Value": "2",
+                    "Label": "Medium"
+                },
+                "STATUS": {
+                    "Value": "5",
+                    "Label": "Complete"
+                }
+            },
+            {
+                "TITLE": "Can't print",
+                "DESCRIPTION": "Steve Alexander\r\nMSP-Ignite\r\n919-825-1820 ext 100\r\nwww.MSP-Ignite.com<http://www.msp-ignite.com/>\r\nSteveA@MSP-Ignite.com<mailto:SteveA@MSP-Ignite.com>\r\n[cid:2CB57E5F-0F09-495B-A381-85BE36A413F9]\r\n\r\n**Created via Incoming Email Processor**\r\nFrom: Steve Alexander <SteveA@MSP-Ignite.com>\r\nTo: \"SupportNScottsdaleAZ@teamlogicit.com\"\t<SupportNScottsdaleAZ@teamlogicit.com>",
+                "ISSUETYPE": {
+                    "Value": null,
+                    "Label": "Unknown/N/A"
+                },
+                "SUBISSUETYPE": {
+                    "Value": null,
+                    "Label": "Unknown/N/A"
+                },
+                "TICKETCATEGORY": {
+                    "Value": "3",
+                    "Label": "Standard"
+                },
+                "TICKETTYPE": {
+                    "Value": "1",
+                    "Label": "Service Request"
+                },
+                "PRIORITY": {
+                    "Value": "2",
+                    "Label": "Medium"
+                },
+                "STATUS": {
+                    "Value": "5",
+                    "Label": "Complete"
+                }
+            },
+            {
+                "TITLE": "Confusion between OneDrive and Sharepoint",
+                "DESCRIPTION": "Marni is requesting information on how to tell OneDrive and Sharepoint from the locations that she has been saving and sharing documents",
+                "ISSUETYPE": {
+                    "Value": "8",
+                    "Label": "Server"
+                },
+                "SUBISSUETYPE": {
+                    "Value": null,
+                    "Label": "Unknown/N/A"
+                },
+                "TICKETCATEGORY": {
+                    "Value": "3",
+                    "Label": "Standard"
+                },
+                "TICKETTYPE": {
+                    "Value": "1",
+                    "Label": "Service Request"
+                },
+                "PRIORITY": {
+                    "Value": "2",
+                    "Label": "Medium"
+                },
+                "STATUS": {
+                    "Value": "5",
+                    "Label": "Complete"
+                }
+            },
+            {
+                "TITLE": "Migrate documents and programs from old PC to new laptop",
+                "DESCRIPTION": "Dr. Boyd purchased a new laptop and asked that his documents be transferred from his old desktop.\r\nAdditional items: Install printer, install Office 365, set up Microsoft Live account. The data and image transfer went smoothly, as did the Office 365 and MS account setup. The printer setup proved to be more of a challenge as there were a couple of networking issues that had to first be resolved. The total effort took 4 hours. Dr. Boyd received a 2 hour promotional discount.",
+                "ISSUETYPE": {
+                    "Value": null,
+                    "Label": "Unknown/N/A"
+                },
+                "SUBISSUETYPE": {
+                    "Value": null,
+                    "Label": "Unknown/N/A"
+                },
+                "TICKETCATEGORY": {
+                    "Value": "3",
+                    "Label": "Standard"
+                },
+                "TICKETTYPE": {
+                    "Value": "1",
+                    "Label": "Service Request"
+                },
+                "PRIORITY": {
+                    "Value": "1",
+                    "Label": "High"
+                },
+                "STATUS": {
+                    "Value": "5",
+                    "Label": "Complete"
+                }
+            },
+            {
+                "TITLE": "Setup email",
+                "DESCRIPTION": "Andy called in requesting assistance in setting up his email",
+                "ISSUETYPE": {
+                    "Value": null,
+                    "Label": "Unknown/N/A"
+                },
+                "SUBISSUETYPE": {
+                    "Value": null,
+                    "Label": "Unknown/N/A"
+                },
+                "TICKETCATEGORY": {
+                    "Value": "3",
+                    "Label": "Standard"
+                },
+                "TICKETTYPE": {
+                    "Value": "1",
+                    "Label": "Service Request"
+                },
+                "PRIORITY": {
+                    "Value": "1",
+                    "Label": "High"
+                },
+                "STATUS": {
+                    "Value": "5",
+                    "Label": "Complete"
+                }
+            },
+            {
+                "TITLE": "Fiber connection down from switch to Ocotillo room",
+                "DESCRIPTION": "Fiber connection went down, may have bad SFP or media converter",
+                "ISSUETYPE": {
+                    "Value": "5",
+                    "Label": "Software/SaaS"
+                },
+                "SUBISSUETYPE": {
+                    "Value": "40",
+                    "Label": "AV/Anti-Spyware"
+                },
+                "TICKETCATEGORY": {
+                    "Value": "3",
+                    "Label": "Standard"
+                },
+                "TICKETTYPE": {
+                    "Value": "2",
+                    "Label": "Incident"
+                },
+                "PRIORITY": {
+                    "Value": "4",
+                    "Label": "Critical"
+                },
+                "STATUS": {
+                    "Value": "5",
+                    "Label": "Complete"
+                }
+            },
+            {
+                "TITLE": "User cannot find contact info",
+                "DESCRIPTION": "John walked into office and notified Jim that he was having trouble finding his contact information on his new computer. He will be back in the office this afternoon",
+                "ISSUETYPE": {
+                    "Value": null,
+                    "Label": "Unknown/N/A"
+                },
+                "SUBISSUETYPE": {
+                    "Value": null,
+                    "Label": "Unknown/N/A"
+                },
+                "TICKETCATEGORY": {
+                    "Value": "3",
+                    "Label": "Standard"
+                },
+                "TICKETTYPE": {
+                    "Value": "2",
+                    "Label": "Incident"
+                },
+                "PRIORITY": {
+                    "Value": "2",
+                    "Label": "Medium"
+                },
+                "STATUS": {
+                    "Value": "5",
+                    "Label": "Complete"
+                }
+            },
+            {
+                "TITLE": "Procure Monitor and Mount",
+                "DESCRIPTION": null,
+                "ISSUETYPE": {
+                    "Value": null,
+                    "Label": "Unknown/N/A"
+                },
+                "SUBISSUETYPE": {
+                    "Value": null,
+                    "Label": "Unknown/N/A"
+                },
+                "TICKETCATEGORY": {
+                    "Value": "3",
+                    "Label": "Standard"
+                },
+                "TICKETTYPE": {
+                    "Value": "1",
+                    "Label": "Service Request"
+                },
+                "PRIORITY": {
+                    "Value": "1",
+                    "Label": "High"
+                },
+                "STATUS": {
+                    "Value": "5",
+                    "Label": "Complete"
+                }
+            },
+            {
+                "TITLE": "Gmail email issues",
+                "DESCRIPTION": "User having issues with mail not showing up in her Office 365 from her gmail box",
+                "ISSUETYPE": {
+                    "Value": null,
+                    "Label": "Unknown/N/A"
+                },
+                "SUBISSUETYPE": {
+                    "Value": null,
+                    "Label": "Unknown/N/A"
+                },
+                "TICKETCATEGORY": {
+                    "Value": "3",
+                    "Label": "Standard"
+                },
+                "TICKETTYPE": {
+                    "Value": "1",
+                    "Label": "Service Request"
+                },
+                "PRIORITY": {
+                    "Value": "3",
+                    "Label": "Low"
+                },
+                "STATUS": {
+                    "Value": "5",
+                    "Label": "Complete"
+                }
+            },
+            {
+                "TITLE": "Image Workstation 145",
+                "DESCRIPTION": "Request to image w145. USB drive installation failed from media. Using CD",
+                "ISSUETYPE": {
+                    "Value": null,
+                    "Label": "Unknown/N/A"
+                },
+                "SUBISSUETYPE": {
+                    "Value": null,
+                    "Label": "Unknown/N/A"
+                },
+                "TICKETCATEGORY": {
+                    "Value": "3",
+                    "Label": "Standard"
+                },
+                "TICKETTYPE": {
+                    "Value": "1",
+                    "Label": "Service Request"
+                },
+                "PRIORITY": {
+                    "Value": "2",
+                    "Label": "Medium"
+                },
+                "STATUS": {
+                    "Value": "5",
+                    "Label": "Complete"
+                }
+            },
+            {
+                "TITLE": "Site Survey",
+                "DESCRIPTION": "Perform Network and Site Survey.",
+                "ISSUETYPE": {
+                    "Value": "4",
+                    "Label": "Hardware"
+                },
+                "SUBISSUETYPE": {
+                    "Value": null,
+                    "Label": "Unknown/N/A"
+                },
+                "TICKETCATEGORY": {
+                    "Value": "3",
+                    "Label": "Standard"
+                },
+                "TICKETTYPE": {
+                    "Value": "1",
+                    "Label": "Service Request"
+                },
+                "PRIORITY": {
+                    "Value": "1",
+                    "Label": "High"
+                },
+                "STATUS": {
+                    "Value": "5",
+                    "Label": "Complete"
+                }
+            },
+            {
+                "TITLE": "Email Routing",
+                "DESCRIPTION": "Route office email per client instructions.",
+                "ISSUETYPE": {
+                    "Value": null,
+                    "Label": "Unknown/N/A"
+                },
+                "SUBISSUETYPE": {
+                    "Value": null,
+                    "Label": "Unknown/N/A"
+                },
+                "TICKETCATEGORY": {
+                    "Value": "3",
+                    "Label": "Standard"
+                },
+                "TICKETTYPE": {
+                    "Value": "1",
+                    "Label": "Service Request"
+                },
+                "PRIORITY": {
+                    "Value": "1",
+                    "Label": "High"
+                },
+                "STATUS": {
+                    "Value": "5",
+                    "Label": "Complete"
+                }
+            },
+            {
+                "TITLE": "Install switches and new router, re-cable panel",
+                "DESCRIPTION": null,
+                "ISSUETYPE": {
+                    "Value": "5",
+                    "Label": "Software/SaaS"
+                },
+                "SUBISSUETYPE": {
+                    "Value": "39",
+                    "Label": "Adobe"
+                },
+                "TICKETCATEGORY": {
+                    "Value": "3",
+                    "Label": "Standard"
+                },
+                "TICKETTYPE": {
+                    "Value": "1",
+                    "Label": "Service Request"
+                },
+                "PRIORITY": {
+                    "Value": "2",
+                    "Label": "Medium"
+                },
+                "STATUS": {
+                    "Value": "5",
+                    "Label": "Complete"
+                }
+            },
+            {
+                "TITLE": "Ashley not receiving email",
+                "DESCRIPTION": null,
+                "ISSUETYPE": {
+                    "Value": null,
+                    "Label": "Unknown/N/A"
+                },
+                "SUBISSUETYPE": {
+                    "Value": null,
+                    "Label": "Unknown/N/A"
+                },
+                "TICKETCATEGORY": {
+                    "Value": "3",
+                    "Label": "Standard"
+                },
+                "TICKETTYPE": {
+                    "Value": "2",
+                    "Label": "Incident"
+                },
+                "PRIORITY": {
+                    "Value": "2",
+                    "Label": "Medium"
+                },
+                "STATUS": {
+                    "Value": "5",
+                    "Label": "Complete"
+                }
+            },
+            {
+                "TITLE": "Set up new printer",
+                "DESCRIPTION": "Unbox and set up new printer\r\nsend MAC address to Mark to set up",
+                "ISSUETYPE": {
+                    "Value": "5",
+                    "Label": "Software/SaaS"
+                },
+                "SUBISSUETYPE": {
+                    "Value": "38",
+                    "Label": "Edge/IE"
+                },
+                "TICKETCATEGORY": {
+                    "Value": "3",
+                    "Label": "Standard"
+                },
+                "TICKETTYPE": {
+                    "Value": "1",
+                    "Label": "Service Request"
+                },
+                "PRIORITY": {
+                    "Value": "2",
+                    "Label": "Medium"
+                },
+                "STATUS": {
+                    "Value": "5",
+                    "Label": "Complete"
+                }
+            },
+            {
+                "TITLE": "Issue logging into school website",
+                "DESCRIPTION": "user is having issues logging into the school website",
+                "ISSUETYPE": {
+                    "Value": null,
+                    "Label": "Unknown/N/A"
+                },
+                "SUBISSUETYPE": {
+                    "Value": null,
+                    "Label": "Unknown/N/A"
+                },
+                "TICKETCATEGORY": {
+                    "Value": "3",
+                    "Label": "Standard"
+                },
+                "TICKETTYPE": {
+                    "Value": "2",
+                    "Label": "Incident"
+                },
+                "PRIORITY": {
+                    "Value": "2",
+                    "Label": "Medium"
+                },
+                "STATUS": {
+                    "Value": "5",
+                    "Label": "Complete"
+                }
+            },
+            {
+                "TITLE": "Reset printer and test scan to server, connect Workstation 145 up to spider",
+                "DESCRIPTION": "printer scanning not working\r\nW145 not responding over spider",
+                "ISSUETYPE": {
+                    "Value": "5",
+                    "Label": "Software/SaaS"
+                },
+                "SUBISSUETYPE": {
+                    "Value": "38",
+                    "Label": "Edge/IE"
+                },
+                "TICKETCATEGORY": {
+                    "Value": "3",
+                    "Label": "Standard"
+                },
+                "TICKETTYPE": {
+                    "Value": "1",
+                    "Label": "Service Request"
+                },
+                "PRIORITY": {
+                    "Value": "2",
+                    "Label": "Medium"
+                },
+                "STATUS": {
+                    "Value": "5",
+                    "Label": "Complete"
+                }
+            },
+            {
+                "TITLE": "Opportunity Closed:[PMI Managed Services]",
+                "DESCRIPTION": "Onboarding.",
+                "ISSUETYPE": {
+                    "Value": null,
+                    "Label": "Unknown/N/A"
+                },
+                "SUBISSUETYPE": {
+                    "Value": null,
+                    "Label": "Unknown/N/A"
+                },
+                "TICKETCATEGORY": {
+                    "Value": "3",
+                    "Label": "Standard"
+                },
+                "TICKETTYPE": {
+                    "Value": "1",
+                    "Label": "Service Request"
+                },
+                "PRIORITY": {
+                    "Value": "4",
+                    "Label": "Critical"
+                },
+                "STATUS": {
+                    "Value": "5",
+                    "Label": "Complete"
+                }
+            },
+            {
+                "TITLE": "Cannot connect to VPN",
+                "DESCRIPTION": "Jean is having issues connecting to Windows VPN",
+                "ISSUETYPE": {
+                    "Value": "6",
+                    "Label": "Network"
+                },
+                "SUBISSUETYPE": {
+                    "Value": "20",
+                    "Label": "VPN"
+                },
+                "TICKETCATEGORY": {
+                    "Value": "3",
+                    "Label": "Standard"
+                },
+                "TICKETTYPE": {
+                    "Value": "3",
+                    "Label": "Problem"
+                },
+                "PRIORITY": {
+                    "Value": "2",
+                    "Label": "Medium"
+                },
+                "STATUS": {
+                    "Value": "5",
+                    "Label": "Complete"
+                }
+            },
+            {
+                "TITLE": "Unable to browse shares while connected to VPN client on Netgear router",
+                "DESCRIPTION": "We are able to connect using OpenVPN client to Netgear router but are unable to browse the shares on his servers",
+                "ISSUETYPE": {
+                    "Value": "6",
+                    "Label": "Network"
+                },
+                "SUBISSUETYPE": {
+                    "Value": "20",
+                    "Label": "VPN"
+                },
+                "TICKETCATEGORY": {
+                    "Value": "3",
+                    "Label": "Standard"
+                },
+                "TICKETTYPE": {
+                    "Value": "3",
+                    "Label": "Problem"
+                },
+                "PRIORITY": {
+                    "Value": "2",
+                    "Label": "Medium"
+                },
+                "STATUS": {
+                    "Value": "5",
+                    "Label": "Complete"
+                }
+            },
+            {
+                "TITLE": "Set up TZ100",
+                "DESCRIPTION": "Company just moved and needs to reset static settings for TZ100",
+                "ISSUETYPE": {
+                    "Value": "6",
+                    "Label": "Network"
+                },
+                "SUBISSUETYPE": {
+                    "Value": "21",
+                    "Label": "Wireless"
+                },
+                "TICKETCATEGORY": {
+                    "Value": "3",
+                    "Label": "Standard"
+                },
+                "TICKETTYPE": {
+                    "Value": "1",
+                    "Label": "Service Request"
+                },
+                "PRIORITY": {
+                    "Value": "2",
+                    "Label": "Medium"
+                },
+                "STATUS": {
+                    "Value": "5",
+                    "Label": "Complete"
+                }
+            },
+            {
+                "TITLE": "configure dns servers",
+                "DESCRIPTION": "Cox called to notify them that they are connected to a legacy DNS server. We need to check to make sure they will still have connectivity after the changeover",
+                "ISSUETYPE": {
+                    "Value": "6",
+                    "Label": "Network"
+                },
+                "SUBISSUETYPE": {
+                    "Value": "21",
+                    "Label": "Wireless"
+                },
+                "TICKETCATEGORY": {
+                    "Value": "3",
+                    "Label": "Standard"
+                },
+                "TICKETTYPE": {
+                    "Value": "1",
+                    "Label": "Service Request"
+                },
+                "PRIORITY": {
+                    "Value": "2",
+                    "Label": "Medium"
+                },
+                "STATUS": {
+                    "Value": "5",
+                    "Label": "Complete"
+                }
+            },
+            {
+                "TITLE": "Router configuration and VPN setup",
+                "DESCRIPTION": "User needs new VPN router and VPN connection set up to allow port forwarding to her CareComple home server",
+                "ISSUETYPE": {
+                    "Value": "6",
+                    "Label": "Network"
+                },
+                "SUBISSUETYPE": {
+                    "Value": "21",
+                    "Label": "Wireless"
+                },
+                "TICKETCATEGORY": {
+                    "Value": "3",
+                    "Label": "Standard"
+                },
+                "TICKETTYPE": {
+                    "Value": "1",
+                    "Label": "Service Request"
+                },
+                "PRIORITY": {
+                    "Value": "2",
+                    "Label": "Medium"
+                },
+                "STATUS": {
+                    "Value": "5",
+                    "Label": "Complete"
+                }
+            },
+            {
+                "TITLE": "Site Survey and Network Assessment",
+                "DESCRIPTION": "Complete site survey and develop proposal.",
+                "ISSUETYPE": {
+                    "Value": null,
+                    "Label": "Unknown/N/A"
+                },
+                "SUBISSUETYPE": {
+                    "Value": null,
+                    "Label": "Unknown/N/A"
+                },
+                "TICKETCATEGORY": {
+                    "Value": "3",
+                    "Label": "Standard"
+                },
+                "TICKETTYPE": {
+                    "Value": "1",
+                    "Label": "Service Request"
+                },
+                "PRIORITY": {
+                    "Value": "2",
+                    "Label": "Medium"
+                },
+                "STATUS": {
+                    "Value": "5",
+                    "Label": "Complete"
+                }
+            },
+            {
+                "TITLE": "Opportunity Closed:[Office Network Project]",
+                "DESCRIPTION": "Perform a Speed Test to confirm network performance\r\nInstall 4 Ethernet drops\r\nMove modem from conference room to behind the front desk\r\nPerform continuity test\r\nProvision phones and instruct office personnel re:on-boarding",
+                "ISSUETYPE": {
+                    "Value": null,
+                    "Label": "Unknown/N/A"
+                },
+                "SUBISSUETYPE": {
+                    "Value": null,
+                    "Label": "Unknown/N/A"
+                },
+                "TICKETCATEGORY": {
+                    "Value": "3",
+                    "Label": "Standard"
+                },
+                "TICKETTYPE": {
+                    "Value": "1",
+                    "Label": "Service Request"
+                },
+                "PRIORITY": {
+                    "Value": "4",
+                    "Label": "Critical"
+                },
+                "STATUS": {
+                    "Value": "5",
+                    "Label": "Complete"
+                }
+            },
+            {
+                "TITLE": "Closed Opportunity for Aquaman Pools",
+                "DESCRIPTION": "Ticket created from Close Opportunity Wizard (Opportunity: Office Network Project; Quote: Network Infrastructure)",
+                "ISSUETYPE": {
+                    "Value": null,
+                    "Label": "Unknown/N/A"
+                },
+                "SUBISSUETYPE": {
+                    "Value": null,
+                    "Label": "Unknown/N/A"
+                },
+                "TICKETCATEGORY": {
+                    "Value": "3",
+                    "Label": "Standard"
+                },
+                "TICKETTYPE": {
+                    "Value": "1",
+                    "Label": "Service Request"
+                },
+                "PRIORITY": {
+                    "Value": "4",
+                    "Label": "Critical"
+                },
+                "STATUS": {
+                    "Value": "5",
+                    "Label": "Complete"
+                }
+            },
+            {
+                "TITLE": "AVG antivirus not running on Jackw7",
+                "DESCRIPTION": "stuck at waiting for service. Datto backup agent also not running",
+                "ISSUETYPE": {
+                    "Value": "7",
+                    "Label": "Assessment"
+                },
+                "SUBISSUETYPE": {
+                    "Value": "33",
+                    "Label": "Workstation/Server"
+                },
+                "TICKETCATEGORY": {
+                    "Value": "3",
+                    "Label": "Standard"
+                },
+                "TICKETTYPE": {
+                    "Value": "1",
+                    "Label": "Service Request"
+                },
+                "PRIORITY": {
+                    "Value": "2",
+                    "Label": "Medium"
+                },
+                "STATUS": {
+                    "Value": "5",
+                    "Label": "Complete"
+                }
+            },
+            {
+                "TITLE": "Backbone Installation",
+                "DESCRIPTION": "Install equipment\r\nTune Cameras\r\nVerify Connectivity",
+                "ISSUETYPE": {
+                    "Value": "6",
+                    "Label": "Network"
+                },
+                "SUBISSUETYPE": {
+                    "Value": null,
+                    "Label": "Unknown/N/A"
+                },
+                "TICKETCATEGORY": {
+                    "Value": "3",
+                    "Label": "Standard"
+                },
+                "TICKETTYPE": {
+                    "Value": "1",
+                    "Label": "Service Request"
+                },
+                "PRIORITY": {
+                    "Value": "1",
+                    "Label": "High"
+                },
+                "STATUS": {
+                    "Value": "5",
+                    "Label": "Complete"
+                }
+            },
+            {
+                "TITLE": "Opportunity Closed:[Wireless Network]",
+                "DESCRIPTION": "Procure Ubiquiti Wireless Access Point and Gigabit Ethernet Adapter\r\nEnable QoS on Nighthawk router for all devices\r\nEnable VLAN Tagging\r\nVLAN1 - exterior cameras\r\nVLAN2 - Interior cameras\r\nVLAN3 - directtv\r\nVLAN4 - everything else\r\nReconfigure cameras to optimize bandwidth, attenuation, and noise\r\nRun heatmap on site again to check for dead spots\r\nCheck connection to cameras over wifi and test access from iPhone",
+                "ISSUETYPE": {
+                    "Value": null,
+                    "Label": "Unknown/N/A"
+                },
+                "SUBISSUETYPE": {
+                    "Value": null,
+                    "Label": "Unknown/N/A"
+                },
+                "TICKETCATEGORY": {
+                    "Value": "3",
+                    "Label": "Standard"
+                },
+                "TICKETTYPE": {
+                    "Value": "1",
+                    "Label": "Service Request"
+                },
+                "PRIORITY": {
+                    "Value": "4",
+                    "Label": "Critical"
+                },
+                "STATUS": {
+                    "Value": "5",
+                    "Label": "Complete"
+                }
+            },
+            {
+                "TITLE": "Gregg's email is delayed",
+                "DESCRIPTION": "email is delayed\r\n------------------------\r\nFollow On Questions\r\n------------------------\r\n Q: When do you need a response for this request? A: no answer\r\n Q: What is the best way to contact you with an update? A: no answer\r\n\r\nOriginal Priority: Low",
+                "ISSUETYPE": {
+                    "Value": null,
+                    "Label": "Unknown/N/A"
+                },
+                "SUBISSUETYPE": {
+                    "Value": null,
+                    "Label": "Unknown/N/A"
+                },
+                "TICKETCATEGORY": {
+                    "Value": "3",
+                    "Label": "Standard"
+                },
+                "TICKETTYPE": {
+                    "Value": "1",
+                    "Label": "Service Request"
+                },
+                "PRIORITY": {
+                    "Value": "2",
+                    "Label": "Medium"
+                },
+                "STATUS": {
+                    "Value": "5",
+                    "Label": "Complete"
+                }
+            },
+            {
+                "TITLE": "Monthly On-Site Visit",
+                "DESCRIPTION": "The Monthly On-Site visit is only required if there are issues requiring it. Please confirm with them in advance.",
+                "ISSUETYPE": {
+                    "Value": null,
+                    "Label": "Unknown/N/A"
+                },
+                "SUBISSUETYPE": {
+                    "Value": null,
+                    "Label": "Unknown/N/A"
+                },
+                "TICKETCATEGORY": {
+                    "Value": "3",
+                    "Label": "Standard"
+                },
+                "TICKETTYPE": {
+                    "Value": "1",
+                    "Label": "Service Request"
+                },
+                "PRIORITY": {
+                    "Value": "2",
+                    "Label": "Medium"
+                },
+                "STATUS": {
+                    "Value": "5",
+                    "Label": "Complete"
+                }
+            },
+            {
+                "TITLE": "Monthly On-Site Visit",
+                "DESCRIPTION": "The Monthly On-Site visit is only required if there are issues requiring it. Please confirm with them in advance.",
+                "ISSUETYPE": {
+                    "Value": null,
+                    "Label": "Unknown/N/A"
+                },
+                "SUBISSUETYPE": {
+                    "Value": null,
+                    "Label": "Unknown/N/A"
+                },
+                "TICKETCATEGORY": {
+                    "Value": "3",
+                    "Label": "Standard"
+                },
+                "TICKETTYPE": {
+                    "Value": "1",
+                    "Label": "Service Request"
+                },
+                "PRIORITY": {
+                    "Value": "2",
+                    "Label": "Medium"
+                },
+                "STATUS": {
+                    "Value": "5",
+                    "Label": "Complete"
+                }
+            },
+            {
+                "TITLE": "Monthly On-Site Visit",
+                "DESCRIPTION": "The Monthly On-Site visit is only required if there are issues requiring it. Please confirm with them in advance.",
+                "ISSUETYPE": {
+                    "Value": null,
+                    "Label": "Unknown/N/A"
+                },
+                "SUBISSUETYPE": {
+                    "Value": null,
+                    "Label": "Unknown/N/A"
+                },
+                "TICKETCATEGORY": {
+                    "Value": "3",
+                    "Label": "Standard"
+                },
+                "TICKETTYPE": {
+                    "Value": "1",
+                    "Label": "Service Request"
+                },
+                "PRIORITY": {
+                    "Value": "2",
+                    "Label": "Medium"
+                },
+                "STATUS": {
+                    "Value": "5",
+                    "Label": "Complete"
+                }
+            },
+            {
+                "TITLE": "Opportunity Closed:[Client On-Boarding]",
+                "DESCRIPTION": "Conduct the following activities in transitioning from on-premise to hosted environment:\r\n  Discovery Phase:\r\n     Validate user information and storage requirements.\r\n     Verify application licenses\r\n     Baseline virtual server requirements\r\n\r\n  Provisioning:\r\n     Input and configure the environment required for each account.\r\n\r\n  Deployment:\r\n     Build each environment\r\n     Create system accounts\r\n     Install applications\r\n     Verify the environments\r\n\r\n  Migrate Data:\r\n     Migrate user data\r\n     Configure file and data access permissions.\r\n     Test each environment's access\r\n\r\n  Go Live\r\n     Install RDP clients\r\n     Reconfigure terminals as needed.\r\n     Introduce each user to their environment.\r\n     User training",
+                "ISSUETYPE": {
+                    "Value": null,
+                    "Label": "Unknown/N/A"
+                },
+                "SUBISSUETYPE": {
+                    "Value": null,
+                    "Label": "Unknown/N/A"
+                },
+                "TICKETCATEGORY": {
+                    "Value": "3",
+                    "Label": "Standard"
+                },
+                "TICKETTYPE": {
+                    "Value": "1",
+                    "Label": "Service Request"
+                },
+                "PRIORITY": {
+                    "Value": "4",
+                    "Label": "Critical"
+                },
+                "STATUS": {
+                    "Value": "5",
+                    "Label": "Complete"
+                }
+            },
+            {
+                "TITLE": "Closed Opportunity for Aquaman Pools",
+                "DESCRIPTION": "Ticket created from Close Opportunity Wizard (Opportunity: New Office Printer; Quote: Higher Speed Printer Option)",
+                "ISSUETYPE": {
+                    "Value": null,
+                    "Label": "Unknown/N/A"
+                },
+                "SUBISSUETYPE": {
+                    "Value": null,
+                    "Label": "Unknown/N/A"
+                },
+                "TICKETCATEGORY": {
+                    "Value": "3",
+                    "Label": "Standard"
+                },
+                "TICKETTYPE": {
+                    "Value": "1",
+                    "Label": "Service Request"
+                },
+                "PRIORITY": {
+                    "Value": "4",
+                    "Label": "Critical"
+                },
+                "STATUS": {
+                    "Value": "5",
+                    "Label": "Complete"
+                }
+            },
+            {
+                "TITLE": "Anti Malware software expired",
+                "DESCRIPTION": "The anti malware has expired and is not running on my PC,  The AVG is also about to run our.\r\n------------------------\r\nFollow On Questions\r\n------------------------\r\n Q: When do you need a response for this request? A: Monday June 6\r\n Q: What is the best way to contact you with an update? A: no answer\r\n\r\nOriginal Priority: Medium",
+                "ISSUETYPE": {
+                    "Value": null,
+                    "Label": "Unknown/N/A"
+                },
+                "SUBISSUETYPE": {
+                    "Value": null,
+                    "Label": "Unknown/N/A"
+                },
+                "TICKETCATEGORY": {
+                    "Value": "3",
+                    "Label": "Standard"
+                },
+                "TICKETTYPE": {
+                    "Value": "1",
+                    "Label": "Service Request"
+                },
+                "PRIORITY": {
+                    "Value": "2",
+                    "Label": "Medium"
+                },
+                "STATUS": {
+                    "Value": "5",
+                    "Label": "Complete"
+                }
+            },
+            {
+                "TITLE": "Sync Software",
+                "DESCRIPTION": "I found a software to sync my phone and have uploaded my contacts.  However I may need so help configuring it when you come to the office.  Can you confirm that date with me \r\nI will be out of the office until mid next week so It is  not critical\r\n------------------------\r\nFollow On Questions\r\n------------------------\r\n Q: When do you need a response for this request? A: June 10, 2016\r\n Q: What is the best way to contact you with an update? A: no answer\r\n\r\nOriginal Priority: Low",
+                "ISSUETYPE": {
+                    "Value": null,
+                    "Label": "Unknown/N/A"
+                },
+                "SUBISSUETYPE": {
+                    "Value": null,
+                    "Label": "Unknown/N/A"
+                },
+                "TICKETCATEGORY": {
+                    "Value": "3",
+                    "Label": "Standard"
+                },
+                "TICKETTYPE": {
+                    "Value": "1",
+                    "Label": "Service Request"
+                },
+                "PRIORITY": {
+                    "Value": "3",
+                    "Label": "Low"
+                },
+                "STATUS": {
+                    "Value": "5",
+                    "Label": "Complete"
+                }
+            }
+        ]
     }
 ]

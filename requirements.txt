@@ -4,13 +4,16 @@ pytesseract>=0.3.10
 opencv-python>=4.5.0
 numpy>=1.21.0
 
-# Automatic Processing Dependencies
+# Core Processing Dependencies
 schedule>=1.2.0
-streamlit
 pandas
-plotly
 pytz
-schedule
 snowflake-connector-python
-dotenv
-scikit-learn  
+python-dotenv
+scikit-learn
+
+# FastAPI and Web Dependencies
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+pydantic>=2.0.0
+python-multipart>=0.0.6

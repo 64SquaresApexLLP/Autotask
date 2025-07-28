@@ -4,11 +4,11 @@ Handles ticket similarity matching, technical analysis, and processing logic.
 """
 
 import re
-import pandas as pd
-from typing import List, Dict, Optional
+from typing import List, Dict, Any
 from collections import Counter
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
+import scipy.sparse
 
 
 class TicketProcessor:
@@ -129,8 +129,17 @@ class TicketProcessor:
             print(f"Processing {len(all_texts)} texts for similarity calculation")
 
             vectors = tfidf.fit_transform(all_texts)
-            cosine_sim = cosine_similarity(vectors[0:1], vectors[1:])
+            # Convert to dense array for easier indexing and cosine_similarity compatibility
+            # vectors is a scipy sparse matrix with toarray() method
+            vectors_dense = getattr(vectors, 'toarray')()
 
+            # Extract vectors using standard array indexing
+            new_vector = vectors_dense[0:1]  # First vector (new text) - keep 2D shape
+            historical_vectors = vectors_dense[1:]  # Remaining vectors (historical texts)
+
+            cosine_sim = cosine_similarity(new_vector, historical_vectors)
+
+            # cosine_sim is a 2D array, get the first row
             similarities = cosine_sim[0]
             print(f"Calculated {len(similarities)} similarity scores")
 

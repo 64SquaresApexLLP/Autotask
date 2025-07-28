@@ -1,6 +1,6 @@
 # TeamLogic AutoTask - IT Support Ticket Management System
 
-A comprehensive AI-powered IT support ticket management system built with Streamlit and Snowflake Cortex LLM.
+A comprehensive AI-powered IT support ticket management system built with Snowflake Cortex LLM.
 
 ## 🚀 Features
 
@@ -10,7 +10,9 @@ A comprehensive AI-powered IT support ticket management system built with Stream
 - **Resolution Generation**: AI-generated resolution suggestions based on historical data
 - **Email Notifications**: Automated confirmation emails to users
 - **Knowledge Management**: Persistent knowledge base with similar ticket tracking
-- **Real-time Dashboard**: Interactive Streamlit interface with analytics
+- **Core Processing Engine**: Backend processing without UI dependencies
+- **FastAPI Backend**: RESTful API with complete AI workflow integration
+- **Swagger Documentation**: Interactive API documentation with testing interface
 
 ## 📁 Project Structure
 
@@ -21,6 +23,15 @@ teamlogic-autotask/
 ├── .env                           # Environment variables (not in repo)
 ├── app.py                         # Main Streamlit application
 ├── config.py                      # Configuration settings
+├── start_backend.py               # FastAPI backend starter script
+│
+├── backend/                       # FastAPI Backend
+│   ├── main.py                    # Main FastAPI application
+│   ├── run.py                     # Backend runner script
+│   ├── test_api.py                # API testing script
+│   ├── requirements.txt           # Backend dependencies
+│   ├── README.md                  # Backend documentation
+│   └── API_ENDPOINTS.md           # Complete API documentation
 │
 ├── src/                           # Source code
 │   ├── agents/                    # AI Agents
@@ -84,9 +95,22 @@ teamlogic-autotask/
    ```
 
 4. **Run the application**
+   
+   **Option A: Streamlit Frontend**
    ```bash
    streamlit run app.py
    ```
+   
+   **Option B: FastAPI Backend**
+   ```bash
+   # Using the starter script
+   python start_backend.py
+   
+   # Or directly with uvicorn
+   uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
+   ```
+   
+   **API Documentation**: http://localhost:8000/docs
 
 ## 🔧 Configuration
 
@@ -101,10 +125,20 @@ teamlogic-autotask/
 
 ## 📊 Usage
 
+### Web Interface (Streamlit)
 1. **Manual Ticket Creation**: Use the web interface to submit tickets
 2. **Email Integration**: Send emails to monitored inbox for automatic processing
 3. **Dashboard**: View ticket analytics and recent activity
 4. **Assignment**: Tickets are automatically assigned to best-matched technicians
+
+### API Interface (FastAPI)
+1. **Create Tickets**: POST `/tickets` with title, description, and due date
+2. **Get Ticket Details**: GET `/tickets/{ticket_number}`
+3. **Get Assigned Technician**: GET `/tickets/{ticket_number}/technician`
+4. **List All Tickets**: GET `/tickets` with optional filtering and pagination
+5. **Health Check**: GET `/health` for monitoring
+
+**API Documentation**: http://localhost:8000/docs
 
 ## 🔄 Workflow
 

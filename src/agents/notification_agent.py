@@ -82,6 +82,9 @@ class NotificationAgent:
             # Send email
             with smtplib.SMTP(self.smtp_server, self.smtp_port) as server:
                 server.starttls()
+                # Ensure smtp_password is not None (should be guaranteed by enabled check)
+                if self.smtp_password is None:
+                    raise ValueError("SMTP password is not configured")
                 server.login(self.smtp_username, self.smtp_password)
                 server.send_message(msg)
                 

@@ -15,46 +15,27 @@ class SnowflakeConnection:
     Manages Snowflake database connections and operations.
     """
 
-    def __init__(self, sf_account: str, sf_user: str, sf_password: str,
-                 sf_warehouse: str, sf_database: str, sf_schema: str,
-                 sf_role: str, sf_passcode: str):
-        """
-        Initialize Snowflake connection parameters.
-
-        Args:
-            sf_account (str): Snowflake account identifier
-            sf_user (str): Snowflake username
-            sf_password (str): Snowflake password
-            sf_warehouse (str): Snowflake warehouse to use
-            sf_database (str): Snowflake database to use
-            sf_schema (str): Snowflake schema to use
-            sf_role (str): Snowflake role to use
-            sf_passcode (str): Snowflake MFA passcode
-        """
-        self.sf_account = sf_account
-        self.sf_user = sf_user
-        self.sf_password = sf_password
-        self.sf_warehouse = sf_warehouse
-        self.sf_database = sf_database
-        self.sf_schema = sf_schema
-        self.sf_role = sf_role
-        self.sf_passcode = sf_passcode
+    def __init__(self, account: str, user: str, authenticator: str, warehouse: str, database: str, schema: str, role: str):
+        self.account = account
+        self.user = user
+        self.authenticator = authenticator
+        self.warehouse = warehouse
+        self.database = database
+        self.schema = schema
+        self.role = role
         self.conn = None
-
         self._connect_to_snowflake()
 
     def _connect_to_snowflake(self):
-        """Establishes a connection to Snowflake."""
         try:
             self.conn = snowflake.connector.connect(
-                user=self.sf_user,
-                password=self.sf_password,
-                account=self.sf_account,
-                warehouse=self.sf_warehouse,
-                database=self.sf_database,
-                schema=self.sf_schema,
-                role=self.sf_role,
-                passcode=self.sf_passcode
+                user=self.user,
+                account=self.account,
+                authenticator=self.authenticator,
+                warehouse=self.warehouse,
+                database=self.database,
+                schema=self.schema,
+                role=self.role
             )
             print("Successfully connected to Snowflake.")
         except Exception as e:
@@ -119,9 +100,9 @@ class SnowflakeConnection:
 
             try:
                 # Extract JSON block from LLM response
-                match = re.search(r'```json\\s*(\\{[\\s\\S]*?\\})\\s*```', response_str)
+                match = re.search(r'```json\s*(\{[\s\S]*?\})\s*```', response_str)
                 if not match:
-                    match = re.search(r'```\\s*(\\{[\\s\\S]*?\\})\\s*```', response_str)
+                    match = re.search(r'```\s*(\{[\s\S]*?\})\s*```', response_str)
                 if match:
                     response_str = match.group(1)
                 else:
@@ -253,6 +234,141 @@ class SnowflakeConnection:
         else:
             print("No historical tickets found")
             return pd.DataFrame()
+
+    def get_all_tickets(self, limit=50, offset=0, status_filter=None, priority_filter=None):
+        columns = [
+            "TICKETNUMBER", "TITLE", "DESCRIPTION", "DUEDATETIME", "PRIORITY", "STATUS",
+            "TECHNICIANEMAIL", "USEREMAIL", "USERID"
+        ]
+        query = f"SELECT {', '.join(columns)} FROM TEST_DB.PUBLIC.TICKETS"
+        filters = []
+        params = []
+        if status_filter:
+            filters.append("STATUS = %s")
+            params.append(status_filter)
+        if priority_filter:
+            filters.append("PRIORITY = %s")
+            params.append(priority_filter)
+        if filters:
+            query += " WHERE " + " AND ".join(filters)
+        query += f" ORDER BY TICKETNUMBER DESC LIMIT {int(limit)} OFFSET {int(offset)}"
+        print("DEBUG: Executing query:", query)
+        print("DEBUG: With params:", params)
+        results = self.execute_query(query, tuple(params) if params else None)
+        print("DEBUG: Results:", results)
+        return results
+
+    def get_ticket_by_number(self, ticket_number):
+        query = "SELECT * FROM TEST_DB.PUBLIC.TICKETS WHERE TICKETNUMBER = %s"
+        result = self.execute_query(query, (ticket_number,))
+        return result[0] if result else None
+
+    def get_technician_by_ticket_number(self, ticket_number):
+        # Get technician_id from ticket
+        ticket = self.get_ticket_by_number(ticket_number)
+        if not ticket or 'TECHNICIAN_ID' not in ticket:
+            return None
+        technician_id = ticket['TECHNICIAN_ID']
+        # Get technician details
+        query = "SELECT TECHNICIAN_ID, TECHNICIAN_NAME, TECHNICIAN_EMAIL FROM TEST_DB.PUBLIC.TECHNICIAN_DUMMY_DATA WHERE TECHNICIAN_ID = %s"
+        result = self.execute_query(query, (technician_id,))
+        return result[0] if result else None
+
+    def get_all_tickets(self, limit: int = 50, offset: int = 0,
+                       status_filter: Optional[str] = None,
+                       priority_filter: Optional[str] = None) -> List[Dict]:
+        """
+        Get all tickets with optional filtering and pagination.
+
+        Args:
+            limit (int): Maximum number of tickets to return
+            offset (int): Number of tickets to skip
+            status_filter (str, optional): Filter by status
+            priority_filter (str, optional): Filter by priority
+
+        Returns:
+            list: List of ticket dictionaries
+        """
+        if not self.conn:
+            print("Not connected to Snowflake. Please check connection.")
+            return []
+
+        try:
+            # Build WHERE clause for filters
+            where_conditions = []
+            params = []
+
+            if status_filter:
+                where_conditions.append("STATUS = %s")
+                params.append(status_filter)
+
+            if priority_filter:
+                where_conditions.append("PRIORITY = %s")
+                params.append(priority_filter)
+
+            where_clause = ""
+            if where_conditions:
+                where_clause = "WHERE " + " AND ".join(where_conditions)
+
+            query = f"""
+                SELECT
+                    TICKETNUMBER,
+                    TITLE,
+                    DESCRIPTION,
+                    DUEDATETIME,
+                    PRIORITY,
+                    STATUS,
+                    TECHNICIANEMAIL,
+                    USEREMAIL,
+                    USERID
+                FROM TEST_DB.PUBLIC.TICKETS
+                {where_clause}
+                ORDER BY TICKETNUMBER DESC
+                LIMIT {limit} OFFSET {offset}
+            """
+
+            return self.execute_query(query, tuple(params) if params else None)
+
+        except Exception as e:
+            print(f"Error getting all tickets: {e}")
+            return []
+
+    def get_ticket_by_number(self, ticket_number: str) -> Optional[Dict]:
+        """
+        Get a specific ticket by its ticket number.
+
+        Args:
+            ticket_number (str): The ticket number to search for
+
+        Returns:
+            dict: Ticket data or None if not found
+        """
+        if not self.conn:
+            print("Not connected to Snowflake. Please check connection.")
+            return None
+
+        try:
+            query = """
+                SELECT
+                    TICKETNUMBER,
+                    TITLE,
+                    DESCRIPTION,
+                    DUEDATETIME,
+                    PRIORITY,
+                    STATUS,
+                    TECHNICIANEMAIL,
+                    USEREMAIL,
+                    USERID
+                FROM TEST_DB.PUBLIC.TICKETS
+                WHERE TICKETNUMBER = %s
+            """
+
+            results = self.execute_query(query, (ticket_number,))
+            return results[0] if results else None
+
+        except Exception as e:
+            print(f"Error getting ticket by number: {e}")
+            return None
 
     def close_connection(self):
         """Close the Snowflake connection."""

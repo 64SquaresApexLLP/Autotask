@@ -27,8 +27,8 @@ class IntakeClassificationAgent:
     This class orchestrates all the modular components to maintain the same functionality.
     """
 
-    def __init__(self, sf_account: str, sf_user: str, sf_password: str, sf_warehouse: str,
-                 sf_database: str, sf_schema: str, sf_role: str, sf_passcode: str,
+    def __init__(self, sf_account: str, sf_user: str, sf_authenticator: str, sf_warehouse: str,
+                 sf_database: str, sf_schema: str, sf_role: str,
                  data_ref_file: str = 'data.txt'):
         """
         Initializes the agent with Snowflake connection details and loads reference data.
@@ -36,18 +36,22 @@ class IntakeClassificationAgent:
         Args:
             sf_account (str): Snowflake account identifier.
             sf_user (str): Snowflake username.
-            sf_password (str): Snowflake password.
+            sf_authenticator (str): Snowflake authenticator (e.g., 'externalbrowser').
             sf_warehouse (str): Snowflake warehouse to use.
             sf_database (str): Snowflake database to use.
             sf_schema (str): Snowflake schema to use.
             sf_role (str): Snowflake role to use.
-            sf_passcode (str): Snowflake MFA passcode (if applicable).
             data_ref_file (str): Path to the data.txt file containing reference mappings.
         """
         # Initialize database connection
         self.db_connection = SnowflakeConnection(
-            sf_account, sf_user, sf_password, sf_warehouse,
-            sf_database, sf_schema, sf_role, sf_passcode
+            account=sf_account,
+            user=sf_user,
+            authenticator=sf_authenticator,
+            warehouse=sf_warehouse,
+            database=sf_database,
+            schema=sf_schema,
+            role=sf_role
         )
 
         # Initialize data manager

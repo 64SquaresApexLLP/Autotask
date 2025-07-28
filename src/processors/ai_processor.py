@@ -154,6 +154,27 @@ class AIProcessor:
         print("Classifying ticket with LLM...")
         classified_data = self.db_connection.call_cortex_llm(classification_prompt, model=model)
 
+        if classified_data is None:
+            print("❌ LLM classification failed, creating fallback classification...")
+            # Create fallback classification using most common values from similar tickets
+            classified_data = {}
+            for field in ["ISSUETYPE", "SUBISSUETYPE", "TICKETCATEGORY", "TICKETTYPE", "PRIORITY"]:
+                if field in summary:
+                    label = self.reference_data.get(field.lower(), {}).get(str(summary[field]["Value"]), "Unknown")
+                    classified_data[field] = {"Value": summary[field]["Value"], "Label": label}
+                else:
+                    # Use default values if no similar tickets
+                    default_values = {
+                        "ISSUETYPE": {"Value": "1", "Label": "Hardware"},
+                        "SUBISSUETYPE": {"Value": "1", "Label": "General Hardware"},
+                        "TICKETCATEGORY": {"Value": "1", "Label": "Incident"},
+                        "TICKETTYPE": {"Value": "1", "Label": "Service Request"},
+                        "PRIORITY": {"Value": "3", "Label": "Medium"}
+                    }
+                    classified_data[field] = default_values.get(field, {"Value": "N/A", "Label": "Unknown"})
+            classified_data["STATUS"] = {"Value": "1", "Label": "Open"}
+            print("✅ Fallback classification created successfully")
+
         if classified_data and "status" in self.reference_data:
             new_status_info = next(((val, label) for val, label in self.reference_data["status"].items() if label == "New"), ("N/A", "New"))
             classified_data["STATUS"] = {"Value": new_status_info[0], "Label": new_status_info[1]}
@@ -167,6 +188,7 @@ class AIProcessor:
                     label = self.reference_data.get(field.lower(), {}).get(str(summary[field]["Value"]), "Unknown")
                     classified_data[field] = {"Value": summary[field]["Value"], "Label": label}
 
+        print("✅ Ticket classification completed")
         return classified_data
 
     def generate_resolution_note(self, ticket_data: Dict, classified_data: Dict,
