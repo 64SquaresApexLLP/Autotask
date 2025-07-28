@@ -59,6 +59,12 @@ assignment_agent.log
 # Streamlit
 .streamlit/secrets.toml
 
+# Credentials and Secrets
+credentials/
+*.json
+!data/*.json
+!package*.json
+
 # Data files (optional - uncomment if you don't want to track data)
 # data/knowledgebase.json
 # data/ticket_sequence.json
