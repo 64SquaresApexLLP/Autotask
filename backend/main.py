@@ -12,9 +12,6 @@ from datetime import datetime
 import sys
 import os
 
-# Import chatbot router
-from .chatbot.router import router as chatbot_router
-
 # Add src to sys.path for agent/database imports
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
@@ -27,11 +24,14 @@ if parent_dir not in sys.path:
 
 # Import from src modules
 from src.agents.intake_agent import IntakeClassificationAgent
-from src.agents.assignment_agent import AssignmentAgentIntegration
+# from src.agents.assignment_agent import AssignmentAgentIntegration  # Not used directly
 from src.agents.notification_agent import NotificationAgent
 from src.database.snowflake_db import SnowflakeConnection
 from src.database.ticket_db import TicketDB
 from src.data.data_manager import DataManager
+
+# Import simplified chatbot router
+from chatbot.simple_router import router as chatbot_router
 
 app = FastAPI(title="TeamLogic AutoTask API", description="Backend API for TeamLogic AutoTask System", version="1.0.0")
 
@@ -46,6 +46,23 @@ app.add_middleware(
 
 # Include chatbot router
 app.include_router(chatbot_router)
+
+# Set database connection and LLM service for chatbot after initialization
+@app.on_event("startup")
+async def startup_event():
+    """Set database connection and LLM service for chatbot on startup."""
+    if snowflake_conn:
+        from chatbot.simple_router import set_database_connection, set_llm_service
+        set_database_connection(snowflake_conn)
+
+        # Initialize LLM service
+        try:
+            from chatbot.services.llm_service import LLMService
+            llm_service = LLMService()
+            set_llm_service(llm_service)
+            print("✅ LLM service initialized for chatbot")
+        except Exception as e:
+            print(f"⚠️ Warning: Could not initialize LLM service: {e}")
 
 # --- CONFIGURATION ---
 import config
@@ -75,7 +92,6 @@ parent_dir = os.path.dirname(project_root)  # project root directory
 reference_data_path = os.path.join(parent_dir, config.DATA_REF_FILE)
 
 data_manager = DataManager(data_ref_file=reference_data_path)
-assignment_agent = AssignmentAgentIntegration(db_connection=snowflake_conn) if snowflake_conn else None
 notification_agent = NotificationAgent()
 try:
     intake_agent = IntakeClassificationAgent(
@@ -87,7 +103,7 @@ try:
         sf_role=config.SF_ROLE,
         data_ref_file=reference_data_path
     )
-    intake_agent.assignment_agent = assignment_agent
+    # The intake_agent already creates its own assignment_agent in __init__
     intake_agent.notification_agent = notification_agent
     intake_agent.reference_data = data_manager.reference_data
 except Exception as e:
@@ -207,57 +223,76 @@ def get_tickets_stats():
 
 @app.get("/tickets", response_model=List[dict])
 def get_all_tickets(limit: int = Query(50, le=100), offset: int = 0, status: Optional[str] = None, priority: Optional[str] = None):
-
-    if not snowflake_conn:
-        raise HTTPException(status_code=503, detail="Database connection unavailable")
-    results = snowflake_conn.get_all_tickets(limit=limit, offset=offset, status_filter=status, priority_filter=priority)
-    return results
     try:
-        # Use TicketDB to get all tickets
-        all_tickets = ticket_db.get_all_tickets()
+        if not snowflake_conn:
+            raise HTTPException(status_code=503, detail="Database connection unavailable")
 
-        # Apply filtering if specified
+        # Build query with filters
+        query = "SELECT * FROM TEST_DB.PUBLIC.TICKETS"
+        conditions = []
+
         if status:
-            all_tickets = [t for t in all_tickets if t.get('STATUS', '').lower() == status.lower()]
+            conditions.append(f"STATUS = '{status}'")
         if priority:
-            all_tickets = [t for t in all_tickets if t.get('PRIORITY', '').lower() == priority.lower()]
+            conditions.append(f"PRIORITY = '{priority}'")
 
-        # Apply pagination
-        start_idx = offset
-        end_idx = offset + limit
-        paginated_tickets = all_tickets[start_idx:end_idx]
+        if conditions:
+            query += " WHERE " + " AND ".join(conditions)
 
-        return paginated_tickets
+        query += " ORDER BY TICKETNUMBER DESC"
+        query += f" LIMIT {limit} OFFSET {offset}"
+
+        results = snowflake_conn.execute_query(query)
+        return results
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to retrieve tickets: {str(e)}")
 
 @app.get("/tickets/{ticket_number}")
 def get_ticket(ticket_number: str):
-    if not snowflake_conn:
-        raise HTTPException(status_code=503, detail="Database connection unavailable")
-    ticket = snowflake_conn.get_ticket_by_number(ticket_number)
-    if not ticket:
-        raise HTTPException(status_code=404, detail="Ticket not found")
-    return ticket
+    try:
+        if not snowflake_conn:
+            raise HTTPException(status_code=503, detail="Database connection unavailable")
+
+        query = "SELECT * FROM TEST_DB.PUBLIC.TICKETS WHERE TICKETNUMBER = %s"
+        results = snowflake_conn.execute_query(query, (ticket_number,))
+
+        if not results:
+            raise HTTPException(status_code=404, detail="Ticket not found")
+
+        return results[0]
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve ticket: {str(e)}")
 
 @app.get("/tickets/{ticket_number}/technician", response_model=TechnicianResponse)
 def get_technician(ticket_number: str):
-    if not snowflake_conn:
-        raise HTTPException(status_code=503, detail="Database connection unavailable")
-    # Get ticket first to get technician email
-    ticket = snowflake_conn.get_ticket_by_number(ticket_number)
-    if not ticket:
-        raise HTTPException(status_code=404, detail="Ticket not found")
+    try:
+        if not snowflake_conn:
+            raise HTTPException(status_code=503, detail="Database connection unavailable")
 
-    technician_email = ticket.get('TECHNICIANEMAIL')
-    if not technician_email:
-        raise HTTPException(status_code=404, detail="No technician assigned to this ticket")
+        # Get ticket first to get technician email
+        query = "SELECT * FROM TEST_DB.PUBLIC.TICKETS WHERE TICKETNUMBER = %s"
+        results = snowflake_conn.execute_query(query, (ticket_number,))
 
-    return TechnicianResponse(
-        technician_email=technician_email,
-        assigned_technician=technician_email,  # Using email as name for now
-        ticket_number=ticket_number
-    )
+        if not results:
+            raise HTTPException(status_code=404, detail="Ticket not found")
+
+        ticket = results[0]
+
+        technician_email = ticket.get('TECHNICIANEMAIL')
+        if not technician_email:
+            raise HTTPException(status_code=404, detail="No technician assigned to this ticket")
+
+        return TechnicianResponse(
+            technician_email=technician_email,
+            assigned_technician=technician_email,  # Using email as name for now
+            ticket_number=ticket_number
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve technician: {str(e)}")
 
 @app.post("/tickets", status_code=201, response_model=TicketResponse)
 def create_ticket(request: TicketCreateRequest):
@@ -359,7 +394,10 @@ def create_ticket(request: TicketCreateRequest):
             None  # PHONENUMBER
         )
 
-        insert_result = snowflake_conn.execute_query(insert_query, params)
+        if not snowflake_conn:
+            raise HTTPException(status_code=503, detail="Database connection unavailable")
+
+        snowflake_conn.execute_query(insert_query, params)
         print(f"✅ Ticket {ticket_number} successfully inserted into database")
 
         return TicketResponse(
@@ -386,16 +424,19 @@ def detailed_health_check():
     """Detailed health check including database connectivity"""
     try:
         # Test database connection
-        test_query = "SELECT 1 as test"
-        db_result = snowflake_conn.execute_query(test_query)
-        db_status = "connected" if db_result else "disconnected"
+        if snowflake_conn:
+            test_query = "SELECT 1 as test"
+            db_result = snowflake_conn.execute_query(test_query)
+            db_status = "connected" if db_result else "disconnected"
+        else:
+            db_status = "not_initialized"
 
         return {
             "status": "ok",
             "database": db_status,
             "agents": {
                 "intake_agent": "initialized" if intake_agent else "not_initialized",
-                "assignment_agent": "initialized" if assignment_agent else "not_initialized",
+                "assignment_agent": "initialized" if (intake_agent and hasattr(intake_agent, 'assignment_agent') and intake_agent.assignment_agent) else "not_initialized",
                 "notification_agent": "initialized" if notification_agent else "not_initialized"
             }
         }
@@ -410,6 +451,9 @@ def detailed_health_check():
 def get_table_structure():
     """Debug endpoint to check table structure"""
     try:
+        if not snowflake_conn:
+            return {"error": "Database connection not available"}
+
         # Check if TICKETS table exists and get its structure
         describe_query = "DESCRIBE TABLE TEST_DB.PUBLIC.TICKETS"
         result = snowflake_conn.execute_query(describe_query)
@@ -417,6 +461,9 @@ def get_table_structure():
     except Exception as e:
         # If table doesn't exist, try to create it
         try:
+            if not snowflake_conn:
+                return {"error": "Database connection not available for table creation"}
+
             create_table_query = """
                 CREATE TABLE IF NOT EXISTS TEST_DB.PUBLIC.TICKETS (
                     TICKETNUMBER VARCHAR(50) PRIMARY KEY,
@@ -489,18 +536,21 @@ async def autotask_inbound_webhook(
 
         print(f"🔗 Received Autotask webhook for ticket: {webhook_data.title}")
 
-        # Convert webhook data to our internal ticket format
-        ticket_request = TicketCreateRequest(
-            title=webhook_data.title,
-            description=webhook_data.description,
-            due_date=webhook_data.due_date,
-            priority=webhook_data.priority,
-            user_email=webhook_data.requester_email,
-            requester_name=webhook_data.requester_name
-        )
+        # Convert webhook data to our internal ticket format (for future use if needed)
+        # ticket_request = TicketCreateRequest(
+        #     title=webhook_data.title,
+        #     description=webhook_data.description,
+        #     due_date=webhook_data.due_date,
+        #     priority=webhook_data.priority,
+        #     user_email=webhook_data.requester_email,
+        #     requester_name=webhook_data.requester_name
+        # )
 
         # Process through our agentic workflow
         print(f"🚀 Processing Autotask ticket through AI workflow: {webhook_data.title}")
+
+        if not intake_agent:
+            raise HTTPException(status_code=503, detail="Intake agent not available")
 
         result = intake_agent.process_new_ticket(
             ticket_name=webhook_data.requester_name or "Autotask User",
@@ -554,7 +604,7 @@ async def autotask_inbound_webhook(
             errors=[str(e)]
         )
 
-async def send_assignment_to_autotask(ticket_id: str, assignment_result: Dict, full_result: Dict) -> bool:
+async def send_assignment_to_autotask(ticket_id: str, assignment_result: Dict, full_result: Optional[Dict] = None) -> bool:
     """
     Send assignment information back to Autotask via outbound webhook
     """
