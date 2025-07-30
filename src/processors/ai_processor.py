@@ -112,11 +112,34 @@ class AIProcessor:
         You are an expert IT support ticket classifier. Based on the new ticket details and similar historical tickets,
         classify the new ticket for the following categories: ISSUETYPE, SUBISSUETYPE, TICKETCATEGORY, TICKETTYPE, and PRIORITY.
         The STATUS should be 'Open'.
-
-        New Ticket Title: "{new_ticket_data['title']}"
-        New Ticket Description: "{new_ticket_data['description']}"
-        New Ticket Extracted Metadata: {json.dumps(extracted_metadata, indent=2)}
-        New Ticket Initial Priority: "{new_ticket_data['priority']}"
+        Your task is to classify a **new support ticket** into the following fields:
+ 
+        - **ISSUETYPE** → The broad category of the issue (e.g., Incident, Request, Problem, Change).  
+        - **SUBISSUETYPE** → A more specific classification within the ISSUETYPE (e.g., Password Reset, Network Outage, Access Request).  
+        - **TICKETCATEGORY** → The functional/business category related to the ticket (e.g., Hardware, Software, Network, Security).  
+        - **TICKETTYPE** → Whether it is a Service Request, Incident, Problem, Change Request, or Task.  
+        - **PRIORITY** → The urgency and impact level (e.g., Low, Medium, High, Critical).  
+        - **STATUS** → Always set this to **"Open"** for newly created tickets.  
+ 
+        You must carefully analyze:  
+        1. **The new ticket details (title, description, extracted metadata, and initial priority)**.  
+        2. **Similar historical tickets** provided as context. These examples are highly relevant and should guide your classification.  
+ 
+        Your classification should be consistent with ITIL best practices, organizational standards, and patterns found in the historical tickets.  
+        If information is ambiguous, infer the most logical classification from context. Avoid inventing categories that do not exist in the examples.  
+ 
+        ---
+ 
+        **New Ticket Information**  
+        - **Title:** "{new_ticket_data['title']}"  
+        - **Description:** "{new_ticket_data['description']}"  
+        - **Extracted Metadata:** {json.dumps(extracted_metadata, indent=2)}  
+        - **Initial Priority (user-given):** "{new_ticket_data['priority']}"  
+ 
+        ---
+ 
+        **Similar Historical Tickets for Context:**  
+        (Use these as references for classification consistency)  
 
         Consider the following similar historical tickets for classification context:
         """
@@ -168,16 +191,41 @@ class AIProcessor:
                 if field in summary:
                     label = self.reference_data.get(field.lower(), {}).get(str(summary[field]["Value"]), "Unknown")
                     classified_data[field] = {"Value": summary[field]["Value"], "Label": label}
+                    print(f"Using similar tickets for {field}: {summary[field]['Value']} ({label})")
                 else:
-                    # Default fallback values if no similar tickets
-                    default_values = {
-                        "ISSUETYPE": {"Value": "5", "Label": "Software/SaaS"},
-                        "SUBISSUETYPE": {"Value": "73", "Label": "MS Office"},
-                        "TICKETCATEGORY": {"Value": "3", "Label": "Standard"},
-                        "TICKETTYPE": {"Value": "2", "Label": "Incident"},
-                        "PRIORITY": {"Value": "2", "Label": "Medium"}
-                    }
-                    classified_data[field] = default_values.get(field, {"Value": "N/A", "Label": "Unknown"})
+                    # Intelligent fallback based on extracted metadata
+                    main_issue = extracted_metadata.get('main_issue', '').lower()
+                    affected_system = extracted_metadata.get('affected_system', '').lower()
+
+                    # Smart defaults based on the issue type
+                    if 'printer' in main_issue or 'printer' in affected_system or 'print' in main_issue:
+                        smart_defaults = {
+                            "ISSUETYPE": {"Value": "1", "Label": "Hardware"},  # Hardware issue
+                            "SUBISSUETYPE": {"Value": "8", "Label": "Printer"},  # Printer specific
+                            "TICKETCATEGORY": {"Value": "3", "Label": "Standard"},
+                            "TICKETTYPE": {"Value": "2", "Label": "Incident"},
+                            "PRIORITY": {"Value": "2", "Label": "Medium"}
+                        }
+                    elif 'email' in main_issue or 'outlook' in main_issue or 'exchange' in main_issue:
+                        smart_defaults = {
+                            "ISSUETYPE": {"Value": "5", "Label": "Software/SaaS"},
+                            "SUBISSUETYPE": {"Value": "74", "Label": "Email"},
+                            "TICKETCATEGORY": {"Value": "3", "Label": "Standard"},
+                            "TICKETTYPE": {"Value": "2", "Label": "Incident"},
+                            "PRIORITY": {"Value": "2", "Label": "Medium"}
+                        }
+                    else:
+                        # Generic fallback
+                        smart_defaults = {
+                            "ISSUETYPE": {"Value": "5", "Label": "Software/SaaS"},
+                            "SUBISSUETYPE": {"Value": "73", "Label": "MS Office"},
+                            "TICKETCATEGORY": {"Value": "3", "Label": "Standard"},
+                            "TICKETTYPE": {"Value": "2", "Label": "Incident"},
+                            "PRIORITY": {"Value": "2", "Label": "Medium"}
+                        }
+
+                    classified_data[field] = smart_defaults.get(field, {"Value": "N/A", "Label": "Unknown"})
+                    print(f"Using smart default for {field}: {classified_data[field]['Value']} ({classified_data[field]['Label']})")
 
         # Set STATUS field
         if classified_data and "status" in self.reference_data:

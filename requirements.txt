@@ -1,11 +1,11 @@
-# Image Processing Dependencies
-Pillow>=9.0.0
-pytesseract>=0.3.10
-opencv-python>=4.5.0
-numpy>=1.21.0
-
-# Automatic Processing Dependencies
-schedule>=1.2.0
+fastapi
+uvicorn
+pydantic
+Pillow
+pytesseract
+opencv-python
+numpy
+schedule
 streamlit
 pandas
 plotly
@@ -14,10 +14,10 @@ schedule
 snowflake-connector-python
 python-dotenv
 scikit-learn
-
-# Google Calendar API Dependencies
-google-auth>=2.0.0
-google-auth-oauthlib>=0.5.0
-google-auth-httplib2>=0.1.0
-google-api-python-client>=2.0.0
+google-auth
+google-auth-oauthlib
+google-auth-httplib2
+google-api-python-client
 matplotlib
+requests
+httpx

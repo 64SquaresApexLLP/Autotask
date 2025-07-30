@@ -86,10 +86,7 @@ teamlogic-autotask/
    SUPPORT_EMAIL=your_email
    ```
 
-4. **Run the application**
-   ```bash
-   streamlit run app.py
-   ```
+
 
 ## 🔧 Configuration
 
