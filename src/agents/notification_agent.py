@@ -54,7 +54,7 @@ class NotificationAgent:
         self.smtp_username = os.getenv('SMTP_USERNAME', os.getenv('EMAIL_ACCOUNT', 'rohankul2017@gmail.com'))
         self.smtp_password = os.getenv('SMTP_PASSWORD', os.getenv('SUPPORT_EMAIL_PASSWORD'))
         self.from_email = os.getenv('FROM_EMAIL', self.smtp_username)
-        self.from_name = os.getenv('FROM_NAME', 'TeamLogic Support')
+        self.from_name = os.getenv('FROM_NAME', 'TeamLogicIT Support')
 
         # LLM Configuration
         self.db_connection = db_connection
@@ -173,7 +173,7 @@ REQUIREMENTS:
 - Make HTML version visually appealing with metadata tables
 - Ensure text version is well-formatted with clear metadata sections
 - Use appropriate tone for recipient type: {recipient_tone}
-- Include TeamLogic Support branding
+- Include TeamLogicIT Support branding
 - IMPORTANT: Use "html_content" and "text_content" (no backslashes!)
 """
 
@@ -368,7 +368,7 @@ INSTRUCTIONS: Generate a resolution email that:
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
                 <h2 style="color: #2c3e50;">🎫 Ticket Confirmation</h2>
                 <p>Dear {customer_name},</p>
-                <p>Thank you for contacting TeamLogic Support. Your support ticket has been successfully received and assigned the following details:</p>
+                <p>Thank you for contacting TeamLogicIT Support. Your support ticket has been successfully received and assigned the following details:</p>
 
                 <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
                     <h3 style="color: #495057; margin-top: 0;">📋 Ticket Details</h3>
@@ -384,12 +384,8 @@ INSTRUCTIONS: Generate a resolution email that:
                         <strong>Assigned Technician:</strong> {technician_name}
                     </p>
                 </div>
-
-                <p>Our team will review your ticket and respond within 2 business hours.</p>
-                <p>If you have any urgent concerns, please contact us immediately.</p>
-
                 <p>Best regards,<br>
-                <strong>TeamLogic Support</strong></p>
+                <strong>TeamLogicIT Support</strong></p>
             </div>
             """,
             'text_content': f"""
@@ -397,7 +393,7 @@ INSTRUCTIONS: Generate a resolution email that:
 
 Dear {customer_name},
 
-Thank you for contacting TeamLogic Support. Your support ticket has been successfully received and assigned the following details:
+Thank you for contacting TeamLogicIT Support. Your support ticket has been successfully received and assigned the following details:
 
 📋 Ticket Details
 Ticket Number: #{ticket_number}
@@ -410,11 +406,8 @@ Issue Type: {issue_type}
 Ticket Type: {ticket_type}
 Assigned Technician: {technician_name}
 
-Our team will review your ticket and respond within 2 business hours.
-If you have any urgent concerns, please contact us immediately.
-
 Best regards,
-TeamLogic Support
+TeamLogicIT Support
             """
         }
 
@@ -464,7 +457,7 @@ TeamLogic Support
                 <p>Please ensure this ticket is resolved by the due date: <strong>{due_date}</strong></p>
 
                 <p>Best regards,<br>
-                <strong>TeamLogic Support System</strong></p>
+                <strong>TeamLogicIT Support System</strong></p>
             </div>
             """,
             'text_content': f"""
@@ -495,7 +488,7 @@ Assigned Technician: {technician_name} ({technician_email})
 Please ensure this ticket is resolved by the due date: {due_date}
 
 Best regards,
-TeamLogic Support System
+TeamLogicIT Support System
             """
         }
 
@@ -738,7 +731,7 @@ TeamLogic Support System
             <pre style="white-space: pre-wrap; font-family: monospace;">{tickets_text}</pre>
         </div>
 
-        <p>This is an automated summary from the TeamLogic Support System.</p>
+        <p>This is an automated summary from the TeamLogicIT Support System.</p>
         """
 
         text_content = f"""
@@ -756,7 +749,7 @@ PROCESSED TICKETS:
 {tickets_text}
 
 ---
-This is an automated summary from the TeamLogic Support System.
+This is an automated summary from the TeamLogicIT Support System.
         """
 
         return {

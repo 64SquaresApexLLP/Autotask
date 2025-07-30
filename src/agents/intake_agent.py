@@ -7,7 +7,6 @@ import json
 import uuid
 import hashlib
 import os
-import pandas as pd
 from datetime import datetime
 from typing import Dict, List, Optional
 
@@ -58,7 +57,8 @@ class IntakeClassificationAgent:
 
     def generate_ticket_number(self, ticket_data: Dict) -> str:
         """
-        Generate a unique ticket number in format T20240916.0057
+        Generate a unique ticket number in format TYYYYMMDD.NNNN.
+        Checks database to ensure uniqueness across the entire system.
 
         Args:
             ticket_data (dict): Ticket information
@@ -70,18 +70,32 @@ class IntakeClassificationAgent:
         now = datetime.now()
         date_part = now.strftime("%Y%m%d")
 
-        # Get next sequential number for today
-        sequence_number = self._get_next_sequence_number(date_part)
+        # Get next sequential number for today by checking database
+        sequence_number = self._get_next_sequence_number_from_db(date_part)
 
         # Generate ticket number: TYYYYMMDD.NNNN
         ticket_number = f"T{date_part}.{sequence_number:04d}"
 
-        print(f"Generated ticket number: {ticket_number}")
-        return ticket_number
+        # Double-check uniqueness and retry if needed
+        max_retries = 10
+        for retry in range(max_retries):
+            test_ticket_number = f"T{date_part}.{sequence_number + retry:04d}"
+            if self._is_ticket_number_unique(test_ticket_number):
+                print(f"Generated unique ticket number: {test_ticket_number}")
+                return test_ticket_number
+            else:
+                print(f"Ticket number {test_ticket_number} already exists, trying next...")
 
-    def _get_next_sequence_number(self, date_part: str) -> int:
+        # If all retries failed, use timestamp-based approach
+        timestamp_suffix = int(datetime.now().strftime("%H%M%S"))
+        fallback_ticket_number = f"T{date_part}.{timestamp_suffix:04d}"
+        print(f"Generated fallback ticket number: {fallback_ticket_number}")
+        return fallback_ticket_number
+
+    def _get_next_sequence_number_from_db(self, date_part: str) -> int:
         """
-        Get the next sequential number for the given date.
+        Get the next sequential number for the given date by checking the database.
+        Uses a more robust approach to ensure uniqueness across the entire system.
 
         Args:
             date_part (str): Date in YYYYMMDD format
@@ -89,34 +103,140 @@ class IntakeClassificationAgent:
         Returns:
             int: Next sequential number
         """
-        sequence_file = "data/ticket_sequence.json"
+        max_attempts = 10
 
-        # Load existing sequence data
-        sequence_data = {}
-        if os.path.exists(sequence_file):
+        for attempt in range(max_attempts):
             try:
-                with open(sequence_file, 'r') as f:
-                    sequence_data = json.load(f)
-            except (json.JSONDecodeError, FileNotFoundError):
+                # Query database to find the highest sequence number for today
+                query = f"""
+                SELECT MAX(CAST(SUBSTRING(TICKETNUMBER, 11, 4) AS INTEGER)) as max_sequence
+                FROM TEST_DB.PUBLIC.TICKETS
+                WHERE TICKETNUMBER LIKE 'T{date_part}.%'
+                """
+
+                result = self.db_connection.execute_query(query)
+
+                if result and len(result) > 0 and result[0]['MAX_SEQUENCE'] is not None:
+                    max_sequence = result[0]['MAX_SEQUENCE']
+                    next_sequence = max_sequence + 1 + attempt  # Add attempt to avoid collisions
+                    print(f"Found existing tickets for {date_part}, next sequence: {next_sequence}")
+                else:
+                    next_sequence = 1 + attempt
+                    print(f"No existing tickets for {date_part}, starting with sequence: {next_sequence}")
+
+                # Test if this number would be unique
+                test_ticket_number = f"T{date_part}.{next_sequence:04d}"
+                if self._is_ticket_number_unique(test_ticket_number):
+                    return next_sequence
+                else:
+                    print(f"Ticket number {test_ticket_number} already exists, trying next...")
+                    continue
+
+            except Exception as e:
+                print(f"Error querying database for sequence number (attempt {attempt + 1}): {e}")
+
+        # If all attempts failed, fallback to file-based sequence
+        print("All database attempts failed, falling back to file-based sequence")
+        return self._get_next_sequence_number_fallback(date_part)
+
+    def _get_next_sequence_number_fallback(self, date_part: str) -> int:
+        """
+        Fallback method using file-based sequence tracking with uniqueness check.
+        Used when database query fails.
+
+        Args:
+            date_part (str): Date in YYYYMMDD format
+
+        Returns:
+            int: Next sequential number
+        """
+        import fcntl  # For file locking
+        sequence_file = "data/ticket_sequence.json"
+        max_attempts = 50
+
+        for attempt in range(max_attempts):
+            try:
+                # Ensure data directory exists
+                os.makedirs("data", exist_ok=True)
+
+                # Load existing sequence data with file locking
                 sequence_data = {}
+                if os.path.exists(sequence_file):
+                    try:
+                        with open(sequence_file, 'r') as f:
+                            fcntl.flock(f.fileno(), fcntl.LOCK_SH)  # Shared lock for reading
+                            sequence_data = json.load(f)
+                    except (json.JSONDecodeError, FileNotFoundError):
+                        sequence_data = {}
 
-        # Get current sequence for this date, default to 0
-        current_sequence = sequence_data.get(date_part, 0)
+                # Get current sequence for this date, default to 0
+                current_sequence = sequence_data.get(date_part, 0)
 
-        # Increment sequence
-        next_sequence = current_sequence + 1
+                # Increment sequence
+                next_sequence = current_sequence + 1
 
-        # Update sequence data
-        sequence_data[date_part] = next_sequence
+                # Test if this number would be unique
+                test_ticket_number = f"T{date_part}.{next_sequence:04d}"
+                if self._is_ticket_number_unique(test_ticket_number):
+                    # Update sequence data with exclusive lock
+                    sequence_data[date_part] = next_sequence
 
-        # Save updated sequence data
+                    try:
+                        with open(sequence_file, 'w') as f:
+                            fcntl.flock(f.fileno(), fcntl.LOCK_EX)  # Exclusive lock for writing
+                            json.dump(sequence_data, f, indent=2)
+                    except Exception as e:
+                        print(f"Warning: Could not save sequence file: {e}")
+
+                    return next_sequence
+                else:
+                    # If not unique, update the file with a higher number and try again
+                    sequence_data[date_part] = next_sequence
+                    try:
+                        with open(sequence_file, 'w') as f:
+                            fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+                            json.dump(sequence_data, f, indent=2)
+                    except Exception as e:
+                        print(f"Warning: Could not save sequence file: {e}")
+
+                    print(f"Ticket number {test_ticket_number} already exists, trying next...")
+                    continue
+
+            except Exception as e:
+                print(f"Error in fallback sequence generation (attempt {attempt + 1}): {e}")
+
+        # If all attempts failed, return a high number based on current time
+        from datetime import datetime
+        return int(datetime.now().strftime("%H%M%S")) % 9999 + 1
+
+    def _is_ticket_number_unique(self, ticket_number: str) -> bool:
+        """
+        Check if a ticket number is unique in the database.
+
+        Args:
+            ticket_number (str): Ticket number to check
+
+        Returns:
+            bool: True if unique, False if already exists
+        """
         try:
-            with open(sequence_file, 'w') as f:
-                json.dump(sequence_data, f, indent=2)
-        except Exception as e:
-            print(f"Warning: Could not save sequence file: {e}")
+            query = """
+            SELECT COUNT(*) as count
+            FROM TEST_DB.PUBLIC.TICKETS
+            WHERE TICKETNUMBER = %s
+            """
 
-        return next_sequence
+            result = self.db_connection.execute_query(query, (ticket_number,))
+
+            if result and len(result) > 0:
+                count = result[0]['COUNT']
+                return count == 0
+            else:
+                return True  # If query fails, assume unique
+
+        except Exception as e:
+            print(f"Error checking ticket number uniqueness: {e}")
+            return True  # If query fails, assume unique
 
     def extract_metadata(self, title: str, description: str, model: str = 'llama3-8b') -> Optional[Dict]:
         """
@@ -185,16 +305,8 @@ class IntakeClassificationAgent:
         # Note: AI_SIMILARITY returns values between 0 and 1, where 1 is most similar
         query = f"""
         SELECT
-            TICKETNUMBER,
             TITLE,
             DESCRIPTION,
-            ISSUETYPE,
-            SUBISSUETYPE,
-            TICKETCATEGORY,
-            TICKETTYPE,
-            PRIORITY,
-            STATUS,
-            RESOLUTION,
             SNOWFLAKE.CORTEX.AI_SIMILARITY(
                 COALESCE(TITLE, '') || ' ' || COALESCE(DESCRIPTION, ''),
                 '{escaped_ticket_text}'
@@ -245,188 +357,20 @@ class IntakeClassificationAgent:
                     return filtered_results
                 else:
                     print(f"No tickets met minimum similarity threshold of {min_similarity_threshold}")
-                    # Try a hybrid approach with keyword matching for better results
-                    return self._hybrid_similarity_search(new_ticket_text, top_n)
+                    return []
             else:
                 print("No similar tickets found using semantic similarity")
-                return self._hybrid_similarity_search(new_ticket_text, top_n)
+                return []
 
         except Exception as e:
             print(f"Error in semantic similarity search: {e}")
-            print("Falling back to hybrid search...")
-            return self._hybrid_similarity_search(new_ticket_text, top_n)
+            print("Falling back to recent tickets...")
+            return []
 
-    def _hybrid_similarity_search(self, ticket_text: str, top_n: int = 10) -> List[Dict]:
-        """
-        Hybrid approach combining semantic similarity with keyword matching for better results.
 
-        Args:
-            ticket_text (str): Combined title and description text
-            top_n (int): Number of tickets to return
 
-        Returns:
-            list: List of similar tickets
-        """
-        print("Using hybrid similarity search (semantic + keyword matching)...")
 
-        # Extract key terms from the ticket text for keyword matching
-        import re
-        # Remove common stop words and extract meaningful terms
-        stop_words = {'the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'is', 'are', 'was', 'were', 'be', 'been', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might', 'can', 'cannot', 'not', 'no', 'yes', 'this', 'that', 'these', 'those', 'i', 'you', 'he', 'she', 'it', 'we', 'they', 'me', 'him', 'her', 'us', 'them', 'my', 'your', 'his', 'her', 'its', 'our', 'their', 'a', 'an'}
 
-        # Extract meaningful keywords (length > 3, not stop words)
-        words = re.findall(r'\b\w+\b', ticket_text.lower())
-        keywords = [word for word in words if len(word) > 3 and word not in stop_words]
-
-        if not keywords:
-            # Fallback to recent tickets if no keywords found
-            return self._get_recent_tickets(top_n)
-
-        # Take top 5 most relevant keywords
-        keywords = keywords[:5]
-        print(f"Using keywords for hybrid search: {keywords}")
-
-        # Build hybrid query combining semantic similarity with keyword matching
-        escaped_ticket_text = ticket_text.replace("'", "''")
-        keyword_conditions = []
-
-        for keyword in keywords:
-            escaped_keyword = keyword.replace("'", "''")
-            keyword_conditions.append(f"(UPPER(TITLE) LIKE UPPER('%{escaped_keyword}%') OR UPPER(DESCRIPTION) LIKE UPPER('%{escaped_keyword}%'))")
-
-        keyword_filter = " OR ".join(keyword_conditions)
-
-        query = f"""
-        SELECT
-            TICKETNUMBER,
-            TITLE,
-            DESCRIPTION,
-            ISSUETYPE,
-            SUBISSUETYPE,
-            TICKETCATEGORY,
-            TICKETTYPE,
-            PRIORITY,
-            STATUS,
-            RESOLUTION,
-            SNOWFLAKE.CORTEX.AI_SIMILARITY(
-                COALESCE(TITLE, '') || ' ' || COALESCE(DESCRIPTION, ''),
-                '{escaped_ticket_text}'
-            ) AS SIMILARITY_SCORE
-        FROM TEST_DB.PUBLIC.COMPANY_4130_DATA
-        WHERE TITLE IS NOT NULL
-        AND DESCRIPTION IS NOT NULL
-        AND TRIM(TITLE) != ''
-        AND TRIM(DESCRIPTION) != ''
-        AND ({keyword_filter})
-        ORDER BY SIMILARITY_SCORE DESC
-        LIMIT {min(top_n * 2, 20)}
-        """
-
-        try:
-            results = self.db_connection.execute_query(query)
-            if results:
-                print(f"Hybrid search found {len(results)} tickets")
-                # Return top N results
-                return results[:top_n]
-            else:
-                print("Hybrid search found no results, falling back to recent tickets")
-                return self._get_recent_tickets(top_n)
-        except Exception as e:
-            print(f"Error in hybrid search: {e}")
-            return self._get_recent_tickets(top_n)
-
-    def _get_recent_tickets(self, top_n: int = 10) -> List[Dict]:
-        """
-        Fallback method to get recent tickets when similarity search fails.
-
-        Args:
-            top_n (int): Number of tickets to return
-
-        Returns:
-            list: List of recent tickets
-        """
-        print("Falling back to recent tickets...")
-        query = f"""
-        SELECT
-            TICKETNUMBER,
-            TITLE,
-            DESCRIPTION,
-            ISSUETYPE,
-            SUBISSUETYPE,
-            TICKETCATEGORY,
-            TICKETTYPE,
-            PRIORITY,
-            STATUS,
-            RESOLUTION
-        FROM TEST_DB.PUBLIC.COMPANY_4130_DATA
-        WHERE TITLE IS NOT NULL AND DESCRIPTION IS NOT NULL
-        ORDER BY TICKETNUMBER DESC
-        LIMIT {min(top_n, 10)}
-        """
-        return self.db_connection.execute_query(query) or []
-
-    def fetch_reference_tickets(self) -> pd.DataFrame:
-        """
-        Fetches actual historical tickets with real, detailed resolutions.
-
-        Returns:
-            pd.DataFrame: DataFrame containing historical tickets with resolutions
-        """
-
-        query = """
-            SELECT TITLE, DESCRIPTION, ISSUETYPE, SUBISSUETYPE, PRIORITY, RESOLUTION
-            FROM TEST_DB.PUBLIC.COMPANY_4130_DATA
-            WHERE RESOLUTION IS NOT NULL
-            AND RESOLUTION != ''
-            AND RESOLUTION != 'N/A'
-            AND RESOLUTION != 'None'
-            AND RESOLUTION NOT LIKE '%contact%'
-            AND RESOLUTION NOT LIKE '%escalate%'
-            AND RESOLUTION NOT LIKE '%call%'
-            AND LENGTH(RESOLUTION) > 50
-            AND TITLE IS NOT NULL
-            AND DESCRIPTION IS NOT NULL
-            AND LENGTH(TITLE) > 10
-            AND LENGTH(DESCRIPTION) > 20
-            ORDER BY LENGTH(RESOLUTION) DESC, RANDOM()
-            LIMIT 200
-        """
-        print("Fetching actual historical tickets with real resolutions...")
-        results = self.db_connection.execute_query(query)
-
-        if results:
-            df = pd.DataFrame(results)
-            print(f"Fetched {len(df)} historical tickets")
-
-            # Additional filtering for actual technical resolutions
-            df = df[df['RESOLUTION'].str.len() > 50]
-
-            # Filter out generic responses
-            generic_patterns = [
-                'please try', 'contact support', 'escalate to', 'call helpdesk',
-                'generic solution', 'standard procedure', 'follow up with'
-            ]
-
-            for pattern in generic_patterns:
-                df = df[~df['RESOLUTION'].str.contains(pattern, case=False, na=False)]
-
-            # Keep only resolutions with actual technical content
-            technical_indicators = [
-                'restart', 'configure', 'install', 'update', 'check', 'verify',
-                'run', 'execute', 'open', 'close', 'delete', 'create', 'modify',
-                'setting', 'option', 'parameter', 'file', 'folder', 'registry',
-                'service', 'process', 'application', 'system'
-            ]
-
-            technical_mask = df['RESOLUTION'].str.contains('|'.join(technical_indicators), case=False, na=False)
-            df = df[technical_mask]
-
-            print(f"After filtering for actual technical resolutions: {len(df)} tickets available")
-
-            return df
-        else:
-            print("No historical tickets found")
-            return pd.DataFrame()
 
     def classify_ticket(self, new_ticket_data: Dict, extracted_metadata: Dict,
                        similar_tickets: List[Dict], model: str = 'mixtral-8x7b') -> Optional[Dict]:
@@ -436,18 +380,19 @@ class IntakeClassificationAgent:
         return self.ai_processor.classify_ticket(new_ticket_data, extracted_metadata, similar_tickets, model)
 
     def generate_resolution_note(self, ticket_data: Dict, classified_data: Dict,
-                               extracted_metadata: Dict) -> str:
+                               extracted_metadata: Dict, model: str = 'mixtral-8x7b') -> str:
         """
         Generates a resolution note using Cortex LLM.
         """
-        return self.ai_processor.generate_resolution_note(ticket_data, classified_data, extracted_metadata)
-
-    # Note: save_to_knowledgebase method removed - tickets are now saved directly to database
+        try:
+            return self.ai_processor.generate_resolution_note(ticket_data, classified_data, extracted_metadata, model)
+        except TypeError:
+            return self.ai_processor.generate_resolution_note(ticket_data, classified_data, extracted_metadata)
 
     def process_new_ticket(self, ticket_name: str, ticket_description: str, ticket_title: str,
                           due_date: str, priority_initial: str, user_email: Optional[str] = None,
                           user_id: Optional[str] = None, phone_number: Optional[str] = None,
-                          extract_model: str = 'llama3-8b', classify_model: str = 'mixtral-8x7b') -> Optional[Dict]:
+                          extract_model: str = 'llama3-8b', classify_model: str = 'mixtral-8x7b', resolution_model: str = 'mixtral-8x7b') -> Optional[Dict]:
         """
         Orchestrates the entire process for a new incoming ticket.
 
@@ -462,6 +407,7 @@ class IntakeClassificationAgent:
             phone_number (str, optional): User's phone number.
             extract_model (str): Model to use for metadata extraction.
             classify_model (str): Model to use for classification.
+            resolution_model (str): Model to use for resolution note generation.
 
         Returns:
             dict: The classified ticket data, or None if the process fails.
@@ -514,7 +460,7 @@ class IntakeClassificationAgent:
 
         # Generate resolution note
         print("\n--- Generating Resolution Note ---")
-        resolution_note = self.generate_resolution_note(new_ticket_raw, classified_data, extracted_metadata)
+        resolution_note = self.generate_resolution_note(new_ticket_raw, classified_data, extracted_metadata, model=resolution_model)
         print("Generated Resolution Note:")
         print(resolution_note)
 
@@ -546,8 +492,6 @@ class IntakeClassificationAgent:
                 "assigned_technician": "IT Manager",
                 "technician_email": "itmanager@company.com"
             }
-
-        # Note: Knowledgebase saving removed - tickets are now saved directly to database
 
         # Send comprehensive notifications
         print(f"\n--- Sending Notifications ---")

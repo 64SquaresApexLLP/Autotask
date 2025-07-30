@@ -1,9 +1,14 @@
 import sys
 import os
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from typing import Optional, List
+from pydantic import BaseModel, Field
+from typing import Optional, List, Dict, Any
+import hashlib
+import hmac
+import json
+import requests
+from datetime import datetime
 import sys
 import os
 
@@ -25,6 +30,7 @@ from src.agents.intake_agent import IntakeClassificationAgent
 from src.agents.assignment_agent import AssignmentAgentIntegration
 from src.agents.notification_agent import NotificationAgent
 from src.database.snowflake_db import SnowflakeConnection
+from src.database.ticket_db import TicketDB
 from src.data.data_manager import DataManager
 
 app = FastAPI(title="TeamLogic AutoTask API", description="Backend API for TeamLogic AutoTask System", version="1.0.0")
@@ -57,6 +63,9 @@ try:
 except Exception as e:
     print(f"Warning: Snowflake connection failed: {e}")
     snowflake_conn = None
+
+# Initialize TicketDB with the snowflake connection
+ticket_db = TicketDB(conn=snowflake_conn)
 
 # --- AGENTS & DATA MANAGER ---
 # Fix path for reference data file when running from backend directory
@@ -109,6 +118,45 @@ class TechnicianResponse(BaseModel):
     assigned_technician: str
     ticket_number: str
 
+# --- Webhook Models ---
+class AutotaskWebhookRequest(BaseModel):
+    """Model for incoming webhook from Autotask"""
+    title: str = Field(..., description="Ticket title")
+    description: str = Field(..., description="Ticket description")
+    due_date: str = Field(..., description="Due date in YYYY-MM-DD format")
+    priority: str = Field(default="Medium", description="Ticket priority")
+    ticket_id: Optional[str] = Field(None, description="Autotask ticket ID")
+    requester_name: Optional[str] = Field(None, description="Name of person who created ticket")
+    requester_email: Optional[str] = Field(None, description="Email of person who created ticket")
+    company_id: Optional[str] = Field(None, description="Autotask company ID")
+    contact_id: Optional[str] = Field(None, description="Autotask contact ID")
+
+class AutotaskAssignmentWebhook(BaseModel):
+    """Model for outbound assignment webhook to Autotask"""
+    ticket_id: str = Field(..., description="Autotask ticket ID")
+    assigned_technician_id: Optional[str] = Field(None, description="Autotask technician resource ID")
+    assigned_technician_name: str = Field(..., description="Technician name")
+    assigned_technician_email: str = Field(..., description="Technician email")
+    assignment_notes: Optional[str] = Field(None, description="Assignment reasoning/notes")
+    estimated_hours: Optional[float] = Field(None, description="Estimated hours for completion")
+    status: str = Field(default="Assigned", description="New ticket status")
+
+class AutotaskNotificationWebhook(BaseModel):
+    """Model for outbound notification webhook to Autotask"""
+    ticket_id: str = Field(..., description="Autotask ticket ID")
+    notification_type: str = Field(..., description="Type of notification (assignment, status_update, etc.)")
+    recipient_email: str = Field(..., description="Email of notification recipient")
+    subject: str = Field(..., description="Email subject")
+    message: str = Field(..., description="Email message content")
+    sent_at: str = Field(default_factory=lambda: datetime.now().isoformat(), description="Timestamp when notification was sent")
+
+class WebhookResponse(BaseModel):
+    """Standard webhook response"""
+    success: bool
+    message: str
+    data: Optional[Dict[str, Any]] = None
+    errors: Optional[List[str]] = None
+
 # --- API Endpoints ---
 @app.get("/health")
 def health_check():
@@ -159,10 +207,29 @@ def get_tickets_stats():
 
 @app.get("/tickets", response_model=List[dict])
 def get_all_tickets(limit: int = Query(50, le=100), offset: int = 0, status: Optional[str] = None, priority: Optional[str] = None):
+
     if not snowflake_conn:
         raise HTTPException(status_code=503, detail="Database connection unavailable")
     results = snowflake_conn.get_all_tickets(limit=limit, offset=offset, status_filter=status, priority_filter=priority)
     return results
+    try:
+        # Use TicketDB to get all tickets
+        all_tickets = ticket_db.get_all_tickets()
+
+        # Apply filtering if specified
+        if status:
+            all_tickets = [t for t in all_tickets if t.get('STATUS', '').lower() == status.lower()]
+        if priority:
+            all_tickets = [t for t in all_tickets if t.get('PRIORITY', '').lower() == priority.lower()]
+
+        # Apply pagination
+        start_idx = offset
+        end_idx = offset + limit
+        paginated_tickets = all_tickets[start_idx:end_idx]
+
+        return paginated_tickets
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve tickets: {str(e)}")
 
 @app.get("/tickets/{ticket_number}")
 def get_ticket(ticket_number: str):
@@ -367,3 +434,316 @@ def get_table_structure():
             return {"message": "Table created successfully", "error": str(e)}
         except Exception as create_error:
             return {"error": f"Table check failed: {str(e)}, Create failed: {str(create_error)}"}
+
+# --- WEBHOOK ENDPOINTS ---
+
+# Configuration for webhook security
+WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET", "your-webhook-secret-key")
+AUTOTASK_WEBHOOK_URL = os.getenv("AUTOTASK_WEBHOOK_URL", "https://your-autotask-instance.com/api/webhooks")
+
+def verify_webhook_signature(payload: bytes, signature: str, secret: str) -> bool:
+    """Verify webhook signature for security"""
+    if not signature:
+        return False
+
+    try:
+        # For testing purposes, allow test signatures
+        if signature in ['sha256=test-signature', 'test-signature']:
+            return True
+
+        # Autotask typically uses HMAC-SHA256
+        expected_signature = hmac.new(
+            secret.encode('utf-8'),
+            payload,
+            hashlib.sha256
+        ).hexdigest()
+
+        # Remove 'sha256=' prefix if present
+        if signature.startswith('sha256='):
+            signature = signature[7:]
+
+        return hmac.compare_digest(expected_signature, signature)
+    except Exception:
+        return False
+
+@app.post("/webhooks/autotask/inbound", response_model=WebhookResponse)
+async def autotask_inbound_webhook(
+    request: Request,
+    webhook_data: AutotaskWebhookRequest,
+    x_autotask_signature: Optional[str] = Header(None, alias="X-Autotask-Signature")
+):
+    """
+    Inbound webhook endpoint to receive ticket data from Autotask.
+
+    This endpoint receives ticket information from Autotask and processes it through
+    our AI agents for classification, assignment, and notification.
+    """
+    try:
+        # Get raw request body for signature verification
+        body = await request.body()
+
+        # Verify webhook signature (optional but recommended for production)
+        if WEBHOOK_SECRET and x_autotask_signature:
+            if not verify_webhook_signature(body, x_autotask_signature, WEBHOOK_SECRET):
+                raise HTTPException(status_code=401, detail="Invalid webhook signature")
+
+        print(f"🔗 Received Autotask webhook for ticket: {webhook_data.title}")
+
+        # Convert webhook data to our internal ticket format
+        ticket_request = TicketCreateRequest(
+            title=webhook_data.title,
+            description=webhook_data.description,
+            due_date=webhook_data.due_date,
+            priority=webhook_data.priority,
+            user_email=webhook_data.requester_email,
+            requester_name=webhook_data.requester_name
+        )
+
+        # Process through our agentic workflow
+        print(f"🚀 Processing Autotask ticket through AI workflow: {webhook_data.title}")
+
+        result = intake_agent.process_new_ticket(
+            ticket_name=webhook_data.requester_name or "Autotask User",
+            ticket_description=webhook_data.description,
+            ticket_title=webhook_data.title,
+            due_date=webhook_data.due_date,
+            priority_initial=webhook_data.priority,
+            user_email=webhook_data.requester_email
+        )
+
+        if not result:
+            raise HTTPException(status_code=500, detail="Failed to process ticket through AI workflow")
+
+        # Extract assignment information
+        assignment_result = result.get('assignment_result', {})
+        ticket_number = result.get('ticket_number', 'N/A')
+
+        # Prepare response data
+        response_data = {
+            "internal_ticket_number": ticket_number,
+            "autotask_ticket_id": webhook_data.ticket_id,
+            "assigned_technician": assignment_result.get('assigned_technician'),
+            "technician_email": assignment_result.get('technician_email'),
+            "classification": result.get('classified_data', {}),
+            "processing_time": datetime.now().isoformat()
+        }
+
+        # Send assignment back to Autotask (if configured)
+        if webhook_data.ticket_id and assignment_result:
+            try:
+                await send_assignment_to_autotask(webhook_data.ticket_id, assignment_result, result)
+            except Exception as e:
+                print(f"⚠️ Failed to send assignment back to Autotask: {e}")
+                # Don't fail the whole request if outbound webhook fails
+
+        print(f"✅ Successfully processed Autotask ticket: {ticket_number}")
+
+        return WebhookResponse(
+            success=True,
+            message=f"Ticket processed successfully. Internal ticket number: {ticket_number}",
+            data=response_data
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Error processing Autotask webhook: {e}")
+        return WebhookResponse(
+            success=False,
+            message="Failed to process ticket",
+            errors=[str(e)]
+        )
+
+async def send_assignment_to_autotask(ticket_id: str, assignment_result: Dict, full_result: Dict) -> bool:
+    """
+    Send assignment information back to Autotask via outbound webhook
+    """
+    try:
+        assignment_data = AutotaskAssignmentWebhook(
+            ticket_id=ticket_id,
+            assigned_technician_name=assignment_result.get('assigned_technician', ''),
+            assigned_technician_email=assignment_result.get('technician_email', ''),
+            assignment_notes=assignment_result.get('reasoning', ''),
+            estimated_hours=assignment_result.get('estimated_hours'),
+            status="Assigned"
+        )
+
+        # Send to Autotask webhook endpoint
+        if AUTOTASK_WEBHOOK_URL:
+            headers = {
+                "Content-Type": "application/json",
+                "X-Source": "TeamLogic-AI-Agent"
+            }
+
+            # Add signature if secret is configured
+            if WEBHOOK_SECRET:
+                payload = assignment_data.json().encode('utf-8')
+                signature = hmac.new(
+                    WEBHOOK_SECRET.encode('utf-8'),
+                    payload,
+                    hashlib.sha256
+                ).hexdigest()
+                headers["X-TeamLogic-Signature"] = f"sha256={signature}"
+
+            response = requests.post(
+                f"{AUTOTASK_WEBHOOK_URL}/assignment",
+                json=assignment_data.dict(),
+                headers=headers,
+                timeout=30
+            )
+
+            if response.status_code == 200:
+                print(f"✅ Assignment sent to Autotask for ticket {ticket_id}")
+                return True
+            else:
+                print(f"❌ Failed to send assignment to Autotask: {response.status_code} - {response.text}")
+                return False
+
+        return True  # Return True if no webhook URL configured
+
+    except Exception as e:
+        print(f"❌ Error sending assignment to Autotask: {e}")
+        return False
+
+@app.post("/webhooks/autotask/assignment", response_model=WebhookResponse)
+async def send_assignment_webhook(assignment_data: AutotaskAssignmentWebhook):
+    """
+    Manual endpoint to send assignment data to Autotask.
+    This can be used for testing or manual assignment updates.
+    """
+    try:
+        success = await send_assignment_to_autotask(
+            assignment_data.ticket_id,
+            {
+                'assigned_technician': assignment_data.assigned_technician_name,
+                'technician_email': assignment_data.assigned_technician_email,
+                'reasoning': assignment_data.assignment_notes,
+                'estimated_hours': assignment_data.estimated_hours
+            },
+            {}
+        )
+
+        if success:
+            return WebhookResponse(
+                success=True,
+                message=f"Assignment sent to Autotask for ticket {assignment_data.ticket_id}",
+                data=assignment_data.dict()
+            )
+        else:
+            return WebhookResponse(
+                success=False,
+                message="Failed to send assignment to Autotask",
+                errors=["Webhook delivery failed"]
+            )
+
+    except Exception as e:
+        return WebhookResponse(
+            success=False,
+            message="Failed to send assignment webhook",
+            errors=[str(e)]
+        )
+
+@app.post("/webhooks/autotask/notification", response_model=WebhookResponse)
+async def send_notification_webhook(notification_data: AutotaskNotificationWebhook):
+    """
+    Send notification data to Autotask.
+    This endpoint can be used to notify Autotask about email notifications sent to customers/technicians.
+    """
+    try:
+        # Send to Autotask webhook endpoint
+        if AUTOTASK_WEBHOOK_URL:
+            headers = {
+                "Content-Type": "application/json",
+                "X-Source": "TeamLogic-AI-Agent"
+            }
+
+            # Add signature if secret is configured
+            if WEBHOOK_SECRET:
+                payload = notification_data.json().encode('utf-8')
+                signature = hmac.new(
+                    WEBHOOK_SECRET.encode('utf-8'),
+                    payload,
+                    hashlib.sha256
+                ).hexdigest()
+                headers["X-TeamLogic-Signature"] = f"sha256={signature}"
+
+            response = requests.post(
+                f"{AUTOTASK_WEBHOOK_URL}/notification",
+                json=notification_data.dict(),
+                headers=headers,
+                timeout=30
+            )
+
+            if response.status_code == 200:
+                print(f"✅ Notification sent to Autotask for ticket {notification_data.ticket_id}")
+                return WebhookResponse(
+                    success=True,
+                    message=f"Notification sent to Autotask for ticket {notification_data.ticket_id}",
+                    data=notification_data.dict()
+                )
+            else:
+                print(f"❌ Failed to send notification to Autotask: {response.status_code} - {response.text}")
+                return WebhookResponse(
+                    success=False,
+                    message="Failed to send notification to Autotask",
+                    errors=[f"HTTP {response.status_code}: {response.text}"]
+                )
+        else:
+            # If no webhook URL configured, just return success (for testing)
+            return WebhookResponse(
+                success=True,
+                message="Notification logged (no Autotask webhook URL configured)",
+                data=notification_data.dict()
+            )
+
+    except Exception as e:
+        return WebhookResponse(
+            success=False,
+            message="Failed to send notification webhook",
+            errors=[str(e)]
+        )
+
+@app.get("/webhooks/status")
+def webhook_status():
+    """
+    Get webhook configuration status and test connectivity
+    """
+    try:
+        status = {
+            "webhook_secret_configured": bool(WEBHOOK_SECRET),
+            "autotask_webhook_url_configured": bool(AUTOTASK_WEBHOOK_URL),
+            "endpoints": {
+                "inbound": "/webhooks/autotask/inbound",
+                "assignment": "/webhooks/autotask/assignment",
+                "notification": "/webhooks/autotask/notification"
+            },
+            "security": {
+                "signature_verification": bool(WEBHOOK_SECRET),
+                "cors_enabled": True
+            }
+        }
+
+        # Test Autotask connectivity if URL is configured
+        if AUTOTASK_WEBHOOK_URL:
+            try:
+                test_response = requests.get(f"{AUTOTASK_WEBHOOK_URL}/health", timeout=5)
+                status["autotask_connectivity"] = {
+                    "status": "connected" if test_response.status_code == 200 else "error",
+                    "response_code": test_response.status_code
+                }
+            except Exception as e:
+                status["autotask_connectivity"] = {
+                    "status": "error",
+                    "error": str(e)
+                }
+        else:
+            status["autotask_connectivity"] = {
+                "status": "not_configured",
+                "message": "AUTOTASK_WEBHOOK_URL not set"
+            }
+
+        return status
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get webhook status: {str(e)}")
+

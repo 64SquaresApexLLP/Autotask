@@ -1,11 +1,11 @@
-# Image Processing Dependencies
-Pillow>=9.0.0
-pytesseract>=0.3.10
-opencv-python>=4.5.0
-numpy>=1.21.0
-
-# Automatic Processing Dependencies
-schedule>=1.2.0
+fastapi
+uvicorn
+pydantic
+Pillow
+pytesseract
+opencv-python
+numpy
+schedule
 streamlit
 pandas
 plotly
@@ -42,3 +42,10 @@ black
 flake8
 jinja2
 aiofiles
+google-auth
+google-auth-oauthlib
+google-auth-httplib2
+google-api-python-client
+matplotlib
+requests
+httpx

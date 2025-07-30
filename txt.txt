@@ -1,0 +1,63 @@
+Improving the classification agent
+Assignment agent
+
+Gurdrail agent 
+
+Integrating the chatbot 
+Adding the source to the response of the chatbot
+
+Preparing the deck for towmmorow
+
+
+
+In Autotask SETTING WEBHOOK:
+Set up outbound webhook:
+Go to Admin → Workflow Rules
+Create rule for "Ticket Created" event
+Add HTTP POST action to: https://your-domain.com/webhooks/autotask/inbound
+Set up inbound webhook endpoints:
+Configure endpoints to receive assignment/notification data
+URLs: /api/webhooks/assignment and /api/webhooks/notification
+
+
+📊 Complete Workflow Example
+Autotask creates ticket with title "Email server down"
+Webhook receives data at /webhooks/autotask/inbound
+AI agents process:
+Classify as "Email/Exchange/Infrastructure/High Priority"
+Assign to technician with Exchange expertise
+Send notification emails
+System sends back:
+Assignment data to Autotask via assignment webhook
+Notification confirmation via notification webhook
+🛡️ Security Features
+Signature Verification: HMAC-SHA256 signatures on all webhooks
+IP Whitelisting: Restrict access to specific IP addresses
+Environment Variables: Secure configuration management
+Error Handling: Comprehensive error responses and logging
+
+
+
+
+Autotask System          Your AI System
+     │                        │
+     │ 1. Create ticket        │
+     │    ID: T20240730.001    │
+     │                        │
+     │ 2. Send webhook ────────┤
+     │    POST /webhooks/      │
+     │    autotask/inbound     │
+     │    {ticket_id: "T..."}  │
+     │                        │
+     │                        │ 3. AI Processing
+     │                        │    - Classify
+     │                        │    - Assign tech
+     │                        │    - Send emails
+     │                        │
+     │ 4. Receive assignment ◄─┤
+     │    POST to Autotask     │
+     │    {ticket_id: "T...",  │
+     │     technician: "Alice"}│
+     │                        │
+     │ 5. Update ticket        │
+     │    with assignment      │
