@@ -11,12 +11,12 @@ load_dotenv()
 
 # Snowflake Connection Configuration (loaded from .env)
 # Using SSO authentication with externalbrowser
-SF_ACCOUNT = os.getenv('SF_ACCOUNT')
-SF_USER = os.getenv('SF_USER')
-SF_WAREHOUSE = os.getenv('SF_WAREHOUSE')
-SF_DATABASE = os.getenv('SF_DATABASE')
-SF_SCHEMA = os.getenv('SF_SCHEMA')
-SF_ROLE = os.getenv('SF_ROLE')
+SF_ACCOUNT = os.getenv('SF_ACCOUNT', 'your_snowflake_account')
+SF_USER = os.getenv('SF_USER', 'your_snowflake_user')
+SF_WAREHOUSE = os.getenv('SF_WAREHOUSE', 'your_warehouse')
+SF_DATABASE = os.getenv('SF_DATABASE', 'your_database')
+SF_SCHEMA = os.getenv('SF_SCHEMA', 'your_schema')
+SF_ROLE = os.getenv('SF_ROLE', 'your_role')
 
 
 # File Paths

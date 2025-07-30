@@ -7,6 +7,9 @@ from typing import Optional, List
 import sys
 import os
 
+# Import chatbot router
+from .chatbot.router import router as chatbot_router
+
 # Add src to sys.path for agent/database imports
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
@@ -35,18 +38,25 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Include chatbot router
+app.include_router(chatbot_router)
+
 # --- CONFIGURATION ---
 import config
 
 # --- DATABASE CONNECTION ---
-snowflake_conn = SnowflakeConnection(
-    sf_account=config.SF_ACCOUNT,
-    sf_user=config.SF_USER,
-    sf_warehouse=config.SF_WAREHOUSE,
-    sf_database=config.SF_DATABASE,
-    sf_schema=config.SF_SCHEMA,
-    sf_role=config.SF_ROLE
-)
+try:
+    snowflake_conn = SnowflakeConnection(
+        sf_account=config.SF_ACCOUNT,
+        sf_user=config.SF_USER,
+        sf_warehouse=config.SF_WAREHOUSE,
+        sf_database=config.SF_DATABASE,
+        sf_schema=config.SF_SCHEMA,
+        sf_role=config.SF_ROLE
+    )
+except Exception as e:
+    print(f"Warning: Snowflake connection failed: {e}")
+    snowflake_conn = None
 
 # --- AGENTS & DATA MANAGER ---
 # Fix path for reference data file when running from backend directory
@@ -56,20 +66,24 @@ parent_dir = os.path.dirname(project_root)  # project root directory
 reference_data_path = os.path.join(parent_dir, config.DATA_REF_FILE)
 
 data_manager = DataManager(data_ref_file=reference_data_path)
-assignment_agent = AssignmentAgentIntegration(db_connection=snowflake_conn)
+assignment_agent = AssignmentAgentIntegration(db_connection=snowflake_conn) if snowflake_conn else None
 notification_agent = NotificationAgent()
-intake_agent = IntakeClassificationAgent(
-    sf_account=config.SF_ACCOUNT,
-    sf_user=config.SF_USER,
-    sf_warehouse=config.SF_WAREHOUSE,
-    sf_database=config.SF_DATABASE,
-    sf_schema=config.SF_SCHEMA,
-    sf_role=config.SF_ROLE,
-    data_ref_file=reference_data_path
-)
-intake_agent.assignment_agent = assignment_agent
-intake_agent.notification_agent = notification_agent
-intake_agent.reference_data = data_manager.reference_data
+try:
+    intake_agent = IntakeClassificationAgent(
+        sf_account=config.SF_ACCOUNT,
+        sf_user=config.SF_USER,
+        sf_warehouse=config.SF_WAREHOUSE,
+        sf_database=config.SF_DATABASE,
+        sf_schema=config.SF_SCHEMA,
+        sf_role=config.SF_ROLE,
+        data_ref_file=reference_data_path
+    )
+    intake_agent.assignment_agent = assignment_agent
+    intake_agent.notification_agent = notification_agent
+    intake_agent.reference_data = data_manager.reference_data
+except Exception as e:
+    print(f"Warning: Intake agent initialization failed: {e}")
+    intake_agent = None
 
 # --- Pydantic Models ---
 class TicketCreateRequest(BaseModel):
@@ -106,6 +120,8 @@ def health_check():
 def get_tickets_count():
     """Get total count of tickets"""
     try:
+        if not snowflake_conn:
+            raise HTTPException(status_code=503, detail="Database connection unavailable")
         query = "SELECT COUNT(*) as total_tickets FROM TEST_DB.PUBLIC.TICKETS"
         result = snowflake_conn.execute_query(query)
         return {"total_tickets": result[0]["TOTAL_TICKETS"] if result else 0}
@@ -116,6 +132,8 @@ def get_tickets_count():
 def get_tickets_stats():
     """Get ticket statistics by status and priority"""
     try:
+        if not snowflake_conn:
+            raise HTTPException(status_code=503, detail="Database connection unavailable")
         status_query = """
             SELECT STATUS, COUNT(*) as count
             FROM TEST_DB.PUBLIC.TICKETS
@@ -141,11 +159,15 @@ def get_tickets_stats():
 
 @app.get("/tickets", response_model=List[dict])
 def get_all_tickets(limit: int = Query(50, le=100), offset: int = 0, status: Optional[str] = None, priority: Optional[str] = None):
+    if not snowflake_conn:
+        raise HTTPException(status_code=503, detail="Database connection unavailable")
     results = snowflake_conn.get_all_tickets(limit=limit, offset=offset, status_filter=status, priority_filter=priority)
     return results
 
 @app.get("/tickets/{ticket_number}")
 def get_ticket(ticket_number: str):
+    if not snowflake_conn:
+        raise HTTPException(status_code=503, detail="Database connection unavailable")
     ticket = snowflake_conn.get_ticket_by_number(ticket_number)
     if not ticket:
         raise HTTPException(status_code=404, detail="Ticket not found")
@@ -153,6 +175,8 @@ def get_ticket(ticket_number: str):
 
 @app.get("/tickets/{ticket_number}/technician", response_model=TechnicianResponse)
 def get_technician(ticket_number: str):
+    if not snowflake_conn:
+        raise HTTPException(status_code=503, detail="Database connection unavailable")
     # Get ticket first to get technician email
     ticket = snowflake_conn.get_ticket_by_number(ticket_number)
     if not ticket:
@@ -172,6 +196,10 @@ def get_technician(ticket_number: str):
 def create_ticket(request: TicketCreateRequest):
     try:
         print(f"🎫 Creating ticket with title: {request.title}")
+
+        # Check if intake agent is available
+        if not intake_agent:
+            raise HTTPException(status_code=503, detail="Ticket processing service unavailable. Please check configuration.")
 
         # Use agentic workflow to process and create ticket
         print(f"🚀 Starting agentic workflow for ticket: {request.title}")

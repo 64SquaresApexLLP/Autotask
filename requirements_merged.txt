@@ -22,7 +22,7 @@ google-auth-httplib2>=0.1.0
 google-api-python-client>=2.0.0
 matplotlib
 
-# FastAPI and Web Framework Dependencies
+# Chatbot Dependencies
 fastapi
 uvicorn[standard]
 websockets
@@ -41,4 +41,4 @@ pytest-asyncio
 black
 flake8
 jinja2
-aiofiles
+aiofiles 
