@@ -1,7 +1,6 @@
-// src/pages/Login.jsx
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bot } from 'lucide-react';
+import { Bot, User, Wrench, Eye, EyeOff } from 'lucide-react';
 import useAuth from '../hooks/useAuth';
 
 const Login = () => {
@@ -10,6 +9,7 @@ const Login = () => {
   const [password, setPassword] = useState('');
   const [role, setRole] = useState('');
   const [error, setError] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
 
   const handleLogin = () => {
@@ -51,44 +51,84 @@ const Login = () => {
         )}
 
         <div className="space-y-6">
-          <div>
-            <label className="block text-gray-700 mb-3 font-semibold text-base">Select Role</label>
-            <select
-              value={role}
-              onChange={(e) => setRole(e.target.value)}
-              className="w-full px-4 py-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00ABE4] transition text-base"
-            >
-              <option value="">Choose your role</option>
-              <option value="user">User</option>
-              <option value="technician">Technician</option>
-            </select>
+          {/* Enhanced Role Selection */}
+          <div className="mb-6">
+            <label className="block text-gray-700 mb-4 font-semibold text-base">Select Your Role</label>
+            <div className="grid grid-cols-2 gap-4">
+              <button
+                type="button"
+                onClick={() => setRole('user')}
+                className={`p-4 border-2 rounded-xl flex flex-col items-center transition-all duration-200 ${role === 'user'
+                    ? 'border-[#00ABE4] bg-[#E9F1FA] shadow-md'
+                    : 'border-gray-200 hover:border-gray-300'
+                  }`}
+              >
+                <div className={`p-3 rounded-full mb-3 ${role === 'user' ? 'bg-[#00ABE4] text-white' : 'bg-gray-100 text-gray-600'
+                  }`}>
+                  <User className="w-6 h-6" />
+                </div>
+                <span className={`font-medium ${role === 'user' ? 'text-[#00ABE4]' : 'text-gray-600'
+                  }`}>User</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setRole('technician')}
+                className={`p-4 border-2 rounded-xl flex flex-col items-center transition-all duration-200 ${role === 'technician'
+                    ? 'border-[#00ABE4] bg-[#E9F1FA] shadow-md'
+                    : 'border-gray-200 hover:border-gray-300'
+                  }`}
+              >
+                <div className={`p-3 rounded-full mb-3 ${role === 'technician' ? 'bg-[#00ABE4] text-white' : 'bg-gray-100 text-gray-600'
+                  }`}>
+                  <Wrench className="w-6 h-6" />
+                </div>
+                <span className={`font-medium ${role === 'technician' ? 'text-[#00ABE4]' : 'text-gray-600'
+                  }`}>Technician</span>
+              </button>
+            </div>
           </div>
 
-          <div>
-            <label className="block text-gray-700 mb-3 font-semibold text-base">Username</label>
+          {/* Enhanced Username Field with Floating Label */}
+          <div className="relative">
             <input
               type="text"
-              placeholder="Enter your username"
+              placeholder=""
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              className="w-full px-4 py-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00ABE4] transition text-base"
+              className="w-full px-4 py-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00ABE4] transition text-base peer"
             />
+            <label className={`absolute left-4 text-gray-500 transition-all duration-200 bg-white px-1 text-xs ${username ? '-top-2' : 'top-4 peer-focus:-top-2 peer-focus:text-xs peer-focus:text-[#00ABE4]'
+              }`}>
+              Username
+            </label>
           </div>
 
-          <div>
-            <label className="block text-gray-700 mb-3 font-semibold text-base">Password</label>
+          <div className="relative mt-6">
             <input
-              type="password"
-              placeholder="Enter your password"
+              type={showPassword ? "text" : "password"}
+              placeholder=" "
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-4 py-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00ABE4] transition text-base"
+              className="w-full px-4 py-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00ABE4] transition text-base peer pr-12"
             />
+            <label className={`absolute left-4 text-gray-500 transition-all duration-200 bg-white px-1 text-xs ${password ? '-top-2' : 'top-4 peer-focus:-top-2 peer-focus:text-xs peer-focus:text-[#00ABE4]'
+              }`}>
+              Password
+            </label>
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+            >
+              {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+            </button>
           </div>
 
+          {/* Enhanced Login Button */}
           <button
             onClick={handleLogin}
-            className="w-full bg-[#00ABE4] text-white py-4 rounded-lg font-semibold transition duration-300 shadow-md hover:shadow-lg hover:bg-blue-600 text-base"
+            className="w-full bg-[#00ABE4] text-white py-4 rounded-lg font-semibold transition-all duration-300 shadow-md hover:shadow-lg hover:bg-blue-600 text-base transform hover:scale-[1.02] active:scale-[0.98]"
           >
             Sign In
           </button>
