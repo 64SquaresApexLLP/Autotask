@@ -29,6 +29,23 @@ class AIProcessor:
         self.db_connection = db_connection
         self.reference_data = reference_data
 
+    def _find_value_by_label(self, field_name: str, label: str) -> str:
+        """
+        Find the value (ID) for a given label in the reference data.
+        
+        Args:
+            field_name (str): The field name (e.g., "issuetype", "subissuetype")
+            label (str): The label to search for
+            
+        Returns:
+            str: The value (ID) for the label, or "N/A" if not found
+        """
+        if field_name in self.reference_data:
+            for value, ref_label in self.reference_data[field_name].items():
+                if ref_label.lower() == label.lower():
+                    return value
+        return "N/A"
+
     def extract_metadata(self, title: str, description: str, model: str = 'llama3-8b') -> Optional[Dict]:
         """
         Extracts structured metadata from the ticket title and description using LLM.
@@ -197,31 +214,51 @@ class AIProcessor:
                     main_issue = extracted_metadata.get('main_issue', '').lower()
                     affected_system = extracted_metadata.get('affected_system', '').lower()
 
-                    # Smart defaults based on the issue type
+                    # Smart defaults based on the issue type - dynamically find from reference data
                     if 'printer' in main_issue or 'printer' in affected_system or 'print' in main_issue:
+                        # Find printer-related values from reference data
+                        printer_issuetype = self._find_value_by_label("issuetype", "Printer")
+                        printer_subissuetype = self._find_value_by_label("subissuetype", "Printer")
+                        standard_category = self._find_value_by_label("ticketcategory", "Standard")
+                        incident_type = self._find_value_by_label("tickettype", "Incident")
+                        medium_priority = self._find_value_by_label("priority", "Medium")
+                        
                         smart_defaults = {
-                            "ISSUETYPE": {"Value": "1", "Label": "Hardware"},  # Hardware issue
-                            "SUBISSUETYPE": {"Value": "8", "Label": "Printer"},  # Printer specific
-                            "TICKETCATEGORY": {"Value": "3", "Label": "Standard"},
-                            "TICKETTYPE": {"Value": "2", "Label": "Incident"},
-                            "PRIORITY": {"Value": "2", "Label": "Medium"}
+                            "ISSUETYPE": {"Value": printer_issuetype, "Label": "Printer"},
+                            "SUBISSUETYPE": {"Value": printer_subissuetype, "Label": "Printer"},
+                            "TICKETCATEGORY": {"Value": standard_category, "Label": "Standard"},
+                            "TICKETTYPE": {"Value": incident_type, "Label": "Incident"},
+                            "PRIORITY": {"Value": medium_priority, "Label": "Medium"}
                         }
                     elif 'email' in main_issue or 'outlook' in main_issue or 'exchange' in main_issue:
+                        # Find email-related values from reference data
+                        email_issuetype = self._find_value_by_label("issuetype", "Email")
+                        email_subissuetype = self._find_value_by_label("subissuetype", "Email")
+                        standard_category = self._find_value_by_label("ticketcategory", "Standard")
+                        incident_type = self._find_value_by_label("tickettype", "Incident")
+                        medium_priority = self._find_value_by_label("priority", "Medium")
+                        
                         smart_defaults = {
-                            "ISSUETYPE": {"Value": "5", "Label": "Software/SaaS"},
-                            "SUBISSUETYPE": {"Value": "74", "Label": "Email"},
-                            "TICKETCATEGORY": {"Value": "3", "Label": "Standard"},
-                            "TICKETTYPE": {"Value": "2", "Label": "Incident"},
-                            "PRIORITY": {"Value": "2", "Label": "Medium"}
+                            "ISSUETYPE": {"Value": email_issuetype, "Label": "Email"},
+                            "SUBISSUETYPE": {"Value": email_subissuetype, "Label": "Email"},
+                            "TICKETCATEGORY": {"Value": standard_category, "Label": "Standard"},
+                            "TICKETTYPE": {"Value": incident_type, "Label": "Incident"},
+                            "PRIORITY": {"Value": medium_priority, "Label": "Medium"}
                         }
                     else:
-                        # Generic fallback
+                        # Generic fallback - find from reference data
+                        software_issuetype = self._find_value_by_label("issuetype", "Software/SaaS")
+                        ms_office_subissuetype = self._find_value_by_label("subissuetype", "MS Office")
+                        standard_category = self._find_value_by_label("ticketcategory", "Standard")
+                        incident_type = self._find_value_by_label("tickettype", "Incident")
+                        medium_priority = self._find_value_by_label("priority", "Medium")
+                        
                         smart_defaults = {
-                            "ISSUETYPE": {"Value": "5", "Label": "Software/SaaS"},
-                            "SUBISSUETYPE": {"Value": "73", "Label": "MS Office"},
-                            "TICKETCATEGORY": {"Value": "3", "Label": "Standard"},
-                            "TICKETTYPE": {"Value": "2", "Label": "Incident"},
-                            "PRIORITY": {"Value": "2", "Label": "Medium"}
+                            "ISSUETYPE": {"Value": software_issuetype, "Label": "Software/SaaS"},
+                            "SUBISSUETYPE": {"Value": ms_office_subissuetype, "Label": "MS Office"},
+                            "TICKETCATEGORY": {"Value": standard_category, "Label": "Standard"},
+                            "TICKETTYPE": {"Value": incident_type, "Label": "Incident"},
+                            "PRIORITY": {"Value": medium_priority, "Label": "Medium"}
                         }
 
                     classified_data[field] = smart_defaults.get(field, {"Value": "N/A", "Label": "Unknown"})
@@ -229,10 +266,10 @@ class AIProcessor:
 
         # Set STATUS field
         if classified_data and "status" in self.reference_data:
-            new_status_info = next(((val, label) for val, label in self.reference_data["status"].items() if label == "New"), ("N/A", "New"))
-            classified_data["STATUS"] = {"Value": new_status_info[0], "Label": new_status_info[1]}
+            new_status_value = self._find_value_by_label("status", "New")
+            classified_data["STATUS"] = {"Value": new_status_value, "Label": "New"}
         elif classified_data:
-            classified_data["STATUS"] = {"Value": "N/A", "Label": "Open"}
+            classified_data["STATUS"] = {"Value": "1", "Label": "New"}
 
         # Fallback: For any field, use the most common value from similar tickets if LLM returns N/A
         if classified_data:

@@ -21,6 +21,8 @@ if src_dir not in sys.path:
     sys.path.insert(0, src_dir)
 if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
+if current_dir not in sys.path:
+    sys.path.insert(0, current_dir)
 
 # Import from src modules
 from src.agents.intake_agent import IntakeClassificationAgent
@@ -52,17 +54,20 @@ app.include_router(chatbot_router)
 async def startup_event():
     """Set database connection and LLM service for chatbot on startup."""
     if snowflake_conn:
-        from chatbot.simple_router import set_database_connection, set_llm_service
-        set_database_connection(snowflake_conn)
-
-        # Initialize LLM service
         try:
-            from chatbot.services.llm_service import LLMService
-            llm_service = LLMService()
-            set_llm_service(llm_service)
-            print("✅ LLM service initialized for chatbot")
+            from chatbot.simple_router import set_database_connection, set_llm_service
+            set_database_connection(snowflake_conn)
+
+            # Initialize LLM service
+            try:
+                from chatbot.services.llm_service import LLMService
+                llm_service = LLMService()
+                set_llm_service(llm_service)
+                print("✅ LLM service initialized for chatbot")
+            except Exception as e:
+                print(f"⚠️ Warning: Could not initialize LLM service: {e}")
         except Exception as e:
-            print(f"⚠️ Warning: Could not initialize LLM service: {e}")
+            print(f"⚠️ Warning: Could not initialize chatbot services: {e}")
 
 # --- CONFIGURATION ---
 import config

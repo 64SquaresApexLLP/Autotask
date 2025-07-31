@@ -482,10 +482,11 @@ class PageControllers:
     @staticmethod
     def _display_email_processing_section(agent):
         """Display the email processing section."""
-        from app import (
-            start_automatic_email_processing, stop_automatic_email_processing,
-            fetch_and_process_emails, EMAIL_PROCESSING_STATUS
-        )
+        # Use the integrated email processing methods from the intake agent
+        start_automatic_email_processing = agent.start_automatic_email_processing
+        stop_automatic_email_processing = agent.stop_automatic_email_processing
+        fetch_and_process_emails = agent.process_recent_emails
+        EMAIL_PROCESSING_STATUS = agent.get_email_processing_status()
 
         with st.expander("📧 Email Processing with Image Analysis", expanded=False):
             st.markdown("""
@@ -500,25 +501,39 @@ class PageControllers:
 
             # Automatic Email Processing Section
             st.markdown("### 🔄 Automatic Email Processing")
+            
+            # Show automatic status
+            if EMAIL_PROCESSING_STATUS["is_running"]:
+                st.success("✅ **Automatic email processing is ACTIVE** - Checking for new emails every 5 minutes")
+            else:
+                st.warning("⚠️ **Automatic email processing is INACTIVE**")
 
             col1, col2, col3 = st.columns([2, 2, 2])
 
             with col1:
-                if st.button("🚀 Start Auto Processing", type="primary"):
-                    with st.spinner("Starting automatic email processing..."):
-                        result = start_automatic_email_processing(agent)
-                        if "✅" in result:
-                            st.success(result)
-                        else:
-                            st.error(result)
+                if EMAIL_PROCESSING_STATUS["is_running"]:
+                    st.info("🟢 Auto processing is running")
+                else:
+                    if st.button("🚀 Start Auto Processing", type="primary"):
+                        with st.spinner("Starting automatic email processing..."):
+                            result = start_automatic_email_processing()
+                            if "✅" in result:
+                                st.success(result)
+                                st.rerun()
+                            else:
+                                st.error(result)
 
             with col2:
-                if st.button("🛑 Stop Auto Processing"):
-                    result = stop_automatic_email_processing()
-                    if "✅" in result:
-                        st.success(result)
-                    else:
-                        st.warning(result)
+                if EMAIL_PROCESSING_STATUS["is_running"]:
+                    if st.button("🛑 Stop Auto Processing"):
+                        result = stop_automatic_email_processing()
+                        if "✅" in result:
+                            st.success(result)
+                            st.rerun()
+                        else:
+                            st.warning(result)
+                else:
+                    st.info("Auto processing stopped")
 
             with col3:
                 if st.button("🔄 Refresh Status"):

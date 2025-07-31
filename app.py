@@ -34,26 +34,9 @@ from src.data import DataManager
 from src.ui import apply_custom_css, format_time_elapsed, format_date_display, get_duration_icon
 from src.core import EmailProcessor, TicketHandlers, PageControllers
 
-# Email integration config (based on test.py)
-EMAIL_ACCOUNT = 'rohankul2017@gmail.com'
-EMAIL_PASSWORD = os.getenv('SUPPORT_EMAIL_PASSWORD')
-IMAP_SERVER = 'imap.gmail.com'
-FOLDER = 'inbox'
+# Email integration config (now handled by IntakeClassificationAgent)
 DEFAULT_TZ = 'Asia/Kolkata'
-MAX_EMAILS = 20  # Increased slightly for 5-minute window
-RECENT_MINUTES = 5  # Only process emails from last 5 minutes
 DEFAULT_DUE_OFFSET_HOURS = 48
-IST = pytz.timezone(DEFAULT_TZ)
-
-# Global variables for automatic email processing
-AUTO_EMAIL_PROCESSOR = None
-EMAIL_PROCESSING_STATUS = {
-    "is_running": False,
-    "last_processed": None,
-    "total_processed": 0,
-    "error_count": 0,
-    "recent_logs": []
-}
 
 def validate_email(email_address: str) -> bool:
     """
