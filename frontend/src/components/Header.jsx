@@ -1,4 +1,3 @@
-// src/components/Header.jsx
 import React from 'react';
 import { User, LogOut, Bot } from 'lucide-react';
 import useAuth from '../hooks/useAuth';

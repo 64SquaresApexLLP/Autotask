@@ -1,4 +1,3 @@
-// src/pages/UserDashboard.jsx
 import React from 'react';
 import { FileText } from 'lucide-react';
 import Header from '../components/Header';

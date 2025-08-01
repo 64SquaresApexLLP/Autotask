@@ -1,4 +1,3 @@
-// src/components/Sidebar.jsx
 import React from 'react';
 import { Settings, Wrench, FileText, Users, BarChart3, CheckSquare, AlertCircle, List } from 'lucide-react';
 import useAuth from '../hooks/useAuth';
