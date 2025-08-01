@@ -30,14 +30,6 @@ function App() {
 
           {/* Technician Routes */}
           <Route
-            path="/technician/dashboard"
-            element={
-              <ProtectedRoute>
-                <TechnicianDashboard />
-              </ProtectedRoute>
-            }
-          />
-          <Route
             path="/technician"
             element={
               <ProtectedRoute>
@@ -45,6 +37,16 @@ function App() {
               </ProtectedRoute>
             }
           />
+          
+          <Route
+            path="/technician/dashboard"
+            element={
+              <ProtectedRoute>
+                <TechnicianDashboard />
+              </ProtectedRoute>
+            }
+          />
+          
           <Route
             path="/technician/my-tickets"
             element={
