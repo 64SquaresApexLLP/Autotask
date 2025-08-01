@@ -140,8 +140,9 @@ const MyTickets = () => {
   const [selectedTicket, setSelectedTicket] = useState(null);
   const [newWorkNote, setNewWorkNote] = useState("");
   const [newStatus, setNewStatus] = useState("");
-  const [timeSpent, setTimeSpent] = useState("");
   const [showFilters, setShowFilters] = useState(false);
+  const [timeSpent, setTimeSpent] = useState("");
+  
 
   const filteredTickets = mockTickets.filter((ticket) => {
     const matchesSearch =

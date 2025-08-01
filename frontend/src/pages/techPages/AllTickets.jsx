@@ -109,14 +109,7 @@ const AllTickets = () => {
     return matchesSearch && matchesStatus && matchesPriority && matchesTech && matchesDept;
   });
 
-  const getPriorityColor = priority => {
-    return {
-      low: 'text-green-600',
-      medium: 'text-yellow-600',
-      high: 'text-orange-600',
-      critical: 'text-red-600',
-    }[priority] || 'text-gray-600';
-  };
+  
 
   const getStatusStyle = status => {
     return {
@@ -125,6 +118,15 @@ const AllTickets = () => {
       resolved: 'bg-green-100 text-green-800',
       closed: 'bg-gray-100 text-gray-800',
     }[status] || 'bg-gray-200 text-gray-800';
+  };
+
+  const getPriorityColor = priority => {
+    return {
+      low: 'text-green-600',
+      medium: 'text-yellow-600',
+      high: 'text-orange-600',
+      critical: 'text-red-600',
+    }[priority] || 'text-gray-600';
   };
 
   const toggleSelectTicket = id => {

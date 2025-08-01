@@ -103,17 +103,19 @@ const UrgentTickets = () => {
     }
   };
 
-  const getTimeRemainingColor = (timeRemaining) => {
-    if (timeRemaining === "OVERDUE") return "text-red-600 font-bold";
-    if (timeRemaining.includes("h") && parseInt(timeRemaining) < 2) return "text-orange-600 font-semibold";
-    return "text-gray-600";
-  };
+  
 
   const getSLAProgress = (timeRemaining) => {
     if (timeRemaining === "OVERDUE") return 0;
     // Mock calculation - in real app, calculate based on actual time
     const hours = parseFloat(timeRemaining.replace(/[^\d.]/g, ""));
     return Math.max(0, Math.min(100, (hours / 4) * 100));
+  };
+
+  const getTimeRemainingColor = (timeRemaining) => {
+    if (timeRemaining === "OVERDUE") return "text-red-600 font-bold";
+    if (timeRemaining.includes("h") && parseInt(timeRemaining) < 2) return "text-orange-600 font-semibold";
+    return "text-gray-600";
   };
 
   return (
