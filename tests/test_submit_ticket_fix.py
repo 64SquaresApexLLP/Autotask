@@ -147,7 +147,7 @@ def main():
         print("✅ The page should display the full ticket submission form.")
         print("✅ Users should be able to submit tickets and see results.")
         print("\n💡 To verify:")
-        print("   1. Open the application: streamlit run app.py")
+        print("   1. Open the application: cd backend && python -m uvicorn main:app --host 0.0.0.0 --port 8001")
         print("   2. Login with user credentials (U001 / Pass@001)")
         print("   3. Navigate to the Home page")
         print("   4. You should see the complete ticket submission form")

@@ -19,8 +19,8 @@ teamlogic-autotask/
 ├── README.md                       # This file
 ├── requirements.txt                # Python dependencies
 ├── .env                           # Environment variables (not in repo)
-├── app.py                         # Main Streamlit application
 ├── config.py                      # Configuration settings
+├── backend/                       # FastAPI backend server
 │
 ├── src/                           # Source code
 │   ├── agents/                    # AI Agents

@@ -23,11 +23,12 @@ PyJWT>=2.4.0
 requests>=2.28.0
 httpx>=0.24.0
 
-# Google Calendar API Dependencies
+# Google API Dependencies (Calendar + Gmail + Pub/Sub)
 google-auth>=2.0.0
 google-auth-oauthlib>=0.5.0
 google-auth-httplib2>=0.1.0
 google-api-python-client>=2.0.0
+google-cloud-pubsub>=2.18.0
 
 # Image Processing Dependencies
 Pillow>=9.0.0

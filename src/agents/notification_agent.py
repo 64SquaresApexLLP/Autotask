@@ -48,13 +48,16 @@ class NotificationAgent:
         Args:
             db_connection: Database connection for LLM access (Snowflake Cortex)
         """
-        # SMTP Configuration
+        # SMTP Configuration - Use same Gmail account as monitoring
         self.smtp_server = os.getenv('SMTP_SERVER', 'smtp.gmail.com')
         self.smtp_port = int(os.getenv('SMTP_PORT', '587'))
-        self.smtp_username = os.getenv('SMTP_USERNAME', os.getenv('EMAIL_ACCOUNT', 'rohankul2017@gmail.com'))
-        self.smtp_password = os.getenv('SMTP_PASSWORD', os.getenv('SUPPORT_EMAIL_PASSWORD'))
+        self.smtp_username = os.getenv('SMTP_USERNAME', 'rohankool2021@gmail.com')  # Same as monitoring
+
+        # Try to load the same app password used for Gmail monitoring
+        self.smtp_password = self._load_gmail_app_password()
+
         self.from_email = os.getenv('FROM_EMAIL', self.smtp_username)
-        self.from_name = os.getenv('FROM_NAME', 'TeamLogicIT Support')
+        self.from_name = os.getenv('FROM_NAME', 'TeamLogic AutoTask Support')
 
         # LLM Configuration
         self.db_connection = db_connection
@@ -68,6 +71,31 @@ class NotificationAgent:
             logger.warning("SMTP password not configured. Email notifications disabled.")
 
         logger.info(f"NotificationAgent initialized - SMTP: {'enabled' if self.enabled else 'disabled'}, LLM: {'enabled' if self.llm_enabled else 'disabled'}")
+
+    def _load_gmail_app_password(self) -> str:
+        """Load Gmail app password from the same file used by Gmail monitor"""
+        try:
+            # Try environment variable first
+            env_password = os.getenv('SMTP_PASSWORD', os.getenv('SUPPORT_EMAIL_PASSWORD'))
+            if env_password:
+                return env_password
+
+            # Try to load from the same file used by Gmail monitor
+            app_password_file = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), '.gmail_app_password')
+
+            if os.path.exists(app_password_file):
+                with open(app_password_file, 'r') as f:
+                    password = f.read().strip()
+                    if password:
+                        logger.info("Gmail app password loaded from .gmail_app_password file")
+                        return password
+
+            logger.warning("No Gmail app password found. Email notifications will be disabled.")
+            return None
+
+        except Exception as e:
+            logger.warning(f"Error loading Gmail app password: {e}")
+            return None
 
     def generate_email_notification(self, notification_type: str, ticket_data: Dict,
                                   recipient_type: str = "customer") -> Dict[str, str]:

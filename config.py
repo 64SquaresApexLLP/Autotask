@@ -1,132 +1,55 @@
 """
-Configuration module for TeamLogic-AutoTask application.
-Contains all configuration constants and settings.
+Configuration file for TeamLogic AutoTask System
+Contains database and service configuration settings
 """
 
 import os
-from dotenv import load_dotenv
 
-# Load environment variables from .env file
-load_dotenv()
+# Snowflake Database Configuration
+SF_ACCOUNT = "FOQUKCW-AITEAM_64SQUARES"
+SF_USER = "anant.lad@64-squares.com"
+SF_PASSWORD = ""  # Using SSO authentication
+SF_AUTHENTICATOR = "externalbrowser"  # SSO authentication
+SF_DATABASE = "TEST_DB"
+SF_SCHEMA = "PUBLIC"
+SF_WAREHOUSE = "S_WHH"
+SF_ROLE = "ACCOUNTADMIN"
 
-# Snowflake Connection Configuration (loaded from .env)
-# Using SSO authentication with externalbrowser
-SF_ACCOUNT = os.getenv('SF_ACCOUNT', 'your_snowflake_account')
-SF_USER = os.getenv('SF_USER', 'your_snowflake_user')
-SF_WAREHOUSE = os.getenv('SF_WAREHOUSE', 'your_warehouse')
-SF_DATABASE = os.getenv('SF_DATABASE', 'your_database')
-SF_SCHEMA = os.getenv('SF_SCHEMA', 'your_schema')
-SF_ROLE = os.getenv('SF_ROLE', 'your_role')
+# Email Configuration
+SUPPORT_EMAIL = "rohankool2021@gmail.com"
+SUPPORT_EMAIL_PASSWORD = os.getenv('SUPPORT_EMAIL_PASSWORD', '')
 
+# SMTP Configuration for notifications
+SMTP_SERVER = "smtp.gmail.com"
+SMTP_PORT = 587
+SMTP_USERNAME = SUPPORT_EMAIL
+SMTP_PASSWORD = SUPPORT_EMAIL_PASSWORD
 
-# File Paths
-DATA_REF_FILE = 'data/reference_data.txt'
-KNOWLEDGEBASE_FILE = 'data/knowledgebase.json'
+# API Configuration
+API_HOST = "0.0.0.0"
+API_PORT = 8001
 
-# UI Configuration
-PAGE_TITLE = "TeamLogic-AutoTask"
-PAGE_ICON = "🎫"
-LAYOUT = "wide"
+# Webhook URLs
+GMAIL_WEBHOOK_URL = f"http://localhost:{API_PORT}/webhooks/gmail/simple"
 
-# Pagination Settings
-TICKETS_PER_PAGE = 10
+# File paths
+DATA_DIR = "data"
+LOGS_DIR = "logs"
+CREDENTIALS_DIR = "credentials"
 
-# LLM Model Configuration
-DEFAULT_EXTRACT_MODEL = 'llama3-8b'
-DEFAULT_CLASSIFY_MODEL = 'mixtral-8x7b'
+# Data file paths (for backward compatibility)
+DATA_REF_FILE = "data/reference_data.txt"
+KNOWLEDGEBASE_FILE_PATH = "data/knowledgebase.json"
 
-# Priority Options
-PRIORITY_OPTIONS = ["Low", "Medium", "High", "Critical", "Desktop/User Down"]
+# LLM Configuration (optional)
+OPENAI_API_KEY = os.getenv('OPENAI_API_KEY', '')
+GROQ_API_KEY = os.getenv('GROQ_API_KEY', '')
 
-# Status Options
-STATUS_OPTIONS = ["Open", "In Progress", "Resolved", "Closed"]
+# Application Settings
+DEBUG = True
+LOG_LEVEL = "INFO"
 
-# Duration Filter Options
-DURATION_OPTIONS = [
-    "Last hour",
-    "Last 2 hours",
-    "Last 6 hours",
-    "Last 12 hours",
-    "Today",
-    "Yesterday",
-    "Last 3 days",
-    "Last week",
-    "Last month",
-    "All tickets"
-]
-
-# Priority Colors for UI
-PRIORITY_COLORS = {
-    "Low": "🟢",
-    "Medium": "🟡",
-    "High": "🟠",
-    "Critical": "🔴",
-    "Desktop/User Down": "🚨"
-}
-
-# Duration Icons
-DURATION_ICONS = {
-    "Last hour": "🚨",
-    "Last 2 hours": "⏰",
-    "Last 6 hours": "🕕",
-    "Last 12 hours": "🕐",
-    "Today": "📅",
-    "Yesterday": "📆",
-    "Last 3 days": "📊",
-    "Last week": "📈",
-    "Last month": "📉",
-    "All tickets": "📋"
-}
-
-# Chart Colors
-STATUS_COLORS = {
-    "New": "#4e73df",
-    "In Progress": "#f6c23e",
-    "Resolved": "#36b9cc",
-    "Closed": "#e74a3b"
-}
-
-CHART_PRIORITY_COLORS = {
-    "Low": "#1cc88a",
-    "Medium": "#36b9cc",
-    "High": "#f6c23e",
-    "Critical": "#e74a3b",
-    "Desktop/User Down": "#6f42c1"
-}
-
-# Email Configuration (loaded from .env)
-EMAIL_ACCOUNT = os.getenv('EMAIL_ACCOUNT', 'rohankul2017@gmail.com')
-EMAIL_PASSWORD = os.getenv('SUPPORT_EMAIL_PASSWORD')
-IMAP_SERVER = os.getenv('IMAP_SERVER', 'imap.gmail.com')
-EMAIL_FOLDER = os.getenv('EMAIL_FOLDER', 'inbox')
-
-# Contact Information (loaded from .env)
-SUPPORT_PHONE = os.getenv('SUPPORT_PHONE', '9723100860')
-SUPPORT_EMAIL = os.getenv('SUPPORT_EMAIL', 'rohankul2017@gmail.com')
-
-# Notification Configuration
-MANAGER_EMAIL = os.getenv('MANAGER_EMAIL', 'itmanager@company.com')
-FALLBACK_TECHNICIAN_EMAIL = os.getenv('FALLBACK_TECHNICIAN_EMAIL', 'support@company.com')
-
-# Email Notification Types
-EMAIL_NOTIFICATION_TYPES = [
-    'confirmation',      # Customer ticket confirmation
-    'assignment',        # Technician assignment notification
-    'status_update',     # Status change notifications
-    'escalation',        # Escalation notifications
-    'resolution',        # Resolution notifications
-    'reminder',          # Reminder notifications
-    'feedback_request'   # Feedback request notifications
-]
-
-# Email Recipient Types
-EMAIL_RECIPIENT_TYPES = [
-    'customer',          # End user who submitted ticket
-    'technician',        # Assigned technician
-    'manager',           # IT manager or supervisor
-    'team'               # Team notifications
-]
-
-# Notification Triggers
-HIGH_PRIORITY_NOTIFICATIONS = ['Critical', 'High', 'Desktop/User Down']
-ESCALATION_KEYWORDS = ['fallback', 'failed', 'error', 'escalated']
+# Ticket Configuration
+TICKET_SEQUENCE_FILE = os.path.join(DATA_DIR, "ticket_sequence.json")
+REFERENCE_DATA_FILE = os.path.join(DATA_DIR, "reference_data.txt")
+KNOWLEDGEBASE_FILE = os.path.join(DATA_DIR, "knowledgebase.json")

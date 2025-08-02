@@ -226,7 +226,7 @@ class TestSuite:
             print(f"\n⚠️ {total_tests - passed_tests} test(s) failed. Please review the issues above.")
         
         print("\n💡 To run the application:")
-        print("   streamlit run app.py")
+        print("   cd backend && python -m uvicorn main:app --host 0.0.0.0 --port 8001")
         print("\n🔑 Test credentials:")
         print("   User: U001 / Pass@001")
         print("   Technician: T101 / Tech@9382xB")

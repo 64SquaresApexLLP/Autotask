@@ -8,9 +8,9 @@ import hashlib
 import hmac
 import json
 import requests
-from datetime import datetime
-import sys
-import os
+from datetime import datetime, timedelta
+import asyncio
+# Email processing imports removed
 
 # Add src to sys.path for agent/database imports
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -31,6 +31,7 @@ from src.agents.notification_agent import NotificationAgent
 from src.database.snowflake_db import SnowflakeConnection
 from src.database.ticket_db import TicketDB
 from src.data.data_manager import DataManager
+# from src.integrations.gmail_realtime import gmail_service  # Disabled - using direct IMAP instead
 
 # Import simplified chatbot router
 from chatbot.simple_router import router as chatbot_router
@@ -493,6 +494,27 @@ def get_table_structure():
 WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET", "your-webhook-secret-key")
 AUTOTASK_WEBHOOK_URL = os.getenv("AUTOTASK_WEBHOOK_URL", "https://your-autotask-instance.com/api/webhooks")
 
+# --- EMAIL FORWARDING MODELS ---
+class EmailForwardingRequest(BaseModel):
+    """Model for incoming forwarded emails from Gmail"""
+    subject: str = Field(..., description="Email subject")
+    body: str = Field(..., description="Email body content")
+    from_email: str = Field(..., description="Sender email address")
+    from_name: Optional[str] = Field(None, description="Sender name")
+    to_email: str = Field(..., description="Recipient email address")
+    received_at: Optional[str] = Field(None, description="Email received timestamp")
+    message_id: Optional[str] = Field(None, description="Email message ID")
+    attachments: Optional[List[Dict[str, Any]]] = Field(None, description="Email attachments")
+
+class EmailProcessingResponse(BaseModel):
+    """Response for email processing"""
+    success: bool
+    message: str
+    ticket_number: Optional[str] = None
+    processed_as_ticket: bool = False
+    data: Optional[Dict[str, Any]] = None
+    errors: Optional[List[str]] = None
+
 def verify_webhook_signature(payload: bytes, signature: str, secret: str) -> bool:
     """Verify webhook signature for security"""
     if not signature:
@@ -758,6 +780,8 @@ async def send_notification_webhook(notification_data: AutotaskNotificationWebho
             errors=[str(e)]
         )
 
+
+
 @app.get("/webhooks/status")
 def webhook_status():
     """
@@ -770,11 +794,18 @@ def webhook_status():
             "endpoints": {
                 "inbound": "/webhooks/autotask/inbound",
                 "assignment": "/webhooks/autotask/assignment",
-                "notification": "/webhooks/autotask/notification"
+                "notification": "/webhooks/autotask/notification",
+                "email_forwarding": "/webhooks/email/forward"
             },
             "security": {
                 "signature_verification": bool(WEBHOOK_SECRET),
                 "cors_enabled": True
+            },
+            "email_processing": {
+                "mode": "webhook",
+                "webhook_enabled": True,
+                "polling_enabled": False,
+                "real_time_processing": True
             }
         }
 
@@ -801,4 +832,207 @@ def webhook_status():
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get webhook status: {str(e)}")
+
+
+@app.get("/email/status")
+def get_email_processing_status():
+    """
+    Get the current status of email processing system (webhook-based).
+    """
+    try:
+        if not intake_agent:
+            raise HTTPException(status_code=503, detail="Intake agent not available")
+
+        status = intake_agent.get_email_processing_status()
+        return {
+            "success": True,
+            "processing_mode": "webhook",
+            "webhook_endpoint": "/webhooks/email/forward",
+            "status": status,
+            "message": "Using real-time webhook-based email processing"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get email processing status: {str(e)}")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# ==================== GMAIL REAL-TIME INTEGRATION ====================
+
+# Gmail Pub/Sub webhook removed - using direct IMAP integration instead
+
+
+async def process_email_through_intake(email_data: Dict) -> Optional[Dict]:
+    """
+    Process email through the intake and ticketing workflow
+
+    Args:
+        email_data: Email data from Gmail API
+
+    Returns:
+        Ticket processing result or None
+    """
+    try:
+        # Convert Gmail email data to intake format
+        intake_data = {
+            'title': email_data.get('subject', 'Email Support Request'),
+            'description': email_data.get('body', ''),
+            'user_email': email_data.get('from_email', ''),
+            'user_name': email_data.get('from_name', ''),
+            'source': 'gmail_realtime',
+            'received_at': email_data.get('received_at', ''),
+            'message_id': email_data.get('message_id', ''),
+            'thread_id': email_data.get('thread_id', '')
+        }
+
+        # Set default values for email tickets
+        due_date = (datetime.now() + timedelta(hours=48)).strftime("%Y-%m-%d")
+        priority_initial = "Medium"
+
+        # Process using the unified ticket processing method
+        result = intake_agent.process_new_ticket(
+            ticket_name=intake_data['user_name'],
+            ticket_description=intake_data['description'],
+            ticket_title=intake_data['title'],
+            due_date=due_date,
+            priority_initial=priority_initial,
+            user_email=intake_data['user_email'],
+            user_id=None,
+            phone_number=None
+        )
+
+        if result:
+            # Add Gmail-specific metadata
+            result['source'] = 'gmail_realtime'
+            result['gmail_message_id'] = intake_data['message_id']
+            result['gmail_thread_id'] = intake_data['thread_id']
+            result['received_at'] = intake_data['received_at']
+
+            # Save ticket to Snowflake database
+            try:
+                print(f"💾 Saving ticket to Snowflake database...")
+                ticket_db.insert_ticket(result)
+                print(f"✅ Ticket saved to database: {result.get('ticket_number', 'Unknown')}")
+                result['database_saved'] = True
+            except Exception as db_error:
+                print(f"❌ Failed to save ticket to database: {db_error}")
+                result['database_saved'] = False
+                result['database_error'] = str(db_error)
+
+            return result
+        else:
+            return None
+
+    except Exception as e:
+        print(f"❌ Error processing email through intake: {e}")
+        return None
+
+
+@app.get("/gmail/status")
+async def get_gmail_status():
+    """Get Gmail integration status"""
+    try:
+        return {
+            "gmail_integration": {
+                "method": "direct_imap",
+                "authenticated": True,
+                "watch_active": True,
+                "webhook_url": "http://localhost:8001/webhooks/gmail/simple"
+            },
+            "intake_agent_available": intake_agent is not None,
+            "webhook_endpoint": "/webhooks/gmail/simple"
+        }
+    except Exception as e:
+        return {"error": f"Failed to get Gmail status: {str(e)}"}
+
+
+# Gmail OAuth endpoints removed - using direct IMAP integration instead
+
+
+@app.post("/webhooks/gmail/simple")
+async def simple_gmail_webhook(request: Request):
+    """
+    Simple webhook endpoint for Gmail integration using token.json
+    Receives email data and processes through intake workflow
+    """
+    try:
+        # Get the email data
+        body = await request.body()
+        email_data = json.loads(body.decode('utf-8'))
+
+        print(f"\n📧 Simple Gmail webhook received:")
+        print(f"   Subject: {email_data.get('subject', 'No subject')}")
+        print(f"   From: {email_data.get('from_email', 'Unknown sender')}")
+
+        # Check if intake agent is available
+        if not intake_agent:
+            print("❌ Intake agent not available")
+            return {"status": "error", "message": "Intake agent not available"}
+
+        # Process the email through intake workflow
+        ticket_result = await process_email_through_intake(email_data)
+
+        if ticket_result:
+            print(f"✅ Ticket created successfully: {ticket_result.get('ticket_number', 'Unknown')}")
+            return {
+                "status": "success",
+                "message": "Email processed and ticket created",
+                "ticket_number": ticket_result.get('ticket_number'),
+                "data": ticket_result
+            }
+        else:
+            print(f"❌ Failed to create ticket from email")
+            return {
+                "status": "failed",
+                "message": "Failed to create ticket from email",
+                "email_data": email_data
+            }
+
+    except Exception as e:
+        print(f"❌ Error processing simple Gmail webhook: {e}")
+        return {
+            "status": "error",
+            "message": f"Error processing email: {str(e)}"
+        }
+
+
+
+
+
+# ==================== STARTUP AND SHUTDOWN EVENTS ====================
+
+@app.on_event("startup")
+async def startup_event():
+    """Initialize services when the application starts"""
+    print("🚀 Starting TeamLogic AutoTask Backend...")
+    print("=" * 50)
+
+    # Gmail real-time service disabled - using direct IMAP integration instead
+    print("📧 Gmail integration: Using direct IMAP (no OAuth required)")
+    print("💡 Direct IMAP integration handles email monitoring")
+
+    print("=" * 50)
+    print("✅ Backend startup complete!")
+    print(f"🌐 API server running on http://0.0.0.0:8001")
+    print(f"📖 API docs available at http://localhost:8001/docs")
+    print(f"📧 Gmail webhook: http://localhost:8001/webhooks/gmail/notification")
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Cleanup when the application shuts down"""
+    print("🛑 Shutting down TeamLogic AutoTask Backend...")
+    print("✅ Shutdown complete!")
 

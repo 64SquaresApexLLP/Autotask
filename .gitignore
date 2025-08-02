@@ -74,3 +74,5 @@ assignment_agent.log
 # Sensitive
 credentials.json
 credentials/
+
+client_secret_826171701006-6biqf0hffn6bhvit91tp0j015beo10s7.apps.googleusercontent.com.json
