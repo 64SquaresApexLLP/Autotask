@@ -80,7 +80,7 @@ class IntakeClassificationAgent:
     def generate_ticket_number(self, ticket_data: Dict) -> str:
         """
         Generate a unique ticket number in format TYYYYMMDD.NNNN.
-        Checks database to ensure uniqueness across the entire system.
+        Finds the highest sequence number for today and increments dynamically.
 
         Args:
             ticket_data (dict): Ticket information
@@ -93,7 +93,7 @@ class IntakeClassificationAgent:
         date_part = now.strftime("%Y%m%d")
 
         # Get next sequential number for today by checking database
-        sequence_number = self._get_next_sequence_number_from_db(date_part)
+        sequence_number = self._get_next_sequence_number_for_date(date_part)
 
         # Generate ticket number: TYYYYMMDD.NNNN
         ticket_number = f"T{date_part}.{sequence_number:04d}"
@@ -114,26 +114,31 @@ class IntakeClassificationAgent:
         print(f"Generated fallback ticket number: {fallback_ticket_number}")
         return fallback_ticket_number
 
-    def _get_next_sequence_number_from_db(self, date_part: str) -> int:
+    def _get_next_sequence_number_for_date(self, date_part: str) -> int:
         """
-        Get the next sequential number for the given date by checking the database.
-        Uses a more robust approach to ensure uniqueness across the entire system.
+        Get the next sequential number for the given date by checking both TICKETS and CLOSED_TICKETS tables.
+        Finds the highest sequence number for today and increments it.
 
         Args:
             date_part (str): Date in YYYYMMDD format
 
         Returns:
-            int: Next sequential number
+            int: Next sequential number for the date
         """
         max_attempts = 10
 
         for attempt in range(max_attempts):
             try:
-                # Query database to find the highest sequence number for today
+                # Query both tables to find the highest sequence number for today
                 query = f"""
+                WITH all_tickets AS (
+                    SELECT TICKETNUMBER FROM TEST_DB.PUBLIC.TICKETS WHERE TICKETNUMBER LIKE 'T{date_part}.%'
+                    UNION ALL
+                    SELECT TICKETNUMBER FROM TEST_DB.PUBLIC.CLOSED_TICKETS WHERE TICKETNUMBER LIKE 'T{date_part}.%'
+                )
                 SELECT MAX(CAST(SUBSTRING(TICKETNUMBER, 11, 4) AS INTEGER)) as max_sequence
-                FROM TEST_DB.PUBLIC.TICKETS
-                WHERE TICKETNUMBER LIKE 'T{date_part}.%'
+                FROM all_tickets
+                WHERE TICKETNUMBER IS NOT NULL
                 """
 
                 result = self.db_connection.execute_query(query)
@@ -233,7 +238,7 @@ class IntakeClassificationAgent:
 
     def _is_ticket_number_unique(self, ticket_number: str) -> bool:
         """
-        Check if a ticket number is unique in the database.
+        Check if a ticket number is unique across both TICKETS and CLOSED_TICKETS tables.
 
         Args:
             ticket_number (str): Ticket number to check
@@ -242,13 +247,17 @@ class IntakeClassificationAgent:
             bool: True if unique, False if already exists
         """
         try:
+            # Check both TICKETS and CLOSED_TICKETS tables
             query = """
             SELECT COUNT(*) as count
-            FROM TEST_DB.PUBLIC.TICKETS
-            WHERE TICKETNUMBER = %s
+            FROM (
+                SELECT TICKETNUMBER FROM TEST_DB.PUBLIC.TICKETS WHERE TICKETNUMBER = %s
+                UNION ALL
+                SELECT TICKETNUMBER FROM TEST_DB.PUBLIC.CLOSED_TICKETS WHERE TICKETNUMBER = %s
+            ) combined
             """
 
-            result = self.db_connection.execute_query(query, (ticket_number,))
+            result = self.db_connection.execute_query(query, (ticket_number, ticket_number))
 
             if result and len(result) > 0:
                 count = result[0]['COUNT']
@@ -258,7 +267,21 @@ class IntakeClassificationAgent:
 
         except Exception as e:
             print(f"Error checking ticket number uniqueness: {e}")
-            return True  # If query fails, assume unique
+            # Fallback: check only TICKETS table if CLOSED_TICKETS doesn't exist
+            try:
+                fallback_query = """
+                SELECT COUNT(*) as count
+                FROM TEST_DB.PUBLIC.TICKETS
+                WHERE TICKETNUMBER = %s
+                """
+                result = self.db_connection.execute_query(fallback_query, (ticket_number,))
+                if result and len(result) > 0:
+                    count = result[0]['COUNT']
+                    return count == 0
+            except Exception as e2:
+                print(f"Fallback uniqueness check also failed: {e2}")
+
+            return True  # If all queries fail, assume unique
 
     def extract_metadata(self, title: str, description: str, model: str = 'llama3-8b') -> Optional[Dict]:
         """

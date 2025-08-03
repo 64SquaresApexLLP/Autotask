@@ -124,6 +124,7 @@ class TicketCreateRequest(BaseModel):
     user_email: Optional[str] = None
     priority: Optional[str] = None
     requester_name: Optional[str] = None
+    phone_number: Optional[str] = None
 
 class TicketResponse(BaseModel):
     ticket_number: str
@@ -134,6 +135,8 @@ class TicketResponse(BaseModel):
     priority: Optional[str] = None
     assigned_technician: Optional[str] = None
     technician_email: Optional[str] = None
+    technician_id: Optional[str] = None
+    phone_number: Optional[str] = None
 
 class TechnicianResponse(BaseModel):
     technician_email: str
@@ -239,7 +242,7 @@ def get_closed_tickets(limit: int = Query(50, le=100), offset: int = 0):
         SELECT
             TICKETNUMBER, TITLE, DESCRIPTION, TICKETTYPE, TICKETCATEGORY,
             ISSUETYPE, SUBISSUETYPE, DUEDATETIME, PRIORITY, STATUS, RESOLUTION,
-            TECHNICIANEMAIL, USEREMAIL, USERID, PHONENUMBER, CLOSED_AT, ORIGINAL_CREATED_AT
+            TECHNICIANEMAIL, TECHNICIAN_ID, USEREMAIL, USERID, PHONENUMBER, CLOSED_AT, ORIGINAL_CREATED_AT
         FROM TEST_DB.PUBLIC.CLOSED_TICKETS
         ORDER BY CLOSED_AT DESC
         LIMIT %s OFFSET %s
@@ -265,11 +268,12 @@ def get_closed_tickets(limit: int = Query(50, le=100), offset: int = 0):
                 "status": row[9],
                 "resolution": row[10],
                 "technician_email": row[11],
-                "user_email": row[12],
-                "user_id": row[13],
-                "phone_number": row[14],
-                "closed_at": str(row[15]) if row[15] else None,
-                "original_created_at": str(row[16]) if row[16] else None
+                "technician_id": row[12],
+                "user_email": row[13],
+                "user_id": row[14],
+                "phone_number": row[15],
+                "closed_at": str(row[16]) if row[16] else None,
+                "original_created_at": str(row[17]) if row[17] else None
             }
             tickets.append(ticket)
 
@@ -422,6 +426,9 @@ def update_ticket_status_priority(ticket_number: str, update_request: TicketUpda
         status_closes_ticket = update_request.status and update_request.status.lower() in ['closed', 'resolved']
 
         if status_closes_ticket:
+            # Ensure TECHNICIAN_ID columns exist in both tables
+            ensure_technician_id_column()
+
             # Create CLOSED_TICKETS table if it doesn't exist
             create_closed_table_query = """
             CREATE TABLE IF NOT EXISTS TEST_DB.PUBLIC.CLOSED_TICKETS (
@@ -437,6 +444,7 @@ def update_ticket_status_priority(ticket_number: str, update_request: TicketUpda
                 STATUS VARCHAR(50),
                 RESOLUTION TEXT,
                 TECHNICIANEMAIL VARCHAR(100),
+                TECHNICIAN_ID VARCHAR(50),
                 USEREMAIL VARCHAR(100),
                 USERID VARCHAR(50),
                 PHONENUMBER VARCHAR(20),
@@ -451,35 +459,52 @@ def update_ticket_status_priority(ticket_number: str, update_request: TicketUpda
             INSERT INTO TEST_DB.PUBLIC.CLOSED_TICKETS (
                 TICKETNUMBER, TITLE, DESCRIPTION, TICKETTYPE, TICKETCATEGORY,
                 ISSUETYPE, SUBISSUETYPE, DUEDATETIME, PRIORITY, STATUS, RESOLUTION,
-                TECHNICIANEMAIL, USEREMAIL, USERID, PHONENUMBER, ORIGINAL_CREATED_AT
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+                TECHNICIANEMAIL, TECHNICIAN_ID, USEREMAIL, USERID, PHONENUMBER, ORIGINAL_CREATED_AT
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
             """
 
             # Use updated values or original values
             final_priority = update_request.priority or ticket_dict.get('PRIORITY')
             final_status = update_request.status or ticket_dict.get('STATUS')
 
-            cursor.execute(insert_closed_query, (
-                ticket_dict.get('TICKETNUMBER'),
-                ticket_dict.get('TITLE'),
-                ticket_dict.get('DESCRIPTION'),
-                ticket_dict.get('TICKETTYPE'),
-                ticket_dict.get('TICKETCATEGORY'),
-                ticket_dict.get('ISSUETYPE'),
-                ticket_dict.get('SUBISSUETYPE'),
-                ticket_dict.get('DUEDATETIME'),
-                final_priority,
-                final_status,
-                ticket_dict.get('RESOLUTION'),
-                ticket_dict.get('TECHNICIANEMAIL'),
-                ticket_dict.get('USEREMAIL'),
-                ticket_dict.get('USERID'),
-                ticket_dict.get('PHONENUMBER')
-            ))
+            # Get TECHNICIAN_ID from email for closed ticket
+            closed_technician_id = None
+            if ticket_dict.get('TECHNICIANEMAIL'):
+                closed_technician_id = get_technician_id_from_email(ticket_dict.get('TECHNICIANEMAIL'))
+                print(f"🔍 Closed ticket technician ID: {closed_technician_id}")
+
+            try:
+                cursor.execute(insert_closed_query, (
+                    ticket_dict.get('TICKETNUMBER'),
+                    ticket_dict.get('TITLE'),
+                    ticket_dict.get('DESCRIPTION'),
+                    ticket_dict.get('TICKETTYPE'),
+                    ticket_dict.get('TICKETCATEGORY'),
+                    ticket_dict.get('ISSUETYPE'),
+                    ticket_dict.get('SUBISSUETYPE'),
+                    ticket_dict.get('DUEDATETIME'),
+                    final_priority,
+                    final_status,
+                    ticket_dict.get('RESOLUTION'),
+                    ticket_dict.get('TECHNICIANEMAIL'),
+                    closed_technician_id,  # TECHNICIAN_ID
+                    ticket_dict.get('USEREMAIL'),
+                    ticket_dict.get('USERID'),
+                    ticket_dict.get('PHONENUMBER')
+                ))
+                print(f"✅ Successfully inserted ticket {ticket_number} into CLOSED_TICKETS")
+            except Exception as insert_error:
+                print(f"❌ Error inserting into CLOSED_TICKETS: {insert_error}")
+                raise HTTPException(status_code=500, detail=f"Failed to move ticket to closed: {str(insert_error)}")
 
             # Delete ticket from TICKETS table
-            delete_ticket_query = "DELETE FROM TEST_DB.PUBLIC.TICKETS WHERE TICKETNUMBER = %s"
-            cursor.execute(delete_ticket_query, (ticket_number,))
+            try:
+                delete_ticket_query = "DELETE FROM TEST_DB.PUBLIC.TICKETS WHERE TICKETNUMBER = %s"
+                cursor.execute(delete_ticket_query, (ticket_number,))
+                print(f"✅ Successfully deleted ticket {ticket_number} from TICKETS table")
+            except Exception as delete_error:
+                print(f"❌ Error deleting from TICKETS: {delete_error}")
+                raise HTTPException(status_code=500, detail=f"Failed to delete ticket from active table: {str(delete_error)}")
 
             moved_to_closed = True
             updated_fields['status'] = final_status
@@ -542,6 +567,110 @@ def update_ticket_status_priority(ticket_number: str, update_request: TicketUpda
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to update ticket: {str(e)}")
 
+def get_technician_id_from_email(technician_email: str) -> Optional[str]:
+    """
+    Get TECHNICIAN_ID from TECHNICIAN_DUMMY_DATA table using email
+
+    Args:
+        technician_email (str): Email of the technician
+
+    Returns:
+        Optional[str]: TECHNICIAN_ID if found, None otherwise
+    """
+    if not technician_email or not snowflake_conn:
+        return None
+
+    try:
+        cursor = snowflake_conn.conn.cursor()
+        query = """
+        SELECT TECHNICIAN_ID
+        FROM TEST_DB.PUBLIC.TECHNICIAN_DUMMY_DATA
+        WHERE EMAIL = %s
+        """
+        cursor.execute(query, (technician_email,))
+        result = cursor.fetchone()
+        cursor.close()
+
+        if result and result[0]:
+            return str(result[0])
+        return None
+
+    except Exception as e:
+        print(f"Error getting technician ID from email {technician_email}: {e}")
+        return None
+
+def ensure_technician_id_column():
+    """
+    Ensure TECHNICIAN_ID column exists in both TICKETS and CLOSED_TICKETS tables
+    """
+    if not snowflake_conn:
+        return False
+
+    try:
+        cursor = snowflake_conn.conn.cursor()
+
+        # Check and add TECHNICIAN_ID column to TICKETS table
+        check_tickets_column_query = """
+        SELECT COUNT(*)
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = 'PUBLIC'
+        AND TABLE_NAME = 'TICKETS'
+        AND COLUMN_NAME = 'TECHNICIAN_ID'
+        """
+        cursor.execute(check_tickets_column_query)
+        tickets_column_exists = cursor.fetchone()[0] > 0
+
+        if not tickets_column_exists:
+            # Add TECHNICIAN_ID column to TICKETS
+            alter_tickets_query = """
+            ALTER TABLE TEST_DB.PUBLIC.TICKETS
+            ADD COLUMN TECHNICIAN_ID VARCHAR(50)
+            """
+            cursor.execute(alter_tickets_query)
+            print("✅ Added TECHNICIAN_ID column to TICKETS table")
+        else:
+            print("✅ TECHNICIAN_ID column already exists in TICKETS table")
+
+        # Check if CLOSED_TICKETS table exists and has TECHNICIAN_ID column
+        check_closed_table_query = """
+        SELECT COUNT(*)
+        FROM INFORMATION_SCHEMA.TABLES
+        WHERE TABLE_SCHEMA = 'PUBLIC'
+        AND TABLE_NAME = 'CLOSED_TICKETS'
+        """
+        cursor.execute(check_closed_table_query)
+        closed_table_exists = cursor.fetchone()[0] > 0
+
+        if closed_table_exists:
+            # Check if TECHNICIAN_ID column exists in CLOSED_TICKETS
+            check_closed_column_query = """
+            SELECT COUNT(*)
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = 'PUBLIC'
+            AND TABLE_NAME = 'CLOSED_TICKETS'
+            AND COLUMN_NAME = 'TECHNICIAN_ID'
+            """
+            cursor.execute(check_closed_column_query)
+            closed_column_exists = cursor.fetchone()[0] > 0
+
+            if not closed_column_exists:
+                # Add TECHNICIAN_ID column to CLOSED_TICKETS
+                alter_closed_query = """
+                ALTER TABLE TEST_DB.PUBLIC.CLOSED_TICKETS
+                ADD COLUMN TECHNICIAN_ID VARCHAR(50)
+                """
+                cursor.execute(alter_closed_query)
+                print("✅ Added TECHNICIAN_ID column to CLOSED_TICKETS table")
+            else:
+                print("✅ TECHNICIAN_ID column already exists in CLOSED_TICKETS table")
+
+        cursor.close()
+        return True
+
+    except Exception as e:
+        print(f"Error ensuring TECHNICIAN_ID column: {e}")
+        return False
+
 @app.post("/tickets", status_code=201, response_model=TicketResponse)
 def create_ticket(request: TicketCreateRequest):
     try:
@@ -561,7 +690,8 @@ def create_ticket(request: TicketCreateRequest):
             ticket_title=request.title,
             due_date=request.due_date,
             priority_initial=request.priority or "Medium",
-            user_email=request.user_email
+            user_email=request.user_email,
+            phone_number=request.phone_number
         )
 
         if not result:
@@ -595,6 +725,15 @@ def create_ticket(request: TicketCreateRequest):
 
         print(f"🔍 Technician email to save: '{technician_email}'")
 
+        # Ensure TECHNICIAN_ID column exists in TICKETS table
+        ensure_technician_id_column()
+
+        # Get TECHNICIAN_ID from email if technician is assigned
+        technician_id = None
+        if technician_email:
+            technician_id = get_technician_id_from_email(technician_email)
+            print(f"🔍 Technician ID: '{technician_id}'")
+
         # Extract classified data with proper fallbacks
         def extract_classified_value(data, key, default=''):
             """Extract value from classified data which may have Label/Value structure"""
@@ -621,8 +760,8 @@ def create_ticket(request: TicketCreateRequest):
             INSERT INTO TEST_DB.PUBLIC.TICKETS (
                 TICKETNUMBER, TITLE, DESCRIPTION, TICKETTYPE, TICKETCATEGORY,
                 ISSUETYPE, SUBISSUETYPE, DUEDATETIME, PRIORITY, STATUS, RESOLUTION,
-                TECHNICIANEMAIL, USEREMAIL, USERID, PHONENUMBER
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                TECHNICIANEMAIL, TECHNICIAN_ID, USEREMAIL, USERID, PHONENUMBER
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """
         params = (
             ticket_number,
@@ -637,9 +776,10 @@ def create_ticket(request: TicketCreateRequest):
             status,
             resolution,
             technician_email,
+            technician_id,  # TECHNICIAN_ID from lookup
             request.user_email or "",
             request.requester_name or "Anonymous",
-            None  # PHONENUMBER
+            request.phone_number or ""  # PHONENUMBER from request
         )
 
         if not snowflake_conn:
@@ -656,7 +796,9 @@ def create_ticket(request: TicketCreateRequest):
             due_date=request.due_date,
             priority=priority,
             assigned_technician=assignment.get("assigned_technician", ""),
-            technician_email=assignment.get("technician_email", "")
+            technician_email=assignment.get("technician_email", ""),
+            technician_id=technician_id,
+            phone_number=request.phone_number
         )
 
     except Exception as e:
