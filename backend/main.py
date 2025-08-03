@@ -179,6 +179,21 @@ class WebhookResponse(BaseModel):
     data: Optional[Dict[str, Any]] = None
     errors: Optional[List[str]] = None
 
+class TicketUpdateRequest(BaseModel):
+    """Model for updating ticket status and priority"""
+    status: Optional[str] = Field(None, description="New ticket status (Open, In Progress, Closed, Resolved, etc.)")
+    priority: Optional[str] = Field(None, description="New ticket priority (Low, Medium, High, Critical)")
+
+class TicketUpdateResponse(BaseModel):
+    """Response for ticket update operations"""
+    success: bool
+    message: str
+    ticket_number: str
+    updated_fields: Dict[str, str]
+    moved_to_closed: bool = False
+    workload_updated: bool = False
+    technician_email: Optional[str] = None
+
 # --- API Endpoints ---
 @app.get("/health")
 def health_check():
@@ -197,6 +212,71 @@ def get_tickets_count():
         return {"total_tickets": result[0]["TOTAL_TICKETS"] if result else 0}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get tickets count: {str(e)}")
+
+@app.get("/tickets/closed", response_model=List[dict])
+def get_closed_tickets(limit: int = Query(50, le=100), offset: int = 0):
+    """Get closed/resolved tickets from CLOSED_TICKETS table"""
+    try:
+        if not snowflake_conn:
+            raise HTTPException(status_code=503, detail="Database connection unavailable")
+
+        cursor = snowflake_conn.conn.cursor()
+
+        # Check if CLOSED_TICKETS table exists, if not return empty list
+        check_table_query = """
+        SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
+        WHERE TABLE_SCHEMA = 'PUBLIC' AND TABLE_NAME = 'CLOSED_TICKETS'
+        """
+        cursor.execute(check_table_query)
+        table_exists = cursor.fetchone()[0] > 0
+
+        if not table_exists:
+            cursor.close()
+            return []
+
+        # Get closed tickets
+        query = """
+        SELECT
+            TICKETNUMBER, TITLE, DESCRIPTION, TICKETTYPE, TICKETCATEGORY,
+            ISSUETYPE, SUBISSUETYPE, DUEDATETIME, PRIORITY, STATUS, RESOLUTION,
+            TECHNICIANEMAIL, USEREMAIL, USERID, PHONENUMBER, CLOSED_AT, ORIGINAL_CREATED_AT
+        FROM TEST_DB.PUBLIC.CLOSED_TICKETS
+        ORDER BY CLOSED_AT DESC
+        LIMIT %s OFFSET %s
+        """
+
+        cursor.execute(query, (limit, offset))
+        results = cursor.fetchall()
+        cursor.close()
+
+        # Convert to list of dictionaries
+        tickets = []
+        for row in results:
+            ticket = {
+                "ticket_number": row[0],
+                "title": row[1],
+                "description": row[2],
+                "ticket_type": row[3],
+                "ticket_category": row[4],
+                "issue_type": row[5],
+                "sub_issue_type": row[6],
+                "due_date": row[7],
+                "priority": row[8],
+                "status": row[9],
+                "resolution": row[10],
+                "technician_email": row[11],
+                "user_email": row[12],
+                "user_id": row[13],
+                "phone_number": row[14],
+                "closed_at": str(row[15]) if row[15] else None,
+                "original_created_at": str(row[16]) if row[16] else None
+            }
+            tickets.append(ticket)
+
+        return tickets
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve closed tickets: {str(e)}")
 
 @app.get("/tickets/stats")
 def get_tickets_stats():
@@ -299,6 +379,168 @@ def get_technician(ticket_number: str):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to retrieve technician: {str(e)}")
+
+@app.patch("/tickets/{ticket_number}", response_model=TicketUpdateResponse)
+def update_ticket_status_priority(ticket_number: str, update_request: TicketUpdateRequest):
+    """
+    Update ticket status and/or priority by ticket number.
+
+    If status is updated to 'Closed' or 'Resolved':
+    - Moves ticket from TICKETS to CLOSED_TICKETS table
+    - Decrements assigned technician's workload by 1
+    """
+    try:
+        if not snowflake_conn:
+            raise HTTPException(status_code=503, detail="Database connection unavailable")
+
+        # Validate that at least one field is being updated
+        if not update_request.status and not update_request.priority:
+            raise HTTPException(status_code=400, detail="At least one field (status or priority) must be provided")
+
+        cursor = snowflake_conn.conn.cursor()
+
+        # First, get the current ticket data
+        get_ticket_query = """
+        SELECT * FROM TEST_DB.PUBLIC.TICKETS WHERE TICKETNUMBER = %s
+        """
+        cursor.execute(get_ticket_query, (ticket_number,))
+        ticket_data = cursor.fetchone()
+
+        if not ticket_data:
+            raise HTTPException(status_code=404, detail=f"Ticket {ticket_number} not found")
+
+        # Get column names for the ticket data
+        column_names = [desc[0] for desc in cursor.description]
+        ticket_dict = dict(zip(column_names, ticket_data))
+
+        updated_fields = {}
+        moved_to_closed = False
+        workload_updated = False
+        technician_email = ticket_dict.get('TECHNICIANEMAIL')
+
+        # Check if status is being updated to Closed or Resolved
+        status_closes_ticket = update_request.status and update_request.status.lower() in ['closed', 'resolved']
+
+        if status_closes_ticket:
+            # Create CLOSED_TICKETS table if it doesn't exist
+            create_closed_table_query = """
+            CREATE TABLE IF NOT EXISTS TEST_DB.PUBLIC.CLOSED_TICKETS (
+                TICKETNUMBER VARCHAR(50) PRIMARY KEY,
+                TITLE VARCHAR(500),
+                DESCRIPTION TEXT,
+                TICKETTYPE VARCHAR(50),
+                TICKETCATEGORY VARCHAR(50),
+                ISSUETYPE VARCHAR(50),
+                SUBISSUETYPE VARCHAR(50),
+                DUEDATETIME VARCHAR(50),
+                PRIORITY VARCHAR(50),
+                STATUS VARCHAR(50),
+                RESOLUTION TEXT,
+                TECHNICIANEMAIL VARCHAR(100),
+                USEREMAIL VARCHAR(100),
+                USERID VARCHAR(50),
+                PHONENUMBER VARCHAR(20),
+                CLOSED_AT TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                ORIGINAL_CREATED_AT TIMESTAMP
+            )
+            """
+            cursor.execute(create_closed_table_query)
+
+            # Insert ticket into CLOSED_TICKETS table with updated status/priority
+            insert_closed_query = """
+            INSERT INTO TEST_DB.PUBLIC.CLOSED_TICKETS (
+                TICKETNUMBER, TITLE, DESCRIPTION, TICKETTYPE, TICKETCATEGORY,
+                ISSUETYPE, SUBISSUETYPE, DUEDATETIME, PRIORITY, STATUS, RESOLUTION,
+                TECHNICIANEMAIL, USEREMAIL, USERID, PHONENUMBER, ORIGINAL_CREATED_AT
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+            """
+
+            # Use updated values or original values
+            final_priority = update_request.priority or ticket_dict.get('PRIORITY')
+            final_status = update_request.status or ticket_dict.get('STATUS')
+
+            cursor.execute(insert_closed_query, (
+                ticket_dict.get('TICKETNUMBER'),
+                ticket_dict.get('TITLE'),
+                ticket_dict.get('DESCRIPTION'),
+                ticket_dict.get('TICKETTYPE'),
+                ticket_dict.get('TICKETCATEGORY'),
+                ticket_dict.get('ISSUETYPE'),
+                ticket_dict.get('SUBISSUETYPE'),
+                ticket_dict.get('DUEDATETIME'),
+                final_priority,
+                final_status,
+                ticket_dict.get('RESOLUTION'),
+                ticket_dict.get('TECHNICIANEMAIL'),
+                ticket_dict.get('USEREMAIL'),
+                ticket_dict.get('USERID'),
+                ticket_dict.get('PHONENUMBER')
+            ))
+
+            # Delete ticket from TICKETS table
+            delete_ticket_query = "DELETE FROM TEST_DB.PUBLIC.TICKETS WHERE TICKETNUMBER = %s"
+            cursor.execute(delete_ticket_query, (ticket_number,))
+
+            moved_to_closed = True
+            updated_fields['status'] = final_status
+            if update_request.priority:
+                updated_fields['priority'] = final_priority
+
+            # Decrement technician workload if ticket was assigned
+            if technician_email:
+                try:
+                    # Import the workload update function
+                    from src.agents.assignment_agent import update_technician_workload_by_email
+                    workload_updated = update_technician_workload_by_email(technician_email, -1, snowflake_conn)
+                    if workload_updated:
+                        print(f"✅ Decremented workload for technician {technician_email}")
+                    else:
+                        print(f"⚠️ Failed to decrement workload for technician {technician_email}")
+                except Exception as e:
+                    print(f"⚠️ Error updating technician workload: {str(e)}")
+                    workload_updated = False
+
+        else:
+            # Regular update (not closing the ticket)
+            update_parts = []
+            update_values = []
+
+            if update_request.status:
+                update_parts.append("STATUS = %s")
+                update_values.append(update_request.status)
+                updated_fields['status'] = update_request.status
+
+            if update_request.priority:
+                update_parts.append("PRIORITY = %s")
+                update_values.append(update_request.priority)
+                updated_fields['priority'] = update_request.priority
+
+            if update_parts:
+                update_query = f"""
+                UPDATE TEST_DB.PUBLIC.TICKETS
+                SET {', '.join(update_parts)}
+                WHERE TICKETNUMBER = %s
+                """
+                update_values.append(ticket_number)
+                cursor.execute(update_query, update_values)
+
+        cursor.close()
+
+        return TicketUpdateResponse(
+            success=True,
+            message=f"Ticket {ticket_number} updated successfully" +
+                   (" and moved to closed tickets" if moved_to_closed else ""),
+            ticket_number=ticket_number,
+            updated_fields=updated_fields,
+            moved_to_closed=moved_to_closed,
+            workload_updated=workload_updated,
+            technician_email=technician_email
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update ticket: {str(e)}")
 
 @app.post("/tickets", status_code=201, response_model=TicketResponse)
 def create_ticket(request: TicketCreateRequest):

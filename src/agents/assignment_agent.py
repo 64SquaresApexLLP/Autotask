@@ -262,7 +262,7 @@ class AssignmentAgentIntegration:
                         'email': str(row[2]) if row[2] else '',
                         'role': str(row[3]) if row[3] else '',
                         'skills': skills,
-                        'current_workload': int(row[5]) if row[5] is not None else 0,
+                        'current_workload': int(float(row[5])) if row[5] is not None else 0,  # Convert float to int
                         'specializations': specializations
                     }
                     technicians.append(technician_dict)
@@ -428,12 +428,12 @@ class AssignmentAgentIntegration:
 
     def select_best_candidate(self, candidates: List[AssignmentCandidate]) -> Optional[AssignmentCandidate]:
         """
-        Select best candidate using strict priority hierarchy (Tiers 4-5 commented out)
+        Select best candidate using strict priority hierarchy with workload consideration
 
         Priority Hierarchy:
-        1. Available + Strong match (≥70%)
-        2. Available + Mid match (60-69%)
-        3. Available + Weak match (<60%)
+        1. Available + Strong match (≥70%) + Lowest workload
+        2. Available + Mid match (60-69%) + Lowest workload
+        3. Available + Weak match (<60%) + Lowest workload
         # 4. Unavailable + Strong match  # COMMENTED OUT
         # 5. Unavailable + Mid/Weak match  # COMMENTED OUT
         6. Fallback assignment
@@ -448,14 +448,19 @@ class AssignmentAgentIntegration:
             logger.warning("No candidates provided for selection")
             return None
 
-        # Sort candidates by priority tier (lower number = higher priority)
-        sorted_candidates = sorted(candidates, key=lambda c: (c.priority_tier, -c.skill_match.match_percentage))
+        # Sort candidates by priority tier first, then by current workload (ascending), then by skill match percentage (descending)
+        sorted_candidates = sorted(candidates, key=lambda c: (
+            c.priority_tier,
+            c.technician.current_workload,
+            -c.skill_match.match_percentage
+        ))
 
         best_candidate = sorted_candidates[0]
 
         # Log assignment decision with reasoning
         logger.info(f"Selected candidate: {best_candidate.technician.name} "
-                   f"(Tier {best_candidate.priority_tier}: {self.priority_tiers[best_candidate.priority_tier]})")
+                   f"(Tier {best_candidate.priority_tier}: {self.priority_tiers[best_candidate.priority_tier]}, "
+                   f"Current Workload: {best_candidate.technician.current_workload})")
         logger.info(f"Selection reasoning: {best_candidate.reasoning}")
 
         # Log rejected candidates with reasons
@@ -463,9 +468,211 @@ class AssignmentAgentIntegration:
             logger.info(f"Rejected candidate: {candidate.technician.name} - "
                        f"Tier {candidate.priority_tier}, {candidate.skill_match.classification} match "
                        f"({candidate.skill_match.match_percentage}%), "
-                       f"Available: {candidate.calendar_available}")
+                       f"Available: {candidate.calendar_available}, "
+                       f"Current Workload: {candidate.technician.current_workload}")
 
         return best_candidate
+
+    # ========================================
+    # WORKLOAD MANAGEMENT FUNCTIONS
+    # ========================================
+
+    def update_technician_workload(self, technician_id: str, increment: int = 1) -> bool:
+        """
+        Update technician workload in the database by incrementing/decrementing the current workload
+
+        Args:
+            technician_id (str): ID of the technician to update
+            increment (int): Amount to increment workload by (can be negative for decrement)
+
+        Returns:
+            bool: True if update was successful, False otherwise
+        """
+        cursor = None
+        try:
+            if not self.db_connection.conn:
+                logger.error("No active Snowflake connection available")
+                return False
+
+            cursor = self.db_connection.conn.cursor()
+
+            # Update the current workload by incrementing it (cast to integer)
+            update_query = """
+            UPDATE TEST_DB.PUBLIC.TECHNICIAN_DUMMY_DATA
+            SET CURRENT_WORKLOAD = CAST(CURRENT_WORKLOAD + %s AS INTEGER)
+            WHERE TECHNICIAN_ID = %s
+            """
+
+            cursor.execute(update_query, (increment, technician_id))
+
+            # Check if any rows were affected
+            if cursor.rowcount > 0:
+                logger.info(f"Successfully updated workload for technician {technician_id} by {increment}")
+                return True
+            else:
+                logger.warning(f"No technician found with ID {technician_id}")
+                return False
+
+        except Exception as e:
+            logger.error(f"Error updating technician workload: {str(e)}")
+            return False
+        finally:
+            if cursor:
+                cursor.close()
+
+    def refresh_all_technician_workloads(self) -> Dict[str, int]:
+        """
+        Refresh all technician workloads by counting active tickets assigned to each technician
+
+        Returns:
+            Dict[str, int]: Dictionary mapping technician email to current workload count
+        """
+        cursor = None
+        try:
+            if not self.db_connection.conn:
+                logger.error("No active Snowflake connection available")
+                return {}
+
+            cursor = self.db_connection.conn.cursor()
+
+            # Count active tickets per technician
+            count_query = """
+            SELECT
+                t.EMAIL,
+                COUNT(tk.TICKETNUMBER) as active_tickets
+            FROM TEST_DB.PUBLIC.TECHNICIAN_DUMMY_DATA t
+            LEFT JOIN TEST_DB.PUBLIC.TICKETS tk ON t.EMAIL = tk.TECHNICIANEMAIL
+            WHERE tk.STATUS IS NULL OR tk.STATUS NOT IN ('Closed', 'Resolved', 'Cancelled')
+            GROUP BY t.EMAIL
+            """
+
+            cursor.execute(count_query)
+            results = cursor.fetchall()
+
+            workload_summary = {}
+
+            # Update workloads in the database
+            for row in results:
+                email = str(row[0]) if row[0] else ''
+                active_count = int(float(row[1])) if row[1] is not None else 0  # Convert float to int
+                workload_summary[email] = active_count
+
+                # Update the technician's current workload in the database (cast to integer)
+                update_query = """
+                UPDATE TEST_DB.PUBLIC.TECHNICIAN_DUMMY_DATA
+                SET CURRENT_WORKLOAD = CAST(%s AS INTEGER)
+                WHERE EMAIL = %s
+                """
+                cursor.execute(update_query, (active_count, email))
+
+            logger.info(f"Refreshed workloads for {len(workload_summary)} technicians")
+            return workload_summary
+
+        except Exception as e:
+            logger.error(f"Error refreshing technician workloads: {str(e)}")
+            return {}
+        finally:
+            if cursor:
+                cursor.close()
+
+    def get_technician_current_workload(self, technician_id: str) -> int:
+        """
+        Get the current workload for a specific technician
+
+        Args:
+            technician_id (str): ID of the technician
+
+        Returns:
+            int: Current workload count, 0 if technician not found
+        """
+        cursor = None
+        try:
+            if not self.db_connection.conn:
+                logger.error("No active Snowflake connection available")
+                return 0
+
+            cursor = self.db_connection.conn.cursor()
+
+            query = """
+            SELECT CURRENT_WORKLOAD
+            FROM TEST_DB.PUBLIC.TECHNICIAN_DUMMY_DATA
+            WHERE TECHNICIAN_ID = %s
+            """
+
+            cursor.execute(query, (technician_id,))
+            result = cursor.fetchone()
+
+            if result and result[0] is not None:
+                return int(float(result[0]))  # Convert float to int
+            else:
+                logger.warning(f"No technician found with ID {technician_id}")
+                return 0
+
+        except Exception as e:
+            logger.error(f"Error getting technician workload: {str(e)}")
+            return 0
+        finally:
+            if cursor:
+                cursor.close()
+
+    def handle_ticket_completion(self, ticket_id: str, technician_email: str) -> bool:
+        """
+        Handle ticket completion by decrementing the assigned technician's workload
+
+        Args:
+            ticket_id (str): ID of the completed ticket
+            technician_email (str): Email of the technician who completed the ticket
+
+        Returns:
+            bool: True if workload was successfully decremented, False otherwise
+        """
+        cursor = None
+        try:
+            if not self.db_connection.conn:
+                logger.error("No active Snowflake connection available")
+                return False
+
+            cursor = self.db_connection.conn.cursor()
+
+            # Get technician ID from email
+            tech_query = """
+            SELECT TECHNICIAN_ID
+            FROM TEST_DB.PUBLIC.TECHNICIAN_DUMMY_DATA
+            WHERE EMAIL = %s
+            """
+
+            cursor.execute(tech_query, (technician_email,))
+            tech_result = cursor.fetchone()
+
+            if not tech_result:
+                logger.warning(f"No technician found with email {technician_email}")
+                return False
+
+            technician_id = tech_result[0]
+
+            # Decrement workload (ensure it doesn't go below 0, cast to integer)
+            update_query = """
+            UPDATE TEST_DB.PUBLIC.TECHNICIAN_DUMMY_DATA
+            SET CURRENT_WORKLOAD = CAST(GREATEST(CURRENT_WORKLOAD - 1, 0) AS INTEGER)
+            WHERE TECHNICIAN_ID = %s
+            """
+
+            cursor.execute(update_query, (technician_id,))
+
+            if cursor.rowcount > 0:
+                logger.info(f"Successfully decremented workload for technician {technician_email} "
+                           f"upon completion of ticket {ticket_id}")
+                return True
+            else:
+                logger.warning(f"Failed to update workload for technician {technician_email}")
+                return False
+
+        except Exception as e:
+            logger.error(f"Error handling ticket completion: {str(e)}")
+            return False
+        finally:
+            if cursor:
+                cursor.close()
 
     # ========================================
     # HELPER FUNCTIONS FOR INTEGRATION
@@ -719,12 +926,13 @@ class AssignmentAgentIntegration:
                 # Determine priority tier based on availability and skill match
                 priority_tier = self._determine_priority_tier(calendar_available, skill_match.classification)
 
-                # Create reasoning string (max_workload removed)
+                # Create reasoning string with workload consideration
                 reasoning = (f"Technician: {technician.name}, "
                            f"Skill Match: {skill_match.classification} ({skill_match.match_percentage}%), "
                            f"Available: {calendar_available}, "
-                           f"Current Workload: {technician.current_workload}, "
-                           f"Matched Skills: {skill_match.matched_skills}")
+                           f"Current Workload: {technician.current_workload} tickets, "
+                           f"Matched Skills: {skill_match.matched_skills}, "
+                           f"Priority Tier: {priority_tier}")
 
                 candidate = AssignmentCandidate(
                     technician=technician,
@@ -862,7 +1070,6 @@ class AssignmentAgentIntegration:
 
             # Step 3: Extract required skills using modular function
             logger.info("Extracting required skills...")
-            required_skills = self.extract_required_skills(assignment_input)
             skill_analysis = self._analyze_skills_with_cortex(ticket)
             logger.info(f"Required skills: {skill_analysis.required_skills}, "
                        f"Complexity: {skill_analysis.complexity_level}")
@@ -897,7 +1104,16 @@ class AssignmentAgentIntegration:
                 logger.info(f"Fallback assignment created for ticket {ticket.ticket_id}")
                 return assignment_response
 
-            # Step 7: Create and return successful assignment response
+            # Step 7: Update technician workload (+1) for successful assignment
+            logger.info("Updating technician workload...")
+            workload_updated = self.update_technician_workload(best_candidate.technician.technician_id, 1)
+            if workload_updated:
+                logger.info(f"Incremented workload for {best_candidate.technician.name} "
+                           f"from {best_candidate.technician.current_workload} to {best_candidate.technician.current_workload + 1}")
+            else:
+                logger.warning(f"Failed to update workload for {best_candidate.technician.name}")
+
+            # Step 8: Create and return successful assignment response
             assignment_response = self._create_assignment_response(ticket, best_candidate)
             logger.info(f"Successfully assigned ticket {ticket.ticket_id} to {best_candidate.technician.name} "
                        f"(Tier {best_candidate.priority_tier}: {self.priority_tiers[best_candidate.priority_tier]})")
@@ -912,6 +1128,69 @@ class AssignmentAgentIntegration:
     # ========================================
     # PUBLIC INTERFACE FUNCTIONS (as specified in requirements)
     # ========================================
+
+def update_technician_workload_by_email(technician_email: str, increment: int, db_connection) -> bool:
+    """
+    Public function to update technician workload by email address
+
+    Args:
+        technician_email (str): Email of the technician to update
+        increment (int): Amount to increment workload by (can be negative for decrement)
+        db_connection: Snowflake database connection
+
+    Returns:
+        bool: True if update was successful, False otherwise
+    """
+    agent = AssignmentAgentIntegration(db_connection)
+
+    cursor = None
+    try:
+        if not db_connection.conn:
+            logger.error("No active Snowflake connection available")
+            return False
+
+        cursor = db_connection.conn.cursor()
+
+        # Get technician ID from email
+        tech_query = """
+        SELECT TECHNICIAN_ID
+        FROM TEST_DB.PUBLIC.TECHNICIAN_DUMMY_DATA
+        WHERE EMAIL = %s
+        """
+
+        cursor.execute(tech_query, (technician_email,))
+        tech_result = cursor.fetchone()
+
+        if not tech_result:
+            logger.warning(f"No technician found with email {technician_email}")
+            return False
+
+        technician_id = tech_result[0]
+
+        # Use the agent's method to update workload
+        return agent.update_technician_workload(technician_id, increment)
+
+    except Exception as e:
+        logger.error(f"Error updating technician workload by email: {str(e)}")
+        return False
+    finally:
+        if cursor:
+            cursor.close()
+
+
+def refresh_all_workloads(db_connection) -> Dict[str, int]:
+    """
+    Public function to refresh all technician workloads
+
+    Args:
+        db_connection: Snowflake database connection
+
+    Returns:
+        Dict[str, int]: Dictionary mapping technician email to current workload count
+    """
+    agent = AssignmentAgentIntegration(db_connection)
+    return agent.refresh_all_technician_workloads()
+
 
 def assign_ticket(ticket_data: Dict, db_connection, google_calendar_credentials_path: Optional[str] = None) -> Dict:
     """
@@ -995,15 +1274,29 @@ def test_assignment_agent():
         print("   ✅ check_calendar_availability()")
         print("   ✅ select_best_candidate()")
         print()
-        print("🎯 Assignment Priority Hierarchy (Tiers 4-5 Commented Out):")
-        print("   1. Available + Strong match (≥70%)")
-        print("   2. Available + Mid match (60-69%)")
-        print("   3. Available + Weak match (<60%)")
+        print("🔧 Workload Management Functions:")
+        print("   ✅ update_technician_workload() - Increment/decrement workload")
+        print("   ✅ refresh_all_technician_workloads() - Refresh all workloads from active tickets")
+        print("   ✅ get_technician_current_workload() - Get current workload for a technician")
+        print("   ✅ handle_ticket_completion() - Decrement workload when ticket is completed")
+        print("   ✅ update_technician_workload_by_email() - Public function to update by email")
+        print("   ✅ refresh_all_workloads() - Public function to refresh all workloads")
+        print()
+        print("🎯 Assignment Priority Hierarchy with Dynamic Workload Management:")
+        print("   1. Available + Strong match (≥70%) + Lowest workload")
+        print("   2. Available + Mid match (60-69%) + Lowest workload")
+        print("   3. Available + Weak match (<60%) + Lowest workload")
         print("   # 4. Unavailable + Strong match  # COMMENTED OUT")
         print("   # 5. Unavailable + Mid/Weak match  # COMMENTED OUT")
         print("   6. Fallback assignment to fallback@company.com")
         print()
-        print("✅ Implementation complete and ready for integration!")
+        print("⚡ Dynamic Workload Features:")
+        print("   • Workload automatically incremented (+1) when ticket is assigned")
+        print("   • Workload considered in candidate selection (lower workload = higher priority)")
+        print("   • Workload can be decremented when tickets are completed")
+        print("   • Real-time workload refresh from active ticket counts")
+        print()
+        print("✅ Implementation complete with dynamic workload management!")
 
     except Exception as e:
         print(f"❌ Test failed: {str(e)}")
