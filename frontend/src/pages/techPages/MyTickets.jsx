@@ -1,9 +1,12 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Header from "../../components/Header";
 import Sidebar from "../../components/Sidebar";
 import ChatButton from "../../components/ChatButton";
 import { FiSearch, FiUser, FiCalendar, FiChevronDown, FiAlertCircle, FiFilter, FiEye } from "react-icons/fi";
 import { IoReload, IoTimeOutline } from "react-icons/io5";
+import useAuth from "../../hooks/useAuth";
+import { ticketService } from "../../services/ticketService";
+import { Loader2 } from "lucide-react";
 
 const mockTickets = [
   {
@@ -122,8 +125,13 @@ const mockTickets = [
 
 const statusColors = {
   open: "bg-blue-100 text-blue-800",
+  new: "bg-blue-100 text-blue-800",
   "in-progress": "bg-yellow-100 text-yellow-800",
+  "in progress": "bg-yellow-100 text-yellow-800",
+  assigned: "bg-purple-100 text-purple-800",
   resolved: "bg-green-100 text-green-800",
+  completed: "bg-green-100 text-green-800",
+  closed: "bg-gray-100 text-gray-800",
 };
 
 const priorityColors = {
@@ -134,6 +142,7 @@ const priorityColors = {
 };
 
 const MyTickets = () => {
+  const { user } = useAuth();
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [priorityFilter, setPriorityFilter] = useState("all");
@@ -142,15 +151,51 @@ const MyTickets = () => {
   const [newStatus, setNewStatus] = useState("");
   const [showFilters, setShowFilters] = useState(false);
   const [timeSpent, setTimeSpent] = useState("");
-  
 
-  const filteredTickets = mockTickets.filter((ticket) => {
+  // Real data state
+  const [tickets, setTickets] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  // Load tickets assigned to current technician
+  const loadMyTickets = async () => {
+    try {
+      setLoading(true);
+      setError("");
+
+      // Get all tickets and filter for current technician
+      const allTickets = await ticketService.getAllTickets({ limit: 100 });
+      const myTickets = allTickets.filter(ticket => {
+        const assignedTech = ticket.assigned_technician;
+        const technicianId = ticket.technician_id;
+        const currentUserId = user?.username; // T001, T103, T104, T106
+
+        return assignedTech === currentUserId || technicianId === currentUserId;
+      });
+
+      setTickets(myTickets);
+    } catch (error) {
+      console.error('Failed to load tickets:', error);
+      setError('Failed to load your tickets. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (user?.username) {
+      loadMyTickets();
+    }
+  }, [user]);
+
+  const filteredTickets = tickets.filter((ticket) => {
     const matchesSearch =
-      ticket.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      ticket.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      ticket.customer.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = statusFilter === "all" || ticket.status === statusFilter;
-    const matchesPriority = priorityFilter === "all" || ticket.priority === priorityFilter;
+      ticket.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      ticket.id?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      ticket.requester_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      ticket.user_email?.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesStatus = statusFilter === "all" || ticket.status?.toLowerCase() === statusFilter.toLowerCase();
+    const matchesPriority = priorityFilter === "all" || ticket.priority?.toLowerCase() === priorityFilter.toLowerCase();
 
     return matchesSearch && matchesStatus && matchesPriority;
   });
@@ -166,7 +211,9 @@ const MyTickets = () => {
 
   const handleSendEmail = () => {
     if (!selectedTicket) return;
-    alert(`Email sent to ${selectedTicket.customer} at ${selectedTicket.customerEmail}`);
+    const customerName = selectedTicket.requester_name || 'Customer';
+    const customerEmail = selectedTicket.user_email || 'No email available';
+    alert(`Email sent to ${customerName} at ${customerEmail}`);
   };
 
   const getSLAStatus = (deadline) => {
@@ -201,10 +248,23 @@ const MyTickets = () => {
                   {filteredTickets.length} tickets
                 </span>
                 <span className="bg-red-100 text-red-800 px-3 py-1 rounded-full text-sm font-medium">
-                  {mockTickets.filter(t => t.priority === "critical").length} critical
+                  {tickets.filter(t => t.priority?.toLowerCase() === "critical").length} critical
                 </span>
               </div>
             </div>
+
+            {/* Error Display */}
+            {error && (
+              <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg mb-6">
+                {error}
+                <button
+                  onClick={loadMyTickets}
+                  className="ml-4 text-red-800 underline hover:no-underline"
+                >
+                  Try Again
+                </button>
+              </div>
+            )}
 
             {/* Search and Filters */}
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
@@ -317,37 +377,46 @@ const MyTickets = () => {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {filteredTickets.map((ticket) => (
+                    {loading ? (
+                      <tr>
+                        <td colSpan="7" className="px-6 py-8 text-center">
+                          <Loader2 className="w-8 h-8 animate-spin text-[#00ABE4] mx-auto mb-4" />
+                          <p className="text-gray-600">Loading your tickets...</p>
+                        </td>
+                      </tr>
+                    ) : filteredTickets.map((ticket) => (
                       <tr key={ticket.id} className="hover:bg-gray-50">
                         <td className="px-6 py-4 whitespace-nowrap font-mono text-sm text-blue-900">{ticket.id}</td>
                         <td className="px-6 py-4 whitespace-nowrap font-medium">{ticket.title}</td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="flex items-center">
                             <FiUser className="h-4 w-4 text-gray-400 mr-1" />
-                            {ticket.customer}
+                            {ticket.requester_name || ticket.user_email || 'Unknown'}
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusColors[ticket.status]}`}>
-                            {ticket.status === "in-progress" ? "In Progress" : ticket.status}
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusColors[ticket.status?.toLowerCase()] || 'bg-gray-100 text-gray-800'}`}>
+                            {ticket.status || 'Unknown'}
                           </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${priorityColors[ticket.priority]}`}>
-                            {ticket.priority.toUpperCase()}
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${priorityColors[ticket.priority?.toLowerCase()] || 'bg-gray-100 text-gray-800'}`}>
+                            {ticket.priority?.toUpperCase() || 'UNKNOWN'}
                           </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          {getSLAStatus(ticket.slaDeadline)}
+                          <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs font-medium">
+                            ✅ On Track
+                          </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="flex items-center">
                             <IoTimeOutline className="h-4 w-4 text-gray-400 mr-1" />
-                            {ticket.timeSpent}
+                            <span className="text-gray-500">-</span>
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <button 
+                          <button
                             onClick={() => setSelectedTicket(ticket)}
                             className="flex items-center text-sm text-blue-600 hover:text-blue-800"
                           >
@@ -379,7 +448,7 @@ const MyTickets = () => {
                   <h2 className="text-2xl font-bold text-gray-800">
                     🎫 {selectedTicket.id} - {selectedTicket.title}
                   </h2>
-                  <p className="text-gray-600">{selectedTicket.category} • {selectedTicket.department}</p>
+                  <p className="text-gray-600">{selectedTicket.ticket_category || 'General'} • {selectedTicket.ticket_type || 'Support'}</p>
                 </div>
                 <button 
                   onClick={() => setSelectedTicket(null)}
@@ -395,50 +464,60 @@ const MyTickets = () => {
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-                      <span className={`px-2 py-1 rounded-full text-sm font-medium ${statusColors[selectedTicket.status]}`}>
-                        {selectedTicket.status === "in-progress" ? "In Progress" : selectedTicket.status}
+                      <span className={`px-2 py-1 rounded-full text-sm font-medium ${statusColors[selectedTicket.status?.toLowerCase()] || 'bg-gray-100 text-gray-800'}`}>
+                        {selectedTicket.status || 'Unknown'}
                       </span>
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Priority</label>
-                      <span className={`px-2 py-1 rounded-full text-sm font-medium ${priorityColors[selectedTicket.priority]}`}>
-                        {selectedTicket.priority.toUpperCase()}
+                      <span className={`px-2 py-1 rounded-full text-sm font-medium ${priorityColors[selectedTicket.priority?.toLowerCase()] || 'bg-gray-100 text-gray-800'}`}>
+                        {selectedTicket.priority?.toUpperCase() || 'UNKNOWN'}
                       </span>
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Customer</label>
-                      <p className="text-sm">{selectedTicket.customer}</p>
-                      <p className="text-xs text-gray-500">{selectedTicket.customerEmail}</p>
+                      <p className="text-sm">{selectedTicket.requester_name || 'Unknown'}</p>
+                      <p className="text-xs text-gray-500">{selectedTicket.user_email || 'No email'}</p>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">SLA Deadline</label>
-                      <p className="text-sm">{selectedTicket.slaDeadline}</p>
-                      <div className="mt-1">{getSLAStatus(selectedTicket.slaDeadline)}</div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Due Date</label>
+                      <p className="text-sm">{selectedTicket.due_date || 'Not set'}</p>
+                      <div className="mt-1">
+                        <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs font-medium">
+                          ✅ On Track
+                        </span>
+                      </div>
                     </div>
                   </div>
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
                     <p className="text-sm text-gray-600 p-3 bg-gray-50 rounded">
-                      {selectedTicket.description}
+                      {selectedTicket.description || 'No description provided'}
                     </p>
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Work Notes History</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Ticket Details</label>
                     <div className="space-y-3 max-h-60 overflow-y-auto">
-                      {selectedTicket.workNotes.map((note, index) => (
-                        <div key={index} className="border-l-2 border-blue-200 pl-4 pb-2">
-                          <div className="flex items-center gap-2 text-xs text-gray-500">
-                            <span>{note.date}</span>
-                            <span>•</span>
-                            <span className="font-medium">You</span>
-                          </div>
-                          <p className="text-sm mt-1">{note.note}</p>
+                      <div className="border-l-2 border-blue-200 pl-4 pb-2">
+                        <div className="flex items-center gap-2 text-xs text-gray-500">
+                          <span>Created: {selectedTicket.created_at ? new Date(selectedTicket.created_at).toLocaleDateString() : 'Unknown'}</span>
                         </div>
-                      ))}
-                      {selectedTicket.workNotes.length === 0 && (
-                        <p className="text-sm text-gray-500 italic">No work notes yet</p>
+                        <p className="text-sm mt-1">Ticket created and assigned to technician</p>
+                      </div>
+
+                      {selectedTicket.resolution && (
+                        <div className="border-l-2 border-green-200 pl-4 pb-2">
+                          <div className="flex items-center gap-2 text-xs text-gray-500">
+                            <span>Resolution</span>
+                          </div>
+                          <p className="text-sm mt-1">{selectedTicket.resolution}</p>
+                        </div>
+                      )}
+
+                      {!selectedTicket.resolution && (
+                        <p className="text-sm text-gray-500 italic">No resolution notes yet</p>
                       )}
                     </div>
                   </div>

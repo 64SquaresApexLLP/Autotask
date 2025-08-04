@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bot, User, Wrench, Eye, EyeOff } from 'lucide-react';
+import { Bot, User, Wrench, Eye, EyeOff, Loader2 } from 'lucide-react';
 import useAuth from '../hooks/useAuth';
 
 const Login = () => {
-  const { login } = useAuth();
+  const { login, loading, error: authError, clearError } = useAuth();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState('');
@@ -12,19 +12,26 @@ const Login = () => {
   const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
     if (!username || !password || !role) {
       setError('All fields are required');
       return;
     }
 
     setError('');
-    login({ username, role });
+    clearError();
 
-    if (role === 'user') {
-      navigate('/user');
-    } else if (role === 'technician') {
-      navigate('/technician');
+    try {
+      await login({ username, password, role });
+
+      // Navigate based on role
+      if (role === 'user') {
+        navigate('/user');
+      } else if (role === 'technician') {
+        navigate('/technician');
+      }
+    } catch (error) {
+      setError(error.message || 'Login failed. Please check your credentials.');
     }
   };
 
@@ -44,9 +51,9 @@ const Login = () => {
           Please sign in to continue
         </p>
 
-        {error && (
+        {(error || authError) && (
           <div className="mb-6 p-4 bg-red-50 text-red-600 rounded-lg text-center border border-red-200 text-base">
-            {error}
+            {error || authError}
           </div>
         )}
 
@@ -128,9 +135,17 @@ const Login = () => {
           {/* Enhanced Login Button */}
           <button
             onClick={handleLogin}
-            className="w-full bg-[#00ABE4] text-white py-4 rounded-lg font-semibold transition-all duration-300 shadow-md hover:shadow-lg hover:bg-blue-600 text-base transform hover:scale-[1.02] active:scale-[0.98]"
+            disabled={loading}
+            className="w-full bg-[#00ABE4] text-white py-4 rounded-lg font-semibold transition-all duration-300 shadow-md hover:shadow-lg hover:bg-blue-600 text-base transform hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
           >
-            Sign In
+            {loading ? (
+              <div className="flex items-center justify-center space-x-2">
+                <Loader2 className="w-5 h-5 animate-spin" />
+                <span>Signing In...</span>
+              </div>
+            ) : (
+              'Sign In'
+            )}
           </button>
         </div>
       </div>

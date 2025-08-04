@@ -143,10 +143,11 @@ async def get_my_tickets(current_user: str = Depends(verify_token)):
             ]
 
         # Query real tickets from database assigned to current user
+        # Use TECHNICIAN_ID instead of TECHNICIANEMAIL since our tickets are assigned by ID
         query = f"""
-            SELECT TICKETNUMBER, TITLE, DESCRIPTION, STATUS, PRIORITY, TECHNICIANEMAIL
+            SELECT TICKETNUMBER, TITLE, DESCRIPTION, STATUS, PRIORITY, TECHNICIAN_ID
             FROM TEST_DB.PUBLIC.TICKETS
-            WHERE TECHNICIANEMAIL = %s
+            WHERE TECHNICIAN_ID = %s
             ORDER BY TICKETNUMBER DESC
             LIMIT 20
         """
@@ -160,7 +161,7 @@ async def get_my_tickets(current_user: str = Depends(verify_token)):
                 description=row.get('DESCRIPTION', ''),
                 status=row.get('STATUS') or 'Open',  # Default to 'Open' if None
                 priority=row.get('PRIORITY') or 'Medium',  # Default to 'Medium' if None
-                assigned_technician=row.get('TECHNICIANEMAIL', '')
+                assigned_technician=row.get('TECHNICIAN_ID', '')  # Use TECHNICIAN_ID instead of email
             ))
 
         return tickets
@@ -322,7 +323,7 @@ async def find_similar_tickets(
 
         if similar_conditions:
             similarity_query = f"""
-                SELECT TICKETNUMBER, TITLE, DESCRIPTION, STATUS, PRIORITY, TECHNICIANEMAIL
+                SELECT TICKETNUMBER, TITLE, DESCRIPTION, STATUS, PRIORITY, TECHNICIAN_ID
                 FROM TEST_DB.PUBLIC.TICKETS
                 WHERE TICKETNUMBER != '{ticket_number}'
                 AND ({' OR '.join(similar_conditions)})
@@ -341,7 +342,7 @@ async def find_similar_tickets(
                 description=row.get('DESCRIPTION', ''),
                 status=row.get('STATUS', ''),
                 priority=row.get('PRIORITY', ''),
-                assigned_technician=row.get('TECHNICIANEMAIL', '')
+                assigned_technician=row.get('TECHNICIAN_ID', '')  # Use TECHNICIAN_ID instead of email
             ))
 
         return tickets

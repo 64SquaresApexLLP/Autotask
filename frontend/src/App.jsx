@@ -5,6 +5,8 @@ import ProtectedRoute from './components/ProtectedRoute';
 import Login from './pages/Login';
 import UserDashboard from './pages/UserDashboard';
 import TechnicianDashboard from './pages/TechnicianDashboard';
+import TrackStatus from './pages/TrackStatus';
+import UserProfile from './pages/UserProfile';
 import MyTickets from './pages/techPages/MyTickets';
 import UrgentTickets from './pages/techPages/UrgentTickets';
 import Analytics from './pages/techPages/Analytics';
@@ -23,6 +25,33 @@ function App() {
             element={
               <ProtectedRoute>
                 <UserDashboard />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/user/dashboard"
+            element={
+              <ProtectedRoute>
+                <UserDashboard />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/user/track-status"
+            element={
+              <ProtectedRoute>
+                <TrackStatus />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/user/profile"
+            element={
+              <ProtectedRoute>
+                <UserProfile />
               </ProtectedRoute>
             }
           />

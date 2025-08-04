@@ -1,8 +1,16 @@
 """Configuration settings for the Technician Chatbot application."""
 
 import os
+from pathlib import Path
 from typing import List
 from pydantic_settings import BaseSettings
+
+# Load environment variables from .env file
+from dotenv import load_dotenv
+
+# Find the .env file in the project root (two levels up from backend/)
+env_path = Path(__file__).parent.parent.parent / ".env"
+load_dotenv(dotenv_path=env_path)
 
 
 class Settings(BaseSettings):
