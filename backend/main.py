@@ -587,6 +587,107 @@ def reset_technician_workloads():
         logger.error(f"Failed to reset workloads: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to reset workloads: {str(e)}")
 
+@app.get("/admin/technician-credentials")
+def get_technician_credentials():
+    """Get all technician credentials for testing purposes"""
+    try:
+        if not snowflake_conn:
+            raise HTTPException(status_code=503, detail="Database connection unavailable")
+
+        # Get all technician credentials
+        query = """
+            SELECT TECHNICIAN_ID, NAME, EMAIL, TECHNICIAN_PASSWORD
+            FROM TEST_DB.PUBLIC.TECHNICIAN_DUMMY_DATA
+            ORDER BY TECHNICIAN_ID
+        """
+
+        results = snowflake_conn.execute_query(query)
+
+        credentials = []
+        for tech in results:
+            credentials.append({
+                "technician_id": tech.get("TECHNICIAN_ID"),
+                "name": tech.get("NAME"),
+                "email": tech.get("EMAIL"),
+                "password": tech.get("TECHNICIAN_PASSWORD")
+            })
+
+        return {
+            "message": "Technician credentials retrieved",
+            "credentials": credentials,
+            "success": True
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to get technician credentials: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get technician credentials: {str(e)}")
+
+@app.post("/admin/fix-workload-data-types")
+def fix_workload_data_types():
+    """Fix workload data types and reset all workloads to correct values"""
+    try:
+        if not snowflake_conn:
+            raise HTTPException(status_code=503, detail="Database connection unavailable")
+
+        # Step 1: Reset all workloads to 0 first
+        reset_query = """
+            UPDATE TEST_DB.PUBLIC.TECHNICIAN_DUMMY_DATA
+            SET CURRENT_WORKLOAD = 0
+        """
+        snowflake_conn.execute_query(reset_query)
+
+        # Step 2: Calculate actual workloads from tickets
+        workload_updates = []
+
+        # Get all technicians
+        tech_query = """
+            SELECT TECHNICIAN_ID, NAME
+            FROM TEST_DB.PUBLIC.TECHNICIAN_DUMMY_DATA
+            ORDER BY TECHNICIAN_ID
+        """
+        technicians = snowflake_conn.execute_query(tech_query)
+
+        for tech in technicians:
+            tech_id = tech["TECHNICIAN_ID"]
+
+            # Count actual tickets for this technician (only non-resolved/closed)
+            count_query = """
+                SELECT COUNT(*) as actual_workload
+                FROM TEST_DB.PUBLIC.TICKETS
+                WHERE TECHNICIAN_ID = %s
+                AND STATUS NOT IN ('resolved', 'closed', 'Resolved', 'Closed')
+            """
+
+            count_result = snowflake_conn.execute_query(count_query, (tech_id,))
+            actual_workload = int(count_result[0]["ACTUAL_WORKLOAD"]) if count_result else 0
+
+            # Update with integer value
+            update_query = """
+                UPDATE TEST_DB.PUBLIC.TECHNICIAN_DUMMY_DATA
+                SET CURRENT_WORKLOAD = %s
+                WHERE TECHNICIAN_ID = %s
+            """
+
+            snowflake_conn.execute_query(update_query, (actual_workload, tech_id))
+
+            workload_updates.append({
+                "technician_id": tech_id,
+                "name": tech["NAME"],
+                "actual_workload": actual_workload
+            })
+
+        return {
+            "message": "Workload data types fixed and values reset to match actual tickets",
+            "workload_updates": workload_updates,
+            "success": True
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to fix workload data types: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to fix workload data types: {str(e)}")
+
+# Dummy ticket deletion completed successfully via external script
+
 @app.get("/tickets/closed", response_model=List[dict])
 def get_closed_tickets(limit: int = Query(50, le=100), offset: int = 0):
     """Get closed/resolved tickets from CLOSED_TICKETS table"""
