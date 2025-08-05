@@ -199,7 +199,7 @@ const UrgentTickets = () => {
       <Sidebar />
       <div className="flex-1 flex flex-col overflow-y-auto max-h-screen">
         <Header />
-        <main className="p-6 md:p-8 flex-1 overflow-y-auto ">
+        <main className=" p-6 md:p-8 flex-1 overflow-y-auto ">
           <div className="max-w-6xl mx-auto space-y-6">
             {/* Toast Notification */}
             {toastMessage && (

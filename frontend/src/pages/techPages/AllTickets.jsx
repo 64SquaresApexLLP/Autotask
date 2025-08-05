@@ -80,9 +80,9 @@ const AllTickets = () => {
   // Filter tickets based on search and filter criteria
   const filteredTickets = tickets.filter(ticket => {
     const matchesSearch = ticket.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         ticket.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         ticket.requester_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         ticket.id?.toString().includes(searchTerm);
+      ticket.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      ticket.requester_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      ticket.id?.toString().includes(searchTerm);
 
     const matchesStatus = statusFilter === 'all' || ticket.status?.toLowerCase() === statusFilter.toLowerCase();
     const matchesPriority = priorityFilter === 'all' || ticket.priority?.toLowerCase() === priorityFilter.toLowerCase();
@@ -141,7 +141,7 @@ const AllTickets = () => {
       <Sidebar />
       <div className="flex-1 flex flex-col overflow-y-auto max-h-screen">
         <Header />
-        <main className="p-6 md:p-8 flex-1 overflow-y-auto">
+        <main className=" p-6 md:p-8 flex-1 overflow-y-auto">
           <div className="max-w-7xl mx-auto space-y-6">
             <div>
               <h1 className="text-3xl font-bold text-gray-900">📋 All Tickets</h1>
@@ -334,8 +334,8 @@ const AllTickets = () => {
               )}
             </div>
 
-            
-            
+
+
           </div>
         </main>
       </div>
