@@ -1,6 +1,6 @@
 /**
  * Chatbot Service
- * Handles all chatbot-related API calls
+ * Handles all chatbot-related API calls without authentication requirement
  */
 
 import { API_BASE_URL } from '../config/api.js';
@@ -35,32 +35,13 @@ export const chatbotService = {
   },
 
   /**
-   * Authenticate user for chatbot access
+   * Get user's tickets (no authentication required)
    */
-  async login(credentials) {
+  async getMyTickets() {
     try {
-      console.log('Chatbot login attempt:', credentials.username);
-      return await this.makeRequest('/chatbot/auth/login', {
-        method: 'POST',
-        body: JSON.stringify(credentials)
-      });
-    } catch (error) {
-      console.error('Chatbot login error:', error);
-      throw error;
-    }
-  },
-
-  /**
-   * Get user's tickets
-   */
-  async getMyTickets(token) {
-    try {
-      console.log('Fetching my tickets with token:', token ? 'Token present' : 'No token');
+      console.log('Fetching my tickets without authentication');
       return await this.makeRequest('/chatbot/tickets/my', {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+        method: 'GET'
       });
     } catch (error) {
       console.error('Error in getMyTickets:', error);
@@ -71,13 +52,10 @@ export const chatbotService = {
   /**
    * Get detailed information for a specific ticket
    */
-  async getTicketDetails(ticketId, token) {
+  async getTicketDetails(ticketId) {
     try {
       return await this.makeRequest(`/chatbot/tickets/${ticketId}`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+        method: 'GET'
       });
     } catch (error) {
       throw error;
@@ -87,14 +65,11 @@ export const chatbotService = {
   /**
    * Search for tickets based on criteria
    */
-  async searchTickets(searchParams, token) {
+  async searchTickets(searchParams) {
     try {
       const queryString = new URLSearchParams(searchParams).toString();
       return await this.makeRequest(`/chatbot/tickets/search?${queryString}`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+        method: 'GET'
       });
     } catch (error) {
       throw error;
@@ -104,13 +79,10 @@ export const chatbotService = {
   /**
    * Find tickets similar to the specified ticket number
    */
-  async getSimilarTickets(ticketNumber, token) {
+  async getSimilarTickets(ticketNumber) {
     try {
       return await this.makeRequest(`/chatbot/tickets/similar/${ticketNumber}`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+        method: 'GET'
       });
     } catch (error) {
       throw error;
@@ -118,19 +90,18 @@ export const chatbotService = {
   },
 
   /**
-   * Send a chat message to the chatbot
+   * Send a chat message to the chatbot (no authentication required)
    */
-  async sendChatMessage(message, token, context = {}) {
+  async sendChatMessage(message, context = {}) {
     try {
       return await this.makeRequest('/chatbot/chat', {
         method: 'POST',
         body: JSON.stringify({
-          message,
-          context
-        }),
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+          message: message,
+          session_id: `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          message_type: context.type || 'user',
+          timestamp: new Date().toISOString()
+        })
       });
     } catch (error) {
       throw error;
@@ -140,10 +111,10 @@ export const chatbotService = {
   /**
    * Get FAQ information
    */
-  async getFAQ(token) {
+  async getFAQ() {
     try {
       // Use the chat endpoint to get FAQ
-      return await this.sendChatMessage('Show me frequently asked questions and help topics', token, {
+      return await this.sendChatMessage('Show me frequently asked questions and help topics', {
         type: 'faq_request'
       });
     } catch (error) {

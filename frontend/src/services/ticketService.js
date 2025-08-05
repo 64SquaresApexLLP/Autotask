@@ -265,6 +265,17 @@ export const ticketService = {
     } catch (error) {
       throw error;
     }
+  },
+
+  /**
+   * Escalate ticket to management
+   */
+  async escalateTicket(ticketId, escalationData = {}) {
+    try {
+      return await apiService.post(`/tickets/${ticketId}/escalate`, escalationData);
+    } catch (error) {
+      throw error;
+    }
   }
 };
 

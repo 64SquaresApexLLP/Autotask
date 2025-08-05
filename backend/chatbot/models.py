@@ -111,6 +111,11 @@ class TokenResponse(BaseModel):
 class ChatMessage(BaseModel):
     message: str
     session_id: Optional[str] = None
+    message_type: Optional[str] = "user"  # user, system, assistant
+    timestamp: Optional[datetime] = None
+    
+    class Config:
+        from_attributes = True
 
 
 class ChatResponse(BaseModel):

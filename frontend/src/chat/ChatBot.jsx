@@ -14,8 +14,6 @@ const ChatBot = ({ onClose }) => {
   ]);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [chatbotToken, setChatbotToken] = useState(null);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const messagesEndRef = useRef(null);
 
   // Scroll to bottom when new messages arrive
@@ -26,35 +24,6 @@ const ChatBot = ({ onClose }) => {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
-
-  // Authenticate with chatbot on component mount
-  useEffect(() => {
-    const authenticateChatbot = async () => {
-      if (user) {
-        try {
-          console.log('🤖 Authenticating chatbot for user:', user.username);
-          const response = await chatbotService.login({
-            username: user.username,
-            password: 'Tech@2908aA'
-          });
-          
-          if (response.access_token) {
-            setChatbotToken(response.access_token);
-            setIsAuthenticated(true);
-            console.log('✅ Chatbot authenticated successfully');
-            
-            addMessage('✅ Connected to AI assistant! All features are now available.', 'bot');
-          }
-        } catch (error) {
-          console.error('❌ Chatbot authentication failed:', error);
-          setIsAuthenticated(false);
-          addMessage('⚠️ Some features may be limited. Connection issue detected.', 'bot');
-        }
-      }
-    };
-
-    authenticateChatbot();
-  }, [user]);
 
   // Helper function to add messages
   const addMessage = (text, sender) => {
@@ -102,16 +71,11 @@ const ChatBot = ({ onClose }) => {
     }
   };
 
-  // Get user's tickets
+  // Get my tickets
   const handleGetMyTickets = async () => {
     try {
-      if (!isAuthenticated || !chatbotToken) {
-        return 'Please wait while I connect to the system...';
-      }
-
-      const tickets = await chatbotService.getMyTickets(chatbotToken);
-      console.log('📋 Tickets received:', tickets);
-
+      const tickets = await chatbotService.getMyTickets();
+      
       if (tickets && tickets.length > 0) {
         const ticketList = tickets.map(ticket => 
           `• **${ticket.ticket_id}**: ${ticket.title} (${ticket.status})`
@@ -119,24 +83,20 @@ const ChatBot = ({ onClose }) => {
         
         return `Here are your recent tickets:\n\n${ticketList}\n\n💡 Would you like details about any specific ticket? Just ask!`;
       } else {
-        return `You have no tickets assigned at the moment.\n\n✨ **What you can do:**\n• Create a new support ticket\n• Ask me technical questions\n• Get troubleshooting help\n• Browse our FAQ`;
+        return `You don't have any assigned tickets at the moment.\n\n📝 **You can:**\n• Create a new ticket for an issue\n• Ask me about common problems\n• Browse our FAQ for solutions\n\n💬 **What technical issue are you experiencing?**`;
       }
     } catch (error) {
-      console.error('Error fetching tickets:', error);
-      return `I couldn't retrieve your tickets right now.\n\n🔧 **Possible reasons:**\n• Temporary connection issue\n• No tickets currently assigned\n\n💬 **Try:**\n• Asking me general questions\n• Using the main dashboard\n• Checking back in a moment`;
+      console.error('Get my tickets error:', error);
+      return `I couldn't fetch your tickets right now.\n\n🔧 **Alternative options:**\n• Describe your issue and I'll help directly\n• Ask me about common solutions\n• Use the AI Resolution feature\n\n💬 **What problem can I help you solve?**`;
     }
   };
 
   // AI Resolution assistance
   const handleAIResolution = async () => {
     try {
-      if (!isAuthenticated || !chatbotToken) {
-        return `🤖 **AI Resolution Assistant**\n\nI can help you troubleshoot technical issues!\n\n🔧 **Common Issues I Can Help With:**\n• Hardware problems\n• Software crashes\n• Network connectivity\n• Performance issues\n• Error messages\n\n💬 **Just describe your problem and I'll provide step-by-step solutions!**`;
-      }
-
+      // Use the enhanced AI resolution endpoint
       const response = await chatbotService.sendChatMessage(
-        'I need AI-powered troubleshooting assistance and resolution suggestions.',
-        chatbotToken,
+        'AI resolution: I need help with technical troubleshooting',
         { type: 'ai_resolution' }
       );
 
@@ -150,19 +110,25 @@ const ChatBot = ({ onClose }) => {
   // Find similar tickets
   const handleSimilarTickets = async () => {
     try {
-      if (!isAuthenticated || !chatbotToken) {
-        return 'Please wait while I connect to find similar tickets...';
+      // Use the enhanced similar tickets functionality
+      const response = await chatbotService.sendChatMessage(
+        'Similar tickets: Find tickets similar to my latest ticket',
+        { type: 'similar_tickets' }
+      );
+
+      if (response.response || response.message) {
+        return response.response || response.message;
       }
 
-      // First get user's tickets to find similar ones
-      const myTickets = await chatbotService.getMyTickets(chatbotToken);
+      // Fallback to the old method if the enhanced one doesn't work
+      const myTickets = await chatbotService.getMyTickets();
       
       if (myTickets && myTickets.length > 0) {
         const latestTicket = myTickets[0];
         const ticketNumber = latestTicket.ticket_id;
         
         if (ticketNumber) {
-          const similarTickets = await chatbotService.getSimilarTickets(ticketNumber, chatbotToken);
+          const similarTickets = await chatbotService.getSimilarTickets(ticketNumber);
           
           if (similarTickets && similarTickets.length > 0) {
             const similarList = similarTickets.map(ticket => 
@@ -186,11 +152,9 @@ const ChatBot = ({ onClose }) => {
   // Get FAQ information
   const handleGetFAQ = async () => {
     try {
-      if (isAuthenticated && chatbotToken) {
-        const response = await chatbotService.getFAQ(chatbotToken);
-        if (response.response || response.message) {
-          return response.response || response.message;
-        }
+      const response = await chatbotService.getFAQ();
+      if (response.response || response.message) {
+        return response.response || response.message;
       }
       
       return `❓ **Frequently Asked Questions**\n\n🔧 **Technical Issues:**\n• How do I reset my password?\n• Why is my application running slowly?\n• How do I report a bug or error?\n• What should I do if I can't log in?\n\n📋 **Ticket Management:**\n• How do I create a new support ticket?\n• How can I check my ticket status?\n• How do I escalate an urgent issue?\n• Can I update my ticket information?\n\n💬 **Support Information:**\n• What are your support hours?\n• How do I contact a technician directly?\n• How long does ticket resolution take?\n• What information should I include in tickets?\n\n🤖 **AI Assistant:**\n• How does AI troubleshooting work?\n• Can you help with hardware issues?\n• Do you provide step-by-step solutions?\n\n💡 **Type any question for specific help, or describe your technical issue for personalized assistance!**`;
@@ -203,11 +167,24 @@ const ChatBot = ({ onClose }) => {
   // Handle regular chat messages
   const handleChatMessage = async (message) => {
     try {
-      if (!isAuthenticated || !chatbotToken) {
-        return `I'm still connecting to the AI system. Please try again in a moment, or use the quick action buttons above.`;
+      // Check if the message contains AI resolution keywords
+      const aiKeywords = ['ai resolution', 'ai help', 'ai support', 'troubleshoot', 'fix', 'problem', 'issue', 'error'];
+      const hasAIKeywords = aiKeywords.some(keyword => message.toLowerCase().includes(keyword));
+      
+      // Check if the message contains similar tickets keywords
+      const similarKeywords = ['similar tickets', 'find similar', 'like this', 'same issue'];
+      const hasSimilarKeywords = similarKeywords.some(keyword => message.toLowerCase().includes(keyword));
+
+      let enhancedMessage = message;
+      
+      // Add appropriate prefix for better intent detection
+      if (hasAIKeywords && !message.toLowerCase().startsWith('ai resolution')) {
+        enhancedMessage = `AI resolution: ${message}`;
+      } else if (hasSimilarKeywords && !message.toLowerCase().startsWith('similar tickets')) {
+        enhancedMessage = `Similar tickets: ${message}`;
       }
 
-      const response = await chatbotService.sendChatMessage(message, chatbotToken);
+      const response = await chatbotService.sendChatMessage(enhancedMessage);
       return response.response || response.message || `I understand you're asking about "${message}". Let me help you with that. Could you provide more details about what specific assistance you need?`;
     } catch (error) {
       console.error('Chat message error:', error);
@@ -249,7 +226,7 @@ const ChatBot = ({ onClose }) => {
           <div>
             <h3 className="font-semibold">Support Bot</h3>
             <p className="text-xs opacity-90">
-              {isAuthenticated ? '🟢 Connected' : '🟡 Connecting...'}
+              🟢 Connected
             </p>
           </div>
         </div>

@@ -40,6 +40,12 @@ from src.database.ticket_db import TicketDB
 from src.data.data_manager import DataManager
 # from src.integrations.gmail_realtime import gmail_service  # Disabled - using direct IMAP instead
 
+# Import config for manager email
+try:
+    from config import MANAGER_EMAIL
+except ImportError:
+    MANAGER_EMAIL = os.getenv('MANAGER_EMAIL', 'anantlad66@gmail.com')
+
 # Import simplified chatbot router
 from chatbot.simple_router import router as chatbot_router
 
@@ -860,7 +866,7 @@ def get_technician(ticket_number: str):
 
 @app.post("/tickets/{ticket_number}/assign")
 def assign_ticket(ticket_number: str, assignment_data: dict):
-    """Assign a ticket to a technician"""
+    """Assign a ticket to a technician with proper workload management"""
     try:
         if not snowflake_conn:
             raise HTTPException(status_code=503, detail="Database connection unavailable")
@@ -869,29 +875,68 @@ def assign_ticket(ticket_number: str, assignment_data: dict):
         if not technician_id:
             raise HTTPException(status_code=400, detail="technician_id is required")
 
-        # Use the technician ID directly (no mapping needed since we're using real IDs)
         backend_tech_id = technician_id
 
-        # Update the ticket with the assigned technician
-        update_ticket_query = """
-        UPDATE TEST_DB.PUBLIC.TICKETS
-        SET TECHNICIAN_ID = %s, STATUS = 'Assigned'
+        # Fetch the technician's email dynamically
+        get_email_query = """
+        SELECT EMAIL FROM TEST_DB.PUBLIC.TECHNICIAN_DUMMY_DATA WHERE TECHNICIAN_ID = %s
+        """
+        email_result = snowflake_conn.execute_query(get_email_query, (backend_tech_id,))
+        if not email_result or not email_result[0].get('EMAIL'):
+            raise HTTPException(status_code=404, detail=f"Technician email not found for ID {backend_tech_id}")
+        technician_email = email_result[0]['EMAIL']
+
+        # First, get the current ticket data to check if it's already assigned
+        get_ticket_query = """
+        SELECT TECHNICIAN_ID, STATUS FROM TEST_DB.PUBLIC.TICKETS
         WHERE TICKETNUMBER = %s
         """
+        ticket_result = snowflake_conn.execute_query(get_ticket_query, (ticket_number,))
+        if not ticket_result:
+            raise HTTPException(status_code=404, detail="Ticket not found")
+        current_ticket = ticket_result[0]
+        previous_technician_id = current_ticket.get('TECHNICIAN_ID')
+        current_status = current_ticket.get('STATUS')
 
-        snowflake_conn.execute_query(update_ticket_query, (backend_tech_id, ticket_number))
+        # Update the ticket with the new assigned technician and email
+        update_ticket_query = """
+        UPDATE TEST_DB.PUBLIC.TICKETS
+        SET TECHNICIAN_ID = %s, TECHNICIANEMAIL = %s, STATUS = 'Assigned'
+        WHERE TICKETNUMBER = %s
+        """
+        snowflake_conn.execute_query(update_ticket_query, (backend_tech_id, technician_email, ticket_number))
 
-        # Update the technician's workload in TECHNICIAN_DUMMY_DATA table
-        # Use increment-based approach for better performance and consistency
+        # Handle workload changes:
+        if previous_technician_id and previous_technician_id != backend_tech_id:
+            decrement_workload_query = """
+            UPDATE TEST_DB.PUBLIC.TECHNICIAN_DUMMY_DATA
+            SET CURRENT_WORKLOAD = GREATEST(CURRENT_WORKLOAD - 1, 0)
+            WHERE TECHNICIAN_ID = %s
+            """
+            snowflake_conn.execute_query(decrement_workload_query, (previous_technician_id,))
+            print(f"✅ Decremented workload for previous technician {previous_technician_id}")
+
         increment_workload_query = """
         UPDATE TEST_DB.PUBLIC.TECHNICIAN_DUMMY_DATA
         SET CURRENT_WORKLOAD = CURRENT_WORKLOAD + 1
         WHERE TECHNICIAN_ID = %s
         """
-
         snowflake_conn.execute_query(increment_workload_query, (backend_tech_id,))
+        print(f"✅ Incremented workload for new technician {backend_tech_id}")
 
-        return {"message": f"Ticket {ticket_number} assigned to technician {technician_id}", "success": True}
+        if previous_technician_id and previous_technician_id != backend_tech_id:
+            message = f"Ticket {ticket_number} reassigned from {previous_technician_id} to {technician_id}. Workload and email updated."
+        else:
+            message = f"Ticket {ticket_number} assigned to technician {technician_id} (email: {technician_email})"
+
+        return {
+            "message": message,
+            "success": True,
+            "previous_technician": previous_technician_id,
+            "new_technician": technician_id,
+            "new_technician_email": technician_email,
+            "workload_transferred": previous_technician_id != backend_tech_id if previous_technician_id else False
+        }
     except HTTPException:
         raise
     except Exception as e:
@@ -1139,6 +1184,107 @@ def update_ticket_status_priority(ticket_number: str, update_request: TicketUpda
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to update ticket: {str(e)}")
+
+class EscalationRequest(BaseModel):
+    """Model for ticket escalation request"""
+    escalation_reason: Optional[str] = Field(None, description="Reason for escalation")
+    technician_id: Optional[str] = Field(None, description="ID of technician escalating the ticket")
+
+class EscalationResponse(BaseModel):
+    """Response for ticket escalation operations"""
+    success: bool
+    message: str
+    ticket_number: str
+    escalated_to_manager: bool
+    manager_email: str
+
+@app.post("/tickets/{ticket_number}/escalate", response_model=EscalationResponse)
+def escalate_ticket(ticket_number: str, escalation_data: EscalationRequest):
+    """
+    Escalate a ticket to management with email notification.
+    
+    This endpoint:
+    1. Updates ticket status to 'Escalated'
+    2. Sends email notification to manager about due date exceeded
+    3. Records escalation reason
+    """
+    try:
+        if not snowflake_conn:
+            raise HTTPException(status_code=503, detail="Database connection unavailable")
+
+        # Get current ticket data
+        get_ticket_query = """
+        SELECT * FROM TEST_DB.PUBLIC.TICKETS WHERE TICKETNUMBER = %s
+        """
+        cursor = snowflake_conn.conn.cursor()
+        cursor.execute(get_ticket_query, (ticket_number,))
+        ticket_data = cursor.fetchone()
+
+        if not ticket_data:
+            raise HTTPException(status_code=404, detail=f"Ticket {ticket_number} not found")
+
+        # Get column names for the ticket data
+        column_names = [desc[0] for desc in cursor.description]
+        ticket_dict = dict(zip(column_names, ticket_data))
+
+        # Update ticket status to Escalated
+        update_query = """
+        UPDATE TEST_DB.PUBLIC.TICKETS
+        SET STATUS = 'Escalated'
+        WHERE TICKETNUMBER = %s
+        """
+        cursor.execute(update_query, (ticket_number,))
+
+        # Initialize notification agent
+        notification_agent = NotificationAgent(db_connection=snowflake_conn)
+        
+        # Prepare ticket data for notification
+        ticket_notification_data = {
+            'ticket_number': ticket_number,
+            'title': ticket_dict.get('TITLE', ''),
+            'description': ticket_dict.get('DESCRIPTION', ''),
+            'priority': ticket_dict.get('PRIORITY', ''),
+            'due_date': ticket_dict.get('DUEDATETIME', ''),
+            'status': 'Escalated',
+            'escalation_reason': escalation_data.escalation_reason or 'Due date exceeded - requires management attention',
+            'technician_id': escalation_data.technician_id or 'Unknown',
+            'user_email': ticket_dict.get('USEREMAIL', ''),
+            'user_id': ticket_dict.get('USERID', ''),
+            'phone_number': ticket_dict.get('PHONENUMBER', ''),
+            'technician_email': ticket_dict.get('TECHNICIANEMAIL', ''),
+            'created_at': datetime.now().isoformat()
+        }
+
+        # Send escalation notification to manager
+        manager_email = MANAGER_EMAIL
+        escalation_sent = False
+        
+        try:
+            escalation_sent = notification_agent.send_escalation_notification(
+                recipient_email=manager_email,
+                ticket_data=ticket_notification_data,
+                ticket_number=ticket_number,
+                escalation_reason=f"Due date exceeded for urgent ticket {ticket_number}",
+                recipient_type="manager"
+            )
+        except Exception as e:
+            logger.error(f"Failed to send escalation notification: {e}")
+            # Don't fail the escalation if email fails
+
+        cursor.close()
+
+        return EscalationResponse(
+            success=True,
+            message=f"Ticket {ticket_number} escalated successfully. Manager notified about due date exceeded.",
+            ticket_number=ticket_number,
+            escalated_to_manager=escalation_sent,
+            manager_email=manager_email
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to escalate ticket: {str(e)}")
 
 def get_technician_id_from_email(technician_email: str) -> Optional[str]:
     """

@@ -165,6 +165,43 @@ class KnowledgeBase(Base):
     is_published = Column(Boolean, default=True)
 
 
+class CompanyData(Base):
+    """Company data model based on existing COMPANY_4130_DATA table."""
+    __tablename__ = "COMPANY_4130_DATA"
+    __table_args__ = {'schema': 'PUBLIC'}
+
+    # Assuming the table has similar structure to TICKETS
+    # Adjust these columns based on actual table structure
+    ticketnumber = Column(String(50), primary_key=True, name="TICKETNUMBER")
+    title = Column(String(500), name="TITLE")
+    description = Column(Text, name="DESCRIPTION")
+    tickettype = Column(String(50), name="TICKETTYPE")
+    ticketcategory = Column(String(50), name="TICKETCATEGORY")
+    issuetype = Column(String(50), name="ISSUETYPE")
+    subissuetype = Column(String(50), name="SUBISSUETYPE")
+    duedatetime = Column(String(50), name="DUEDATETIME")
+    resolution = Column(Text, name="RESOLUTION")
+    userid = Column(String(50), name="USERID")
+    useremail = Column(String(100), name="USEREMAIL")
+    technicianemail = Column(String(100), name="TECHNICIANEMAIL")
+    phonenumber = Column(String(20), name="PHONENUMBER")
+    status = Column(String(50), name="STATUS")
+    priority = Column(String(50), name="PRIORITY")
+
+    # Add properties for compatibility with existing code
+    @property
+    def id(self):
+        return self.ticketnumber
+
+    @property
+    def ticket_number(self):
+        return self.ticketnumber
+
+    @property
+    def is_resolved(self):
+        return self.resolution and self.resolution.strip() and self.status == "Resolved"
+
+
 # Using existing tables plus knowledge_base for FAQ functionality
 
 

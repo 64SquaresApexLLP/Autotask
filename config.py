@@ -23,6 +23,15 @@ SF_ROLE = os.getenv('SNOWFLAKE_ROLE', 'ACCOUNTADMIN')
 SUPPORT_EMAIL = os.getenv('SUPPORT_EMAIL', 'rohankool2021@gmail.com')
 SUPPORT_EMAIL_PASSWORD = os.getenv('SUPPORT_EMAIL_PASSWORD', '')
 
+# Manager and escalation email configuration
+MANAGER_EMAIL = os.getenv('MANAGER_EMAIL', 'anantlad66@gmail.com')
+FALLBACK_TECHNICIAN_EMAIL = os.getenv('FALLBACK_TECHNICIAN_EMAIL', 'support@company.com')
+SUPPORT_PHONE = os.getenv('SUPPORT_PHONE', '1-800-SUPPORT')
+
+# Priority and escalation configuration
+HIGH_PRIORITY_NOTIFICATIONS = ['Critical', 'High', 'Desktop/User Down']
+ESCALATION_KEYWORDS = ['fallback', 'failed', 'error', 'escalated', 'due date exceeded']
+
 # SMTP Configuration for notifications (loaded from .env)
 SMTP_SERVER = os.getenv('SMTP_SERVER', 'smtp.gmail.com')
 SMTP_PORT = int(os.getenv('SMTP_PORT', '587'))

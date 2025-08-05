@@ -112,12 +112,19 @@ const UrgentTickets = () => {
       // Use the correct field name for ticket number
       const ticketNumber = ticket.TICKETNUMBER || ticket.ticketnumber || ticket.id;
 
-      // Update ticket status to escalated
-      await ticketService.updateTicketStatus(ticketNumber, 'Escalated');
+      // Get current user info for escalation
+      const currentUser = user;
+      const technicianId = currentUser?.username || currentUser?.id || 'Unknown';
+
+      // Escalate ticket with notification to manager
+      const escalationResult = await ticketService.escalateTicket(ticketNumber, {
+        escalation_reason: 'Due date exceeded - urgent ticket requires management attention',
+        technician_id: technicianId
+      });
 
       setToastMessage({
         title: "Ticket Escalated! ⬆️",
-        description: `Ticket ${ticketNumber} has been escalated to senior technician. Management notified.`,
+        description: `Ticket ${ticketNumber} has been escalated. Manager notified about due date exceeded.`,
       });
 
       // Reload tickets to reflect changes

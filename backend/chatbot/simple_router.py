@@ -1,10 +1,10 @@
-"""Chatbot API Router for Autotask integration with exact functionality specifications."""
+"""Chatbot API Router for Autotask integration without authentication requirement."""
 
 import logging
 import jwt
 from datetime import datetime, timedelta
 from typing import List, Optional, Dict, Any
-from fastapi import APIRouter, HTTPException, status, Query, Depends
+from fastapi import APIRouter, HTTPException, status, Query, Depends, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 
@@ -30,25 +30,15 @@ logger = logging.getLogger(__name__)
 # Create router
 router = APIRouter(prefix="/chatbot", tags=["chatbot"])
 
-# Security
-security = HTTPBearer()
-
-# JWT Configuration (from .env)
-JWT_SECRET_KEY = "your-secret-key-here-change-in-production"
-JWT_ALGORITHM = "HS256"
-JWT_ACCESS_TOKEN_EXPIRE_MINUTES = 30
-
 # Models
-class LoginRequest(BaseModel):
-    username: str
-    password: str
-
-class TokenResponse(BaseModel):
-    access_token: str
-    token_type: str = "bearer"
-
 class ChatMessage(BaseModel):
     message: str
+    session_id: Optional[str] = None
+    message_type: Optional[str] = "user"
+    timestamp: Optional[datetime] = None
+    
+    class Config:
+        from_attributes = True
 
 class ChatResponse(BaseModel):
     response: str
@@ -62,88 +52,38 @@ class TicketResponse(BaseModel):
     priority: Optional[str] = None
     assigned_technician: Optional[str] = None
 
-class SearchCriteria(BaseModel):
-    query: Optional[str] = None
-    status: Optional[str] = None
-    priority: Optional[str] = None
-    assigned_technician: Optional[str] = None
-
-# Helper Functions
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
-    """Create JWT access token."""
-    to_encode = data.copy()
-    if expires_delta:
-        expire = datetime.utcnow() + expires_delta
-    else:
-        expire = datetime.utcnow() + timedelta(minutes=15)
-    to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
-    return encoded_jwt
-
-def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
-    """Verify JWT token."""
+# Helper function to get current technician from main app's authentication
+async def get_current_technician_from_main_app(request: Request) -> str:
+    """Get the current technician ID from the main application's authentication."""
     try:
-        payload = jwt.decode(credentials.credentials, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
-        username: str = payload.get("sub")
-        if username is None:
-            raise HTTPException(status_code=401, detail="Invalid authentication credentials")
-        return username
-    except jwt.PyJWTError:
-        raise HTTPException(status_code=401, detail="Invalid authentication credentials")
-
-# 1. POST /chatbot/auth/login – Allows user login (authentication) and give access_token for authentication
-@router.post("/auth/login", response_model=TokenResponse)
-async def login(request: LoginRequest):
-    """Allows user login (authentication) and gives access_token for authentication."""
-    try:
-        # Simple authentication - validate username and password
-        # In production, this should validate against a real user database
-        if not request.username or not request.password:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Username and password are required"
-            )
-
-        # For demo purposes, accept any non-empty credentials
-        # In production, validate against database
-        if len(request.username) > 0 and len(request.password) > 0:
-            # Create JWT token
-            access_token_expires = timedelta(minutes=JWT_ACCESS_TOKEN_EXPIRE_MINUTES)
-            access_token = create_access_token(
-                data={"sub": request.username}, expires_delta=access_token_expires
-            )
-            return TokenResponse(access_token=access_token, token_type="bearer")
-        else:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid credentials"
-            )
-    except HTTPException:
-        raise
+        # Get the Authorization header
+        auth_header = request.headers.get("Authorization")
+        if not auth_header or not auth_header.startswith("Bearer "):
+            # If no auth header, try to get from query params or default to a test user
+            return "T001"  # Default technician for testing
+        
+        # Extract token
+        token = auth_header.split(" ")[1]
+        
+        # For now, we'll use a simple approach - in production, this should validate against the main app's JWT
+        # Since we're removing authentication, we'll return a default technician
+        return "T001"
+        
     except Exception as e:
-        logger.error(f"Login error: {e}")
-        raise HTTPException(status_code=500, detail="Login failed")
+        logger.warning(f"Could not extract technician from auth: {e}")
+        return "T001"  # Default technician
 
-# 2. GET /chatbot/tickets/my – Retrieves tickets assigned to the logged-in user
+# 1. GET /chatbot/tickets/my – Retrieves tickets assigned to the logged-in user
 @router.get("/tickets/my", response_model=List[TicketResponse])
-async def get_my_tickets(current_user: str = Depends(verify_token)):
+async def get_my_tickets(request: Request):
     """Retrieves tickets assigned to the logged-in user."""
     try:
+        current_user = await get_current_technician_from_main_app(request)
+        
         if not snowflake_conn:
-            # Fallback to mock data if no database connection
-            return [
-                TicketResponse(
-                    ticket_id="T20250730.0001",
-                    title="Network Issue (Mock)",
-                    description="Network connectivity problem - Database not connected",
-                    status="Open",
-                    priority="High",
-                    assigned_technician=current_user
-                )
-            ]
+            raise HTTPException(status_code=503, detail="Database connection not available. Please ensure Snowflake connection is properly configured.")
 
         # Query real tickets from database assigned to current user
-        # Use TECHNICIAN_ID instead of TECHNICIANEMAIL since our tickets are assigned by ID
         query = f"""
             SELECT TICKETNUMBER, TITLE, DESCRIPTION, STATUS, PRIORITY, TECHNICIAN_ID
             FROM TEST_DB.PUBLIC.TICKETS
@@ -159,39 +99,29 @@ async def get_my_tickets(current_user: str = Depends(verify_token)):
                 ticket_id=row.get('TICKETNUMBER', ''),
                 title=row.get('TITLE', ''),
                 description=row.get('DESCRIPTION', ''),
-                status=row.get('STATUS') or 'Open',  # Default to 'Open' if None
-                priority=row.get('PRIORITY') or 'Medium',  # Default to 'Medium' if None
-                assigned_technician=row.get('TECHNICIAN_ID', '')  # Use TECHNICIAN_ID instead of email
+                status=row.get('STATUS') or 'Open',
+                priority=row.get('PRIORITY') or 'Medium',
+                assigned_technician=row.get('TECHNICIAN_ID', '')
             ))
 
         return tickets
 
-    except HTTPException:
-        raise
     except Exception as e:
         logger.error(f"Error fetching my tickets: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to fetch tickets: {str(e)}")
 
-# 4. GET /chatbot/tickets/search – Searches for tickets based on provided criteria
+# 2. GET /chatbot/tickets/search – Searches for tickets based on provided criteria
 @router.get("/tickets/search", response_model=List[TicketResponse])
 async def search_tickets(
     q: str = Query(..., description="Search query"),
-    current_user: str = Depends(verify_token)
+    request: Request = None
 ):
     """Searches for tickets based on provided criteria."""
     try:
+        current_user = await get_current_technician_from_main_app(request) if request else "T001"
+        
         if not snowflake_conn:
-            # Fallback to mock data if no database connection
-            return [
-                TicketResponse(
-                    ticket_id="T20250730.0003",
-                    title=f"Search result for: {q} (Mock)",
-                    description=f"Ticket matching search query: {q} - Database not connected",
-                    status="Open",
-                    priority="Medium",
-                    assigned_technician=current_user
-                )
-            ]
+            raise HTTPException(status_code=503, detail="Database connection not available. Please ensure Snowflake connection is properly configured.")
 
         # Search real tickets from database
         search_term = f"%{q}%"
@@ -218,27 +148,19 @@ async def search_tickets(
 
         return tickets
 
-    except HTTPException:
-        raise
     except Exception as e:
         logger.error(f"Error searching tickets: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to search tickets: {str(e)}")
 
-# 3. GET /chatbot/tickets/{ticket_id} – Fetches detailed information for a specific ticket by using ticket number
+# 3. GET /chatbot/tickets/{ticket_id} – Fetches detailed information for a specific ticket
 @router.get("/tickets/{ticket_id}", response_model=TicketResponse)
-async def get_ticket(ticket_id: str, current_user: str = Depends(verify_token)):
+async def get_ticket(ticket_id: str, request: Request = None):
     """Fetches detailed information for a specific ticket by using ticket number."""
     try:
+        current_user = await get_current_technician_from_main_app(request) if request else "T001"
+        
         if not snowflake_conn:
-            # Fallback to mock data if no database connection
-            return TicketResponse(
-                ticket_id=ticket_id,
-                title="Sample Ticket (Mock)",
-                description="This is a sample ticket description - Database not connected",
-                status="Open",
-                priority="Medium",
-                assigned_technician=current_user
-            )
+            raise HTTPException(status_code=503, detail="Database connection not available. Please ensure Snowflake connection is properly configured.")
 
         # Query specific ticket from database
         query = f"""
@@ -267,38 +189,19 @@ async def get_ticket(ticket_id: str, current_user: str = Depends(verify_token)):
         logger.error(f"Error fetching ticket {ticket_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to fetch ticket: {str(e)}")
 
-# 5. GET /chatbot/tickets/similar/{ticket_number} – Finds tickets similar to the specified ticket number
+# 4. GET /chatbot/tickets/similar/{ticket_number} – Finds tickets similar to the specified ticket number
 @router.get("/tickets/similar/{ticket_number}", response_model=List[TicketResponse])
-async def find_similar_tickets(
-    ticket_number: str,
-    current_user: str = Depends(verify_token)
-):
-    """Finds tickets similar to the specified ticket number."""
+async def find_similar_tickets(ticket_number: str, request: Request = None):
+    """Finds tickets similar to the specified ticket number using semantic similarity."""
     try:
+        current_user = await get_current_technician_from_main_app(request) if request else "T001"
+        
         if not snowflake_conn:
-            # Fallback to mock data if no database connection
-            return [
-                TicketResponse(
-                    ticket_id="T20250730.0004",
-                    title="Similar Issue 1 (Mock)",
-                    description="Similar ticket description - Database not connected",
-                    status="Resolved",
-                    priority="Medium",
-                    assigned_technician=current_user
-                ),
-                TicketResponse(
-                    ticket_id="T20250730.0005",
-                    title="Similar Issue 2 (Mock)",
-                    description="Another similar ticket - Database not connected",
-                    status="Open",
-                    priority="Low",
-                    assigned_technician=current_user
-                )
-            ]
+            raise HTTPException(status_code=503, detail="Database connection not available. Please ensure Snowflake connection is properly configured.")
 
         # First, get the original ticket to find similar ones
         original_query = f"""
-            SELECT TITLE, DESCRIPTION, STATUS, PRIORITY
+            SELECT TITLE, DESCRIPTION, STATUS, PRIORITY, ISSUETYPE, SUBISSUETYPE
             FROM TEST_DB.PUBLIC.TICKETS
             WHERE TICKETNUMBER = '{ticket_number}'
         """
@@ -310,39 +213,117 @@ async def find_similar_tickets(
         original_ticket = original_results[0]
         original_title = original_ticket.get('TITLE', '')
         original_description = original_ticket.get('DESCRIPTION', '')
+        original_issue_type = original_ticket.get('ISSUETYPE', '')
+        
+        # Combine title and description for semantic search
+        search_text = f"{original_title} {original_description}".strip()
+        
+        if not search_text:
+            raise HTTPException(status_code=400, detail="Original ticket has no content to search for similar tickets")
 
-        # Find similar tickets based on title and description keywords
-        # Simple similarity search using common words
-        title_words = original_title.split()[:3]  # Take first 3 words
-        desc_words = original_description.split()[:5]  # Take first 5 words
-
-        similar_conditions = []
-        for word in title_words + desc_words:
-            if len(word) > 3:  # Only use words longer than 3 characters
-                similar_conditions.append(f"UPPER(TITLE) LIKE UPPER('%{word}%') OR UPPER(DESCRIPTION) LIKE UPPER('%{word}%')")
-
-        if similar_conditions:
-            similarity_query = f"""
-                SELECT TICKETNUMBER, TITLE, DESCRIPTION, STATUS, PRIORITY, TECHNICIAN_ID
-                FROM TEST_DB.PUBLIC.TICKETS
-                WHERE TICKETNUMBER != '{ticket_number}'
-                AND ({' OR '.join(similar_conditions)})
-                ORDER BY TICKETNUMBER DESC
-                LIMIT 10
-            """
-            results = snowflake_conn.execute_query(similarity_query)
-        else:
-            results = []
-
+        # Use Snowflake Cortex AI for semantic similarity search in TICKETS table
+        tickets_similarity_query = f"""
+            SELECT 
+                TICKETNUMBER,
+                TITLE,
+                DESCRIPTION,
+                STATUS,
+                PRIORITY,
+                TECHNICIANEMAIL,
+                ISSUETYPE,
+                SUBISSUETYPE,
+                RESOLUTION,
+                SNOWFLAKE.CORTEX.AI_SIMILARITY(
+                    COALESCE(TITLE, '') || ' ' || COALESCE(DESCRIPTION, ''),
+                    '{search_text.replace("'", "''")}'
+                ) AS SIMILARITY_SCORE
+            FROM TEST_DB.PUBLIC.TICKETS
+            WHERE TICKETNUMBER != '{ticket_number}'
+            AND TITLE IS NOT NULL
+            AND DESCRIPTION IS NOT NULL
+            AND TRIM(TITLE) != ''
+            AND TRIM(DESCRIPTION) != ''
+            AND LENGTH(TRIM(TITLE || ' ' || DESCRIPTION)) > 10
+            ORDER BY SIMILARITY_SCORE DESC
+            LIMIT 5
+        """
+        
+        tickets_results = snowflake_conn.execute_query(tickets_similarity_query)
+        
+        # Use Snowflake Cortex AI for semantic similarity search in COMPANY_4130_DATA table
+        company_similarity_query = f"""
+            SELECT 
+                TICKETNUMBER,
+                TITLE,
+                DESCRIPTION,
+                STATUS,
+                PRIORITY,
+                ISSUETYPE,
+                SUBISSUETYPE,
+                RESOLUTION,
+                SNOWFLAKE.CORTEX.AI_SIMILARITY(
+                    COALESCE(TITLE, '') || ' ' || COALESCE(DESCRIPTION, ''),
+                    '{search_text.replace("'", "''")}'
+                ) AS SIMILARITY_SCORE
+            FROM TEST_DB.PUBLIC.COMPANY_4130_DATA
+            WHERE TITLE IS NOT NULL
+            AND DESCRIPTION IS NOT NULL
+            AND TRIM(TITLE) != ''
+            AND TRIM(DESCRIPTION) != ''
+            AND LENGTH(TRIM(TITLE || ' ' || DESCRIPTION)) > 10
+            ORDER BY SIMILARITY_SCORE DESC
+            LIMIT 5
+        """
+        
+        company_results = snowflake_conn.execute_query(company_similarity_query)
+        
+        # Combine and sort results by similarity score
+        all_results = []
+        
+        # Add TICKETS results
+        for row in tickets_results:
+            score = row.get('SIMILARITY_SCORE', 0)
+            if isinstance(score, (int, float)) and score >= 0.1:  # Minimum similarity threshold
+                all_results.append({
+                    'source': 'TICKETS',
+                    'data': row,
+                    'score': score
+                })
+        
+        # Add COMPANY_4130_DATA results
+        for row in company_results:
+            score = row.get('SIMILARITY_SCORE', 0)
+            if isinstance(score, (int, float)) and score >= 0.1:  # Minimum similarity threshold
+                all_results.append({
+                    'source': 'COMPANY_4130_DATA',
+                    'data': row,
+                    'score': score
+                })
+        
+        # Sort by similarity score (highest first)
+        all_results.sort(key=lambda x: x['score'], reverse=True)
+        
+        # Convert to TicketResponse format
         tickets = []
-        for row in results:
+        for result in all_results[:10]:  # Return top 10 most similar
+            row = result['data']
+            source = result['source']
+            
+            # Create enhanced description with source and resolution info
+            description = row.get('DESCRIPTION', '')
+            resolution = row.get('RESOLUTION', '')
+            
+            enhanced_description = f"[Source: {source}] {description}"
+            if resolution and resolution.strip():
+                enhanced_description += f"\n\nResolution: {resolution[:200]}{'...' if len(resolution) > 200 else ''}"
+            
             tickets.append(TicketResponse(
                 ticket_id=row.get('TICKETNUMBER', ''),
                 title=row.get('TITLE', ''),
-                description=row.get('DESCRIPTION', ''),
+                description=enhanced_description,
                 status=row.get('STATUS', ''),
                 priority=row.get('PRIORITY', ''),
-                assigned_technician=row.get('TECHNICIAN_ID', '')  # Use TECHNICIAN_ID instead of email
+                assigned_technician=row.get('TECHNICIANEMAIL', '') if source == 'TICKETS' else None
             ))
 
         return tickets
@@ -353,14 +334,12 @@ async def find_similar_tickets(
         logger.error(f"Error finding similar tickets for {ticket_number}: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to find similar tickets: {str(e)}")
 
-# 6. POST /chatbot/chat – Sends a chat message to the chatbot for the resolution and general message
+# 5. POST /chatbot/chat – Sends a chat message to the chatbot for the resolution and general message
 @router.post("/chat", response_model=ChatResponse)
-async def chat_message(
-    message: ChatMessage,
-    current_user: str = Depends(verify_token)
-):
+async def chat_message(message: ChatMessage, request: Request = None):
     """Sends a chat message to the chatbot for the resolution and general message."""
     try:
+        current_user = await get_current_technician_from_main_app(request) if request else "T001"
         user_message = message.message.strip()
 
         # ALWAYS try to use LLM service first for ALL questions
@@ -396,8 +375,6 @@ async def chat_message(
         response_text = _generate_intelligent_response(user_message, current_user)
         return ChatResponse(response=response_text)
 
-    except HTTPException:
-        raise
     except Exception as e:
         logger.error(f"Chat endpoint error: {e}")
         raise HTTPException(status_code=500, detail="Error processing chat message")
@@ -947,26 +924,23 @@ I can help you with a wide range of topics:
 
 What would you like to know or what issue can I help you resolve today?"""
 
-# Additional endpoints with authentication
+# Additional endpoints without authentication
 @router.get("/health")
-async def health_check(current_user: str = Depends(verify_token)):
-    """Health Check endpoint for chatbot service (requires authentication)."""
+async def health_check():
+    """Health Check endpoint for chatbot service."""
     return {
         "status": "ok",
         "service": "chatbot",
-        "user": current_user,
         "timestamp": datetime.now()
     }
 
 @router.get("/")
-async def read_root(current_user: str = Depends(verify_token)):
-    """Root endpoint for chatbot service (requires authentication)."""
+async def read_root():
+    """Root endpoint for chatbot service."""
     return {
         "message": "Chatbot API is running",
         "version": "1.0.0",
-        "user": current_user,
-        "authenticated_endpoints": [
-            "POST /chatbot/auth/login",
+        "available_endpoints": [
             "GET /chatbot/tickets/my",
             "GET /chatbot/tickets/{ticket_id}",
             "GET /chatbot/tickets/search",

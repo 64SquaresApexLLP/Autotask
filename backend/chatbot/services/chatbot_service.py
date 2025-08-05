@@ -159,52 +159,106 @@ class ConversationalChatbotService:
         return any(indicator in message_lower for indicator in followup_indicators)
     
     def _analyze_message(self, message: str) -> Tuple[str, Dict]:
-        """Analyze message to determine intent and extract entities."""
-        message_lower = message.lower()
-        entities = {}
+        """Analyze message to determine intent and extract entities with enhanced NLP."""
+        message_lower = message.lower().strip()
         
-        # Intent patterns - Check AI resolution first before greeting
-        # AI Resolution patterns - Enhanced detection (check FIRST)
-        if any(phrase in message_lower for phrase in [
-            'help me resolve', 'help me fix', 'how to fix', 'i have a problem',
-            'my screen is broken', 'not working', 'issue with', 'problem with',
-            'broken', 'error', 'can\'t', 'won\'t', 'doesn\'t work', 'troubleshoot',
-            'ai resolution', 'get help with', 'solve this problem', 'screen is flickering',
-            'laptop won\'t start', 'computer is slow', 'internet not working',
-            'forgot password', 'forgot my password', 'password reset', 'can\'t login',
-            'printer not working', 'wifi not working', 'email not working',
-            'outlook not working', 'computer freezing', 'slow computer'
-        ]) or (
-            # Detect "help me" + technical terms
-            'help me' in message_lower and any(tech_term in message_lower for tech_term in [
-                'outlook', 'email', 'password', 'printer', 'wifi', 'network', 'computer',
-                'software', 'install', 'login', 'access', 'connection', 'slow', 'error'
-            ])
-        ):
-            intent = "ai_resolution"
-            entities['problem'] = message
-        elif any(word in message_lower for word in ['hi', 'hello', 'hey', 'good morning']) and not any(tech_word in message_lower for tech_word in ['help', 'issue', 'problem', 'fix', 'resolve']):
-            intent = "greeting"
-        # Check for similar tickets BEFORE general show tickets to avoid conflicts
-        elif any(phrase in message_lower for phrase in ['similar tickets', 'related tickets', 'find similar', 'show similar', 'show me similar']):
-            intent = "find_similar_tickets"
-            entities['query'] = message
-        elif any(phrase in message_lower for phrase in ['my tickets', 'show tickets', 'recent tickets']) and not any(phrase in message_lower for phrase in ['similar', 'related']):
-            intent = "show_my_tickets"
-        elif any(phrase in message_lower for phrase in ['help', 'resolution', 'solve', 'fix']):
-            intent = "get_resolution"
-            entities['query'] = message
-        elif any(phrase in message_lower for phrase in ['ticket', 'tkn', 't20']):
-            intent = "ticket_info"
-            # Extract ticket number
-            ticket_match = re.search(r'(t\d{8}\.\d{4}|tkn-\d+)', message_lower)
-            if ticket_match:
-                entities['ticket_id'] = ticket_match.group(1)
+        # Initialize entities
+        entities = {
+            'query': '',
+            'ticket_number': None,
+            'issue_type': None,
+            'urgency': None
+        }
+        
+        # Check for ticket number patterns (e.g., T20250804.0001, T2025.0001, etc.)
+        ticket_patterns = [
+            r'T\d{8}\.\d{4}',  # T20250804.0001
+            r'T\d{4}\.\d{4}',  # T2025.0001
+            r'T\d{6}\.\d{4}',  # T202504.0001
+            r'T\d{7}\.\d{4}',  # T2025040.0001
+        ]
+        
+        for pattern in ticket_patterns:
+            import re
+            match = re.search(pattern, message, re.IGNORECASE)
+            if match:
+                entities['ticket_number'] = match.group()
+                break
+        
+        # Intent classification with enhanced patterns
+        if any(word in message_lower for word in ['hello', 'hi', 'hey', 'good morning', 'good afternoon']):
+            return 'greeting', entities
+        
+        elif any(word in message_lower for word in ['my tickets', 'show my tickets', 'my assigned tickets', 'tickets assigned to me']):
+            return 'show_my_tickets', entities
+        
+        elif any(word in message_lower for word in ['ai resolution', 'ai help', 'ai support', 'artificial intelligence', 'ai assistance']):
+            # Extract the actual query after AI resolution keywords
+            ai_keywords = ['ai resolution', 'ai help', 'ai support', 'artificial intelligence', 'ai assistance']
+            query_start = message_lower
+            for keyword in ai_keywords:
+                if keyword in message_lower:
+                    query_start = message_lower.split(keyword, 1)[1].strip()
+                    break
+            
+            # Clean up the query by removing leading colon and spaces
+            if query_start.startswith(':'):
+                query_start = query_start[1:].strip()
+            
+            if query_start:
+                entities['query'] = query_start
+            return 'ai_resolution', entities
+        
+        elif any(word in message_lower for word in ['similar tickets', 'find similar', 'similar to', 'like this', 'same issue', 'find similar ticket']):
+            # Extract query for similar tickets
+            similar_keywords = ['similar tickets', 'find similar', 'similar to', 'like this', 'same issue', 'find similar ticket']
+            query_start = message_lower
+            for keyword in similar_keywords:
+                if keyword in message_lower:
+                    query_start = message_lower.split(keyword, 1)[1].strip()
+                    break
+            
+            # Clean up the query by removing leading "to " and spaces
+            if query_start.startswith('to '):
+                query_start = query_start[3:].strip()
+            
+            if query_start:
+                entities['query'] = query_start
+            return 'find_similar_tickets', entities
+        
+        elif any(word in message_lower for word in ['resolution', 'solution', 'how to fix', 'how to resolve', 'troubleshoot']):
+            # Extract the issue description
+            resolution_keywords = ['resolution', 'solution', 'how to fix', 'how to resolve', 'troubleshoot']
+            query_start = message_lower
+            for keyword in resolution_keywords:
+                if keyword in message_lower:
+                    query_start = message_lower.split(keyword, 1)[1].strip()
+                    break
+            
+            if query_start:
+                entities['query'] = query_start
+            return 'get_resolution', entities
+        
+        elif entities['ticket_number'] or any(word in message_lower for word in ['ticket', 'issue', 'problem', 'bug']):
+            # If we found a ticket number or ticket-related keywords, treat as ticket info request
+            if not entities['ticket_number']:
+                # Extract ticket-related query
+                ticket_keywords = ['ticket', 'issue', 'problem', 'bug']
+                query_start = message_lower
+                for keyword in ticket_keywords:
+                    if keyword in message_lower:
+                        query_start = message_lower.split(keyword, 1)[1].strip()
+                        break
+                
+                if query_start:
+                    entities['query'] = query_start
+            
+            return 'ticket_info', entities
+        
         else:
-            intent = "general_query"
+            # Default to general query
             entities['query'] = message
-        
-        return intent, entities
+            return 'general_query', entities
     
     def _generate_response(
         self,
@@ -304,135 +358,171 @@ What would you like to do today?"""
         )
 
     def _handle_ai_resolution(self, entities: Dict, technician: TechnicianDummyData, session_id: str) -> ChatResponse:
-        """Handle AI-powered interactive resolution requests."""
-        problem = entities.get('problem', '')
-
-        # Check if the problem description is sufficient
-        def is_sufficient_description(text: str) -> bool:
-            if not text or len(text.strip().split()) < 10:
-                return False
-            # Check for presence of technical keywords
-            keywords = [
-                'outlook', 'email', 'password', 'wifi', 'internet', 'network', 'connection',
-                'printer', 'print', 'printing', 'slow', 'lag', 'performance', 'freeze', 'hang',
-                'install', 'installation', 'setup', 'login', 'sign in', 'authentication', 'access',
-                'error', 'issue', 'problem', 'not working', 'broken', 'reset', 'update', 'crash', 'fail'
-            ]
-            return any(kw in text.lower() for kw in keywords)
-
-        if not problem or not is_sufficient_description(problem):
-            return self._create_response(
-                "To help you better, could you please provide a more detailed description of the issue you're experiencing? Include any error messages, what you were doing when the problem occurred, and any troubleshooting steps you've already tried.",
-                session_id=session_id
-            )
-
-        logger.info(f"AI Resolution request from {technician.technician_id}: {problem}")
-
-        # Extract metadata from the problem description
-        metadata = self._extract_query_metadata(problem)
-
-        # Get conversation history for this session
-        conversation_history = self.conversation_history.get(session_id, [])
-
-        # Get similar tickets for context using enhanced search
-        similar_tickets = self._find_similar_tickets_by_query(problem, limit=5)
-
+        """Handle AI resolution requests with enhanced LLM integration and ticket references."""
         try:
-            # Use the new interactive AI resolution with metadata
-            if self.llm_service and hasattr(self.llm_service, 'generate_interactive_ai_resolution'):
-                response_text = self.llm_service.generate_interactive_ai_resolution(
-                    problem,
-                    conversation_history,
-                    similar_tickets,
-                    metadata
+            query = entities.get('query', '').strip()
+            
+            if not query:
+                return self._create_response(
+                    "I'd be happy to help you with AI-powered resolution! Please describe the technical issue you're experiencing. "
+                    "For example: 'My computer is running slow' or 'I can't connect to the printer'",
+                    session_id,
+                    message_type="clarification"
                 )
+            
+            # Find similar tickets for context
+            similar_tickets = self._find_similar_tickets_by_query(query, limit=3)
+            
+            # Extract metadata from the query
+            metadata = self._extract_query_metadata(query)
+            
+            # Generate AI resolution using LLM service
+            if self.llm_service and hasattr(self.llm_service, 'generate_resolution_for_issue'):
+                try:
+                    resolution = self.llm_service.generate_resolution_for_issue(
+                        query, 
+                        similar_tickets=similar_tickets, 
+                        metadata=metadata
+                    )
+                except Exception as llm_error:
+                    logger.warning(f"LLM service failed, using fallback: {llm_error}")
+                    resolution = self._generate_ai_resolution_fallback(query, similar_tickets, metadata)
             else:
-                response_text = self._generate_ai_resolution_fallback(problem, similar_tickets, metadata)
-
-            # Set context for follow-up conversation
-            self._set_conversation_context(session_id, "ai_resolution", {
-                "problem": problem,
-                "similar_tickets": [t.ticketnumber for t in similar_tickets] if similar_tickets else []
-            })
-
-            # Create ticket responses for related tickets
-            ticket_responses = []
+                resolution = self._generate_ai_resolution_fallback(query, similar_tickets, metadata)
+            
+            # Create response with ticket references
+            response_text = f"🤖 **AI Resolution for: {query}**\n\n"
+            response_text += resolution
+            
+            # Add similar tickets context if available
             if similar_tickets:
-                ticket_responses = [TicketResponse.from_orm(ticket) for ticket in similar_tickets[:3]]
-
+                response_text += f"\n\n📋 **Similar Historical Tickets:**\n"
+                for i, ticket in enumerate(similar_tickets[:3], 1):
+                    response_text += f"{i}. **{ticket.ticketnumber}** - {ticket.title}\n"
+                    if ticket.resolution:
+                        response_text += f"   Resolution: {ticket.resolution[:150]}...\n"
+                    response_text += "\n"
+            
+            response_text += "\n💡 **Need more help?** Ask me to find more similar tickets or get specific details about any ticket mentioned above."
+            
+            # Set context for follow-up questions
+            self._set_conversation_context(session_id, "ai_resolution", {
+                "original_query": query,
+                "similar_tickets": [t.ticketnumber for t in similar_tickets],
+                "metadata": metadata
+            })
+            
             return self._create_response(
                 response_text,
-                session_id=session_id,
-                related_tickets=ticket_responses
+                session_id,
+                related_tickets=similar_tickets
             )
-
+            
         except Exception as e:
-            logger.error(f"Error generating AI resolution: {e}")
+            logger.error(f"Error in _handle_ai_resolution: {e}")
             return self._create_response(
-                self._generate_ai_resolution_fallback(problem, similar_tickets, metadata),
-                session_id=session_id
+                "I encountered an error while generating the AI resolution. Please try again or contact support.",
+                session_id,
+                message_type="error"
             )
 
     def _handle_find_similar_tickets(self, entities: Dict, technician: TechnicianDummyData, session_id: str) -> ChatResponse:
-        """Find and display 4 similar tickets based on query."""
-        query = entities.get('query', '')
-
-        if not query:
+        """Handle finding similar tickets with enhanced NLP/NLU capabilities."""
+        try:
+            # Check if user provided a specific ticket number
+            ticket_number = entities.get('ticket_number')
+            
+            if ticket_number:
+                # User provided a specific ticket number
+                original_ticket = self._get_ticket_by_number(ticket_number)
+                if not original_ticket:
+                    return self._create_response(
+                        f"I couldn't find ticket {ticket_number}. Please check the ticket number and try again.",
+                        session_id,
+                        message_type="error"
+                    )
+                
+                # Find similar tickets based on the original ticket
+                similar_tickets = self._find_similar_tickets_from_db(
+                    [original_ticket.title or "", original_ticket.description or "", original_ticket.issuetype or ""],
+                    technician.technician_id,
+                    limit=5
+                )
+                
+                if similar_tickets:
+                    response_text = f"Here are similar tickets to {ticket_number}:\n\n"
+                    for i, ticket in enumerate(similar_tickets[:5], 1):
+                        response_text += f"{i}. **{ticket.ticketnumber}** - {ticket.title}\n"
+                        response_text += f"   Status: {ticket.status}\n"
+                        response_text += f"   Issue: {ticket.issuetype or 'N/A'}\n"
+                        if ticket.resolution and ticket.resolution.strip():
+                            response_text += f"   Resolution: {ticket.resolution[:150]}...\n"
+                        response_text += "\n"
+                    
+                    response_text += f"Found {len(similar_tickets)} similar tickets based on ticket {ticket_number}.\n\n"
+                    response_text += "💡 **Strong Similar Tickets with Resolutions:**\n"
+                    
+                    # Show resolved tickets with resolutions
+                    resolved_tickets = [t for t in similar_tickets if t.resolution and t.resolution.strip()]
+                    if resolved_tickets:
+                        for i, ticket in enumerate(resolved_tickets[:3], 1):
+                            response_text += f"   • **{ticket.ticketnumber}** - {ticket.title}\n"
+                            response_text += f"     Resolution: {ticket.resolution[:200]}...\n\n"
+                    else:
+                        response_text += "   No resolved tickets with resolutions found.\n\n"
+                else:
+                    response_text = f"No similar tickets found for {ticket_number}. This might be a unique issue."
+                
+                return self._create_response(response_text, session_id, related_tickets=similar_tickets)
+            
+            else:
+                # User provided a natural language query
+                query = entities.get('query', '')
+                if not query:
+                    return self._create_response(
+                        "I can help you find similar tickets! Please provide either:\n"
+                        "1. A specific ticket number (e.g., 'T20250804.0001')\n"
+                        "2. A description of the issue you're looking for (e.g., 'network connectivity problems')",
+                        session_id,
+                        message_type="clarification"
+                    )
+                
+                # Use NLP/NLU to find similar tickets based on natural language
+                similar_tickets = self._find_similar_tickets_by_query(query, limit=5)
+                
+                if similar_tickets:
+                    response_text = f"Here are tickets similar to your query '{query}':\n\n"
+                    for i, ticket in enumerate(similar_tickets[:5], 1):
+                        response_text += f"{i}. **{ticket.ticketnumber}** - {ticket.title}\n"
+                        response_text += f"   Status: {ticket.status}\n"
+                        response_text += f"   Issue: {ticket.issuetype or 'N/A'}\n"
+                        if ticket.resolution and ticket.resolution.strip():
+                            response_text += f"   Resolution: {ticket.resolution[:150]}...\n"
+                        response_text += "\n"
+                    
+                    response_text += f"Found {len(similar_tickets)} tickets matching your query.\n\n"
+                    response_text += "💡 **Strong Similar Tickets with Resolutions:**\n"
+                    
+                    # Show resolved tickets with resolutions
+                    resolved_tickets = [t for t in similar_tickets if t.resolution and t.resolution.strip()]
+                    if resolved_tickets:
+                        for i, ticket in enumerate(resolved_tickets[:3], 1):
+                            response_text += f"   • **{ticket.ticketnumber}** - {ticket.title}\n"
+                            response_text += f"     Resolution: {ticket.resolution[:200]}...\n\n"
+                    else:
+                        response_text += "   No resolved tickets with resolutions found.\n\n"
+                else:
+                    response_text = f"No tickets found matching '{query}'. Try using different keywords or a specific ticket number."
+                
+                return self._create_response(response_text, session_id, related_tickets=similar_tickets)
+                
+        except Exception as e:
+            logger.error(f"Error in _handle_find_similar_tickets: {e}")
             return self._create_response(
-                "Please describe the issue you'd like me to find similar tickets for.",
-                session_id=session_id
+                "I encountered an error while searching for similar tickets. Please try again or contact support.",
+                session_id,
+                message_type="error"
             )
-
-        # Extract keywords from query
-        keywords = self._extract_keywords(query)
-        cache_key = f"similar_{technician.technician_id}_{hash('_'.join(keywords))}"
-
-        # Check cache first
-        similar_tickets = self.ticket_cache.get_similar_tickets(cache_key)
-
-        if not similar_tickets:
-            # Find similar tickets from database
-            similar_tickets = self._find_similar_tickets_from_db(keywords, technician.technician_id, limit=4)
-            # Cache the results
-            self.ticket_cache.cache_similar_tickets(cache_key, similar_tickets)
-
-        if not similar_tickets:
-            return self._create_response(
-                f"I couldn't find any similar tickets for '{query}'. This might be a new type of issue.",
-                session_id=session_id
-            )
-
-        # Create similar ticket cards
-        ticket_responses = [TicketResponse.from_orm(ticket) for ticket in similar_tickets]
-
-        response_text = f"## 🔍 Similar Tickets Found ({len(similar_tickets)} cards)\n\n"
-        response_text += f"**Search Query:** {query}\n\n"
-
-        for i, ticket in enumerate(similar_tickets, 1):
-            status_emoji = "✅" if ticket.status == "resolved" else "🔄"
-
-            response_text += f"""**Card {i}: {ticket.ticket_number}** {status_emoji}
-📝 **Title:** {ticket.title}
-🏷️ **Issue Type:** {ticket.issuetype}
-👤 **Handled by:** {ticket.technicianemail}
-"""
-            if ticket.resolution:
-                response_text += f"💡 **Resolution:** {ticket.resolution[:100]}...\n"
-            response_text += "\n"
-
-        response_text += "💬 Ask me for more details about any ticket or request a resolution for your issue!"
-
-        # Set context for follow-up
-        self._set_conversation_context(session_id, "similar_tickets", {
-            "query": query,
-            "tickets": [t.ticketnumber for t in similar_tickets]
-        })
-
-        return self._create_response(
-            response_text,
-            session_id=session_id,
-            related_tickets=ticket_responses
-        )
 
     def _handle_get_resolution(self, entities: Dict, technician: TechnicianDummyData, session_id: str) -> ChatResponse:
         """Get AI-powered resolution using Cortex Complete."""
@@ -760,7 +850,133 @@ What would you like to do today?"""
             return None
 
     def _find_similar_tickets_from_db(self, keywords: List[str], technician_id: str, limit: int = 4) -> List[Ticket]:
-        """Find similar tickets based on keywords with enhanced matching."""
+        """Find similar tickets using semantic similarity from both TICKETS and COMPANY_4130_DATA tables."""
+        if not keywords:
+            return []
+
+        try:
+            # Combine keywords into search text
+            search_text = " ".join(keywords)
+            
+            # Use raw SQL for semantic similarity search since SQLAlchemy doesn't support Snowflake Cortex functions
+            # Get the engine directly for raw SQL execution
+            from ..database import create_snowflake_engine
+            engine = create_snowflake_engine()
+            
+            # Search in TICKETS table using semantic similarity
+            tickets_query = f"""
+                SELECT 
+                    TICKETNUMBER,
+                    TITLE,
+                    DESCRIPTION,
+                    STATUS,
+                    PRIORITY,
+                    TECHNICIANEMAIL,
+                    ISSUETYPE,
+                    SUBISSUETYPE,
+                    RESOLUTION,
+                    SNOWFLAKE.CORTEX.AI_SIMILARITY(
+                        COALESCE(TITLE, '') || ' ' || COALESCE(DESCRIPTION, ''),
+                        '{search_text.replace("'", "''")}'
+                    ) AS SIMILARITY_SCORE
+                FROM TEST_DB.PUBLIC.TICKETS
+                WHERE TITLE IS NOT NULL
+                AND DESCRIPTION IS NOT NULL
+                AND TRIM(TITLE) != ''
+                AND TRIM(DESCRIPTION) != ''
+                AND LENGTH(TRIM(TITLE || ' ' || DESCRIPTION)) > 10
+                ORDER BY SIMILARITY_SCORE DESC
+                LIMIT {limit}
+            """
+            
+            # Search in COMPANY_4130_DATA table using semantic similarity
+            # Note: Using only the columns that exist in COMPANY_4130_DATA table
+            company_query = f"""
+                SELECT 
+                    TICKETNUMBER,
+                    TITLE,
+                    DESCRIPTION,
+                    STATUS,
+                    PRIORITY,
+                    ISSUETYPE,
+                    SUBISSUETYPE,
+                    RESOLUTION,
+                    SNOWFLAKE.CORTEX.AI_SIMILARITY(
+                        COALESCE(TITLE, '') || ' ' || COALESCE(DESCRIPTION, ''),
+                        '{search_text.replace("'", "''")}'
+                    ) AS SIMILARITY_SCORE
+                FROM TEST_DB.PUBLIC.COMPANY_4130_DATA
+                WHERE TITLE IS NOT NULL
+                AND DESCRIPTION IS NOT NULL
+                AND TRIM(TITLE) != ''
+                AND TRIM(DESCRIPTION) != ''
+                AND LENGTH(TRIM(TITLE || ' ' || DESCRIPTION)) > 10
+                ORDER BY SIMILARITY_SCORE DESC
+                LIMIT {limit}
+            """
+            
+            # Execute queries using raw SQL
+            from sqlalchemy import text
+            with engine.connect() as connection:
+                tickets_results = connection.execute(text(tickets_query)).fetchall()
+                company_results = connection.execute(text(company_query)).fetchall()
+                
+            # Convert results to dictionaries for easier access
+            tickets_dicts = [dict(row._mapping) for row in tickets_results]
+            company_dicts = [dict(row._mapping) for row in company_results]
+            
+            # Combine and sort results by similarity score
+            all_results = []
+            
+            # Process TICKETS results
+            for row in tickets_dicts:
+                score = row.get('SIMILARITY_SCORE', 0)
+                if isinstance(score, (int, float)) and score >= 0.1:  # Minimum similarity threshold
+                    # Create Ticket object from row
+                    ticket = Ticket(
+                        ticketnumber=row.get('TICKETNUMBER'),
+                        title=row.get('TITLE'),
+                        description=row.get('DESCRIPTION'),
+                        status=row.get('STATUS'),
+                        priority=row.get('PRIORITY'),
+                        technicianemail=row.get('TECHNICIANEMAIL'),
+                        issuetype=row.get('ISSUETYPE'),
+                        subissuetype=row.get('SUBISSUETYPE'),
+                        resolution=row.get('RESOLUTION')
+                    )
+                    all_results.append((ticket, score, 'TICKETS'))
+            
+            # Process COMPANY_4130_DATA results
+            for row in company_dicts:
+                score = row.get('SIMILARITY_SCORE', 0)
+                if isinstance(score, (int, float)) and score >= 0.1:  # Minimum similarity threshold
+                    # Create Ticket object from row (using same model for compatibility)
+                    ticket = Ticket(
+                        ticketnumber=row.get('TICKETNUMBER'),
+                        title=row.get('TITLE'),
+                        description=f"[Source: COMPANY_4130_DATA] {row.get('DESCRIPTION', '')}",
+                        status=row.get('STATUS'),
+                        priority=row.get('PRIORITY'),
+                        technicianemail=None,  # COMPANY_4130_DATA doesn't have this column
+                        issuetype=row.get('ISSUETYPE'),
+                        subissuetype=row.get('SUBISSUETYPE'),
+                        resolution=row.get('RESOLUTION')
+                    )
+                    all_results.append((ticket, score, 'COMPANY_4130_DATA'))
+            
+            # Sort by similarity score (highest first)
+            all_results.sort(key=lambda x: x[1], reverse=True)
+            
+            # Return top tickets
+            return [ticket for ticket, score, source in all_results[:limit]]
+
+        except Exception as e:
+            logger.error(f"Error finding similar tickets: {e}")
+            # Fallback to keyword-based search if semantic similarity fails
+            return self._find_similar_tickets_fallback(keywords, technician_id, limit)
+
+    def _find_similar_tickets_fallback(self, keywords: List[str], technician_id: str, limit: int = 4) -> List[Ticket]:
+        """Fallback method for finding similar tickets using keyword-based search."""
         if not keywords:
             return []
 
@@ -799,7 +1015,7 @@ What would you like to do today?"""
             return [ticket for ticket, score in scored_tickets[:limit]]
 
         except Exception as e:
-            logger.error(f"Error finding similar tickets: {e}")
+            logger.error(f"Error in fallback similar tickets search: {e}")
             return []
 
     def _extract_keywords(self, text: str) -> List[str]:

@@ -144,9 +144,141 @@ class TicketService:
             return []
 
     def find_similar_tickets_by_issue(self, issue_description: str, limit: int = 10) -> List[Ticket]:
-        """Find similar tickets based on issue description by searching TICKETS table."""
+        """Find similar tickets using semantic similarity from both TICKETS and COMPANY_4130_DATA tables."""
         try:
             logger.info(f"Searching for similar tickets with description: '{issue_description}'")
+            
+            # Use raw SQL for semantic similarity search since SQLAlchemy doesn't support Snowflake Cortex functions
+            # Get the engine directly for raw SQL execution
+            from ..database import create_snowflake_engine
+            engine = create_snowflake_engine()
+            
+            # Search in TICKETS table using semantic similarity
+            tickets_query = f"""
+                SELECT 
+                    TICKETNUMBER,
+                    TITLE,
+                    DESCRIPTION,
+                    STATUS,
+                    PRIORITY,
+                    TECHNICIANEMAIL,
+                    ISSUETYPE,
+                    SUBISSUETYPE,
+                    RESOLUTION,
+                    TICKETTYPE,
+                    TICKETCATEGORY,
+                    SNOWFLAKE.CORTEX.AI_SIMILARITY(
+                        COALESCE(TITLE, '') || ' ' || COALESCE(DESCRIPTION, ''),
+                        '{issue_description.replace("'", "''")}'
+                    ) AS SIMILARITY_SCORE
+                FROM TEST_DB.PUBLIC.TICKETS
+                WHERE TITLE IS NOT NULL
+                AND DESCRIPTION IS NOT NULL
+                AND TRIM(TITLE) != ''
+                AND TRIM(DESCRIPTION) != ''
+                AND LENGTH(TRIM(TITLE || ' ' || DESCRIPTION)) > 10
+                ORDER BY SIMILARITY_SCORE DESC
+                LIMIT {limit}
+            """
+            
+            # Search in COMPANY_4130_DATA table using semantic similarity
+            # Note: Using only the columns that exist in COMPANY_4130_DATA table
+            company_query = f"""
+                SELECT 
+                    TICKETNUMBER,
+                    TITLE,
+                    DESCRIPTION,
+                    STATUS,
+                    PRIORITY,
+                    ISSUETYPE,
+                    SUBISSUETYPE,
+                    RESOLUTION,
+                    TICKETTYPE,
+                    TICKETCATEGORY,
+                    SNOWFLAKE.CORTEX.AI_SIMILARITY(
+                        COALESCE(TITLE, '') || ' ' || COALESCE(DESCRIPTION, ''),
+                        '{issue_description.replace("'", "''")}'
+                    ) AS SIMILARITY_SCORE
+                FROM TEST_DB.PUBLIC.COMPANY_4130_DATA
+                WHERE TITLE IS NOT NULL
+                AND DESCRIPTION IS NOT NULL
+                AND TRIM(TITLE) != ''
+                AND TRIM(DESCRIPTION) != ''
+                AND LENGTH(TRIM(TITLE || ' ' || DESCRIPTION)) > 10
+                ORDER BY SIMILARITY_SCORE DESC
+                LIMIT {limit}
+            """
+            
+            # Execute queries using raw SQL
+            from sqlalchemy import text
+            with engine.connect() as connection:
+                tickets_results = connection.execute(text(tickets_query)).fetchall()
+                company_results = connection.execute(text(company_query)).fetchall()
+                
+            # Convert results to dictionaries for easier access
+            tickets_dicts = [dict(row._mapping) for row in tickets_results]
+            company_dicts = [dict(row._mapping) for row in company_results]
+            
+            # Combine and sort results by similarity score
+            all_results = []
+            
+            # Process TICKETS results
+            for row in tickets_dicts:
+                score = row.get('SIMILARITY_SCORE', 0)
+                if isinstance(score, (int, float)) and score >= 0.1:  # Minimum similarity threshold
+                    # Create Ticket object from row
+                    ticket = Ticket(
+                        ticketnumber=row.get('TICKETNUMBER'),
+                        title=row.get('TITLE'),
+                        description=row.get('DESCRIPTION'),
+                        status=row.get('STATUS'),
+                        priority=row.get('PRIORITY'),
+                        technicianemail=row.get('TECHNICIANEMAIL'),
+                        issuetype=row.get('ISSUETYPE'),
+                        subissuetype=row.get('SUBISSUETYPE'),
+                        resolution=row.get('RESOLUTION'),
+                        tickettype=row.get('TICKETTYPE'),
+                        ticketcategory=row.get('TICKETCATEGORY')
+                    )
+                    all_results.append((ticket, score, 'TICKETS'))
+            
+            # Process COMPANY_4130_DATA results
+            for row in company_dicts:
+                score = row.get('SIMILARITY_SCORE', 0)
+                if isinstance(score, (int, float)) and score >= 0.1:  # Minimum similarity threshold
+                    # Create Ticket object from row (using same model for compatibility)
+                    ticket = Ticket(
+                        ticketnumber=row.get('TICKETNUMBER'),
+                        title=row.get('TITLE'),
+                        description=f"[Source: COMPANY_4130_DATA] {row.get('DESCRIPTION', '')}",
+                        status=row.get('STATUS'),
+                        priority=row.get('PRIORITY'),
+                        technicianemail=None,  # COMPANY_4130_DATA doesn't have this column
+                        issuetype=row.get('ISSUETYPE'),
+                        subissuetype=row.get('SUBISSUETYPE'),
+                        resolution=row.get('RESOLUTION'),
+                        tickettype=row.get('TICKETTYPE'),
+                        ticketcategory=row.get('TICKETCATEGORY')
+                    )
+                    all_results.append((ticket, score, 'COMPANY_4130_DATA'))
+            
+            # Sort by similarity score (highest first)
+            all_results.sort(key=lambda x: x[1], reverse=True)
+            
+            logger.info(f"Found {len(all_results)} similar tickets for issue: {issue_description}")
+            
+            # Return top tickets
+            return [ticket for ticket, score, source in all_results[:limit]]
+            
+        except Exception as e:
+            logger.error(f"Failed to find similar tickets with semantic similarity: {e}")
+            # Fallback to keyword-based search
+            return self._find_similar_tickets_fallback(issue_description, limit)
+
+    def _find_similar_tickets_fallback(self, issue_description: str, limit: int = 10) -> List[Ticket]:
+        """Fallback method for finding similar tickets using keyword-based search."""
+        try:
+            logger.info(f"Using fallback keyword search for: '{issue_description}'")
             
             # Split the issue description into keywords for better matching
             keywords = [word.strip() for word in issue_description.split() if len(word.strip()) > 2]
@@ -202,7 +334,7 @@ class TicketService:
             
             return similar_tickets
         except Exception as e:
-            logger.error(f"Failed to find similar tickets: {e}")
+            logger.error(f"Failed to find similar tickets in fallback: {e}")
             return []
 
     def get_tickets_by_status(
