@@ -10,14 +10,14 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Snowflake Database Configuration (loaded from .env)
-SF_ACCOUNT = os.getenv('SF_ACCOUNT', 'FOQUKCW-AITEAM_64SQUARES')
-SF_USER = os.getenv('SF_USER', 'anant.lad@64-squares.com')
-SF_PASSWORD = os.getenv('SF_PASSWORD', '')  # Using SSO authentication
-SF_AUTHENTICATOR = os.getenv('SF_AUTHENTICATOR', 'externalbrowser')  # SSO authentication
-SF_DATABASE = os.getenv('SF_DATABASE', 'TEST_DB')
-SF_SCHEMA = os.getenv('SF_SCHEMA', 'PUBLIC')
-SF_WAREHOUSE = os.getenv('SF_WAREHOUSE', 'S_WHH')
-SF_ROLE = os.getenv('SF_ROLE', 'ACCOUNTADMIN')
+SF_ACCOUNT = os.getenv('SNOWFLAKE_ACCOUNT', 'FOQUKCW-AITEAM_64SQUARES')
+SF_USER = os.getenv('SNOWFLAKE_USER', 'anant.lad@64-squares.com')
+SF_PASSWORD = os.getenv('SNOWFLAKE_PASSWORD', '')  # Using SSO authentication
+SF_AUTHENTICATOR = os.getenv('SNOWFLAKE_AUTHENTICATOR', 'externalbrowser')  # SSO authentication
+SF_DATABASE = os.getenv('SNOWFLAKE_DATABASE', 'TEST_DB')
+SF_SCHEMA = os.getenv('SNOWFLAKE_SCHEMA', 'PUBLIC')
+SF_WAREHOUSE = os.getenv('SNOWFLAKE_WAREHOUSE', 'S_WHH')
+SF_ROLE = os.getenv('SNOWFLAKE_ROLE', 'ACCOUNTADMIN')
 
 # Email Configuration (loaded from .env)
 SUPPORT_EMAIL = os.getenv('SUPPORT_EMAIL', 'rohankool2021@gmail.com')
@@ -30,8 +30,8 @@ SMTP_USERNAME = SUPPORT_EMAIL
 SMTP_PASSWORD = SUPPORT_EMAIL_PASSWORD
 
 # API Configuration (loaded from .env)
-API_HOST = os.getenv('API_HOST', '0.0.0.0')
-API_PORT = int(os.getenv('API_PORT', '8001'))
+API_HOST = os.getenv('APP_HOST', '0.0.0.0')
+API_PORT = int(os.getenv('APP_PORT', '8001'))
 
 # Webhook URLs
 GMAIL_WEBHOOK_URL = f"http://localhost:{API_PORT}/webhooks/gmail/simple"
