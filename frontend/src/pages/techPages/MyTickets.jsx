@@ -2,126 +2,14 @@ import React, { useState, useEffect } from "react";
 import Header from "../../components/Header";
 import Sidebar from "../../components/Sidebar";
 import ChatButton from "../../components/ChatButton";
-import { FiSearch, FiUser, FiCalendar, FiChevronDown, FiAlertCircle, FiFilter, FiEye } from "react-icons/fi";
+import { FiSearch, FiUser , FiChevronDown, FiFilter, FiEye } from "react-icons/fi";
 import { IoReload, IoTimeOutline } from "react-icons/io5";
 import useAuth from "../../hooks/useAuth";
 import { ticketService } from "../../services/ticketService";
 import { Loader2 } from "lucide-react";
+import { useNavigate } from 'react-router-dom';
 
-const mockTickets = [
-  {
-    id: "MTK-1001",
-    title: "Wi-Fi Not Working",
-    status: "open",
-    priority: "high",
-    category: "Network",
-    createdDate: "2024-01-20",
-    department: "HR",
-    customer: "Anant Lad",
-    customerEmail: "anantlad66@gmail.com",
-    description: "Unable to connect to office Wi-Fi network on multiple devices",
-    slaDeadline: "2024-01-22 17:00",
-    timeSpent: "30 minutes",
-    workNotes: [
-      {
-        date: "2024-01-20 10:30",
-        note: "Verified network credentials and connectivity",
-      },
-      { 
-        date: "2024-01-20 11:15", 
-        note: "Reset network settings on user's laptop" 
-      },
-    ],
-  },
-  {
-    id: "MTK-1002",
-    title: "Email Sync Issue",
-    status: "in-progress",
-    priority: "medium",
-    category: "Email",
-    createdDate: "2024-01-21",
-    department: "Sales",
-    customer: "Raj Sharma",
-    customerEmail: "raj.sharma@example.com",
-    description: "Outlook not syncing new emails properly",
-    slaDeadline: "2024-01-23 12:00",
-    timeSpent: "1 hour",
-    workNotes: [
-      { 
-        date: "2024-01-21 14:00", 
-        note: "Verified account settings and IMAP configuration" 
-      },
-    ],
-  },
-  {
-    id: "MTK-1003",
-    title: "Laptop Battery Replacement",
-    status: "resolved",
-    priority: "low",
-    category: "Hardware",
-    createdDate: "2024-01-22",
-    department: "Engineering",
-    customer: "Priya Patel",
-    customerEmail: "priya.patel@example.com",
-    description: "Laptop battery drains quickly and needs replacement",
-    slaDeadline: "2024-01-24 10:00",
-    timeSpent: "45 minutes",
-    workNotes: [
-      { 
-        date: "2024-01-22 09:30", 
-        note: "Diagnosed battery health - 12% capacity remaining" 
-      },
-      { 
-        date: "2024-01-22 10:15", 
-        note: "Ordered replacement battery - will arrive in 2 days" 
-      },
-    ],
-  },
-  {
-    id: "MTK-1004",
-    title: "Software License Activation",
-    status: "open",
-    priority: "critical",
-    category: "Software",
-    createdDate: "2024-01-22",
-    department: "Marketing",
-    customer: "Amit Kumar",
-    customerEmail: "amit.kumar@example.com",
-    description: "Adobe Creative Cloud license activation failed",
-    slaDeadline: "2024-01-22 18:00",
-    timeSpent: "15 minutes",
-    workNotes: [
-      { 
-        date: "2024-01-22 15:00", 
-        note: "Verified license availability in admin portal" 
-      },
-    ],
-  },
-  {
-    id: "MTK-1005",
-    title: "Printer Configuration",
-    status: "in-progress",
-    priority: "medium",
-    category: "Hardware",
-    createdDate: "2024-01-23",
-    department: "Operations",
-    customer: "Neha Gupta",
-    customerEmail: "neha.gupta@example.com",
-    description: "New printer needs installation and configuration",
-    slaDeadline: "2024-01-25 15:00",
-    timeSpent: "1.5 hours",
-    workNotes: [
-      { 
-        date: "2024-01-23 11:00", 
-        note: "Unboxed and physically installed the printer" 
-      },
-      { 
-        date: "2024-01-23 12:30", 
-        note: "Installed drivers on user's workstation" 
-      },
-    ],
-  },
-];
+
 
 const statusColors = {
   open: "bg-blue-100 text-blue-800",
@@ -152,6 +40,9 @@ const MyTickets = () => {
   const [showFilters, setShowFilters] = useState(false);
   const [timeSpent, setTimeSpent] = useState("");
 
+
+  const navigate = useNavigate();
+
   // Real data state
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -168,7 +59,7 @@ const MyTickets = () => {
       const myTickets = allTickets.filter(ticket => {
         const assignedTech = ticket.assigned_technician;
         const technicianId = ticket.technician_id;
-        const currentUserId = user?.username; // T001, T103, T104, T106
+        const currentUserId = user?.username; 
 
         return assignedTech === currentUserId || technicianId === currentUserId;
       });
@@ -417,9 +308,11 @@ const MyTickets = () => {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <button
-                            onClick={() => setSelectedTicket(ticket)}
+                            onClick={() => navigate(`/technician/my-tickets/view/${ticket.id.replace('.', '-')}`)}
+        
                             className="flex items-center text-sm text-blue-600 hover:text-blue-800"
                           >
+                            
                             <FiEye className="h-4 w-4 mr-1" />
                             View
                           </button>
