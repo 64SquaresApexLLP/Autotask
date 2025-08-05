@@ -11,6 +11,7 @@ import MyTickets from './pages/techPages/MyTickets';
 import UrgentTickets from './pages/techPages/UrgentTickets';
 import Analytics from './pages/techPages/Analytics';
 import AllTickets from './pages/techPages/AllTickets';
+import ViewTicket from './pages/techPages/ViewTicket';
 
 function App() {
   return (
@@ -74,12 +75,21 @@ function App() {
               </ProtectedRoute>
             }
           />
-          
+
           <Route
             path="/technician/my-tickets"
             element={
               <ProtectedRoute>
                 <MyTickets />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/technician/my-tickets/view/:ticketId"
+            element={
+              <ProtectedRoute>
+                <ViewTicket />
               </ProtectedRoute>
             }
           />
