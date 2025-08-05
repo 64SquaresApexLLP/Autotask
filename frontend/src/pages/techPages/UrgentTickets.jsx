@@ -33,6 +33,14 @@ const UrgentTickets = () => {
       });
 
       setUrgentTickets(urgent);
+      
+      // Check for overdue tickets and reminders after loading
+      if (urgent.length > 0) {
+        setTimeout(() => {
+          checkOverdueTickets();
+          checkDueDateReminders();
+        }, 1000); // Wait 1 second for state to update
+      }
     } catch (error) {
       console.error('Failed to load urgent tickets:', error);
       setError('Failed to load urgent tickets. Please try again.');
@@ -75,10 +83,133 @@ const UrgentTickets = () => {
     }
   };
 
+  // Check for overdue tickets and auto-escalate
+  const checkOverdueTickets = async () => {
+    try {
+      const now = new Date();
+      
+      for (const ticket of urgentTickets) {
+        // Get due date from various possible field names
+        const dueDateStr = ticket.due_date || ticket.DUEDATETIME || ticket.duedatetime;
+        
+        if (dueDateStr && ticket.status !== 'Closed' && ticket.status !== 'Resolved') {
+          const dueDate = new Date(dueDateStr);
+          
+          // Check if ticket is overdue (due date is in the past)
+          if (dueDate < now) {
+            console.log(`Auto-escalating overdue ticket: ${ticket.TICKETNUMBER || ticket.ticketnumber || ticket.id}`);
+            
+            // Auto-escalate the overdue ticket
+            await handleEscalate(ticket);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Failed to check overdue tickets:', error);
+    }
+  };
+
+  // Check for tickets due tomorrow and send reminder emails
+  const checkDueDateReminders = async () => {
+    try {
+      const now = new Date();
+      const tomorrow = new Date(now);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      
+      // Format tomorrow's date to match due date format (YYYY-MM-DD)
+      const tomorrowStr = tomorrow.toISOString().split('T')[0];
+      
+      for (const ticket of urgentTickets) {
+        // Get due date from various possible field names
+        const dueDateStr = ticket.due_date || ticket.DUEDATETIME || ticket.duedatetime;
+        
+        if (dueDateStr && ticket.status !== 'Closed' && ticket.status !== 'Resolved') {
+          const dueDate = new Date(dueDateStr);
+          const dueDateStrFormatted = dueDate.toISOString().split('T')[0];
+          
+          // Check if ticket is due tomorrow
+          if (dueDateStrFormatted === tomorrowStr && ticket.assigned_technician) {
+            console.log(`Sending reminder for ticket due tomorrow: ${ticket.TICKETNUMBER || ticket.ticketnumber || ticket.id}`);
+            
+            // Send reminder email to assigned technician
+            await sendDueDateReminder(ticket);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Failed to check due date reminders:', error);
+    }
+  };
+
+  // Send reminder email to assigned technician
+  const sendDueDateReminder = async (ticket) => {
+    try {
+      const ticketNumber = ticket.TICKETNUMBER || ticket.ticketnumber || ticket.id;
+      const technicianId = ticket.assigned_technician || ticket.technician_id;
+      
+      if (!technicianId) {
+        console.log(`No assigned technician found for ticket ${ticketNumber}`);
+        return;
+      }
+
+      // Find technician email from available technicians
+      const technician = availableTechnicians.find(tech => tech.id === technicianId);
+      const technicianEmail = technician?.email;
+
+      if (!technicianEmail) {
+        console.log(`No email found for technician ${technicianId}`);
+        return;
+      }
+
+      // Prepare reminder data
+      const reminderData = {
+        ticket_number: ticketNumber,
+        ticket_title: ticket.title || ticket.TITLE,
+        due_date: ticket.due_date || ticket.DUEDATETIME || ticket.duedatetime,
+        technician_email: technicianEmail,
+        technician_name: technician?.name || technicianId,
+        customer_name: ticket.requester_name || ticket.user_email || 'Unknown',
+        priority: ticket.priority || ticket.PRIORITY || 'Unknown'
+      };
+
+      // Call backend API to send reminder email
+      const response = await fetch('/api/tickets/send-reminder', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(reminderData)
+      });
+
+      if (response.ok) {
+        console.log(`Reminder sent successfully for ticket ${ticketNumber} to ${technicianEmail}`);
+        setToastMessage({
+          title: "Reminder Sent! 📧",
+          description: `Due date reminder sent to ${technician?.name || technicianId} for ticket ${ticketNumber}`,
+        });
+      } else {
+        console.error(`Failed to send reminder for ticket ${ticketNumber}`);
+      }
+    } catch (error) {
+      console.error('Failed to send due date reminder:', error);
+    }
+  };
+
   useEffect(() => {
     loadUrgentTickets();
     loadTechnicians();
-  }, []);
+    
+    // Check for overdue tickets every 5 minutes (300000 ms)
+    const overdueCheckInterval = setInterval(checkOverdueTickets, 5 * 60 * 1000);
+    
+    // Check for due date reminders every hour (3600000 ms)
+    const reminderCheckInterval = setInterval(checkDueDateReminders, 60 * 60 * 1000);
+    
+    return () => {
+      clearInterval(overdueCheckInterval);
+      clearInterval(reminderCheckInterval);
+    };
+  }, []); // Empty dependency array to run only once on mount
 
   const handleTakeTicket = async (ticket) => {
     try {
@@ -199,6 +330,16 @@ const UrgentTickets = () => {
     if (diffHours < 24) return `${diffHours} hours ago`;
     const diffDays = Math.floor(diffHours / 24);
     return diffDays === 1 ? '1 day ago' : `${diffDays} days ago`;
+  };
+
+  // Helper function to check if ticket is overdue
+  const isTicketOverdue = (ticket) => {
+    const dueDateStr = ticket.due_date || ticket.DUEDATETIME || ticket.duedatetime;
+    if (!dueDateStr) return false;
+    
+    const now = new Date();
+    const dueDate = new Date(dueDateStr);
+    return dueDate < now && ticket.status !== 'Closed' && ticket.status !== 'Resolved';
   };
 
   return (
@@ -325,6 +466,23 @@ const UrgentTickets = () => {
                         </div>
                       </div>
 
+                      {/* Due Date and Overdue Indicator */}
+                      {(ticket.due_date || ticket.DUEDATETIME || ticket.duedatetime) && (
+                        <div className="flex items-center justify-between text-sm">
+                          <div>
+                            <p className="font-medium">Due Date:</p>
+                            <p className="text-gray-600">
+                              {new Date(ticket.due_date || ticket.DUEDATETIME || ticket.duedatetime).toLocaleDateString()}
+                            </p>
+                          </div>
+                          {isTicketOverdue(ticket) && (
+                            <div className="bg-red-100 text-red-800 px-2 py-1 rounded-full text-xs font-medium animate-pulse">
+                              ⚠️ OVERDUE
+                            </div>
+                          )}
+                        </div>
+                      )}
+
                       <div>
                         <div className="flex justify-between text-sm mb-1">
                           <span>Priority Level</span>
@@ -339,33 +497,15 @@ const UrgentTickets = () => {
                       </div>
 
                     <div className="flex gap-2">
+                      
                       <button
-                        className="flex-1 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center justify-center"
-                        onClick={() => handleTakeTicket(ticket)}
-                      >
-                        <Zap className="h-4 w-4 mr-1" />
-                        Take Ticket
-                      </button>
-                      <button
-                        className="border border-gray-300 hover:bg-gray-100 px-4 py-2 rounded-lg text-sm font-medium"
+                        className="border w-full border-gray-300 hover:bg-gray-100 px-4 py-2 rounded-lg text-sm font-medium"
                         onClick={() => handleEscalate(ticket)}
                       >
                         ⬆️ Escalate
                       </button>
                     </div>
-
                     <div className="flex gap-2">
-                      <button
-                        className="flex-1 border border-gray-300 hover:bg-gray-100 px-4 py-2 rounded-lg text-sm font-medium flex items-center justify-center"
-                        onClick={() => handleEmergencyContact(ticket.customerPhone)}
-                      >
-                        <Phone className="h-4 w-4 mr-1" />
-                        Call
-                      </button>
-                      <button className="flex-1 border border-gray-300 hover:bg-gray-100 px-4 py-2 rounded-lg text-sm font-medium flex items-center justify-center">
-                        <Mail className="h-4 w-4 mr-1" />
-                        Email
-                      </button>
                     </div>
                   </div>
                 </div>

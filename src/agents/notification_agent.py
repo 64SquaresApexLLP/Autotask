@@ -325,6 +325,20 @@ INSTRUCTIONS: Generate a resolution email that:
 3. Provides any necessary follow-up instructions
 4. Requests feedback and satisfaction rating
 5. Uses a positive and helpful tone
+""",
+            'due_date_reminder': f"""
+INSTRUCTIONS: Generate a due date reminder email that:
+1. Clearly alerts the technician that a ticket is due TOMORROW
+2. Creates urgency without being alarmist
+3. MUST include ALL metadata fields in a structured format:
+   - Ticket Number, Title, Customer Name, Due Date, Priority
+   - Current Status, Assigned Technician
+4. Emphasizes the approaching deadline and importance of timely resolution
+5. Provides clear action items and next steps
+6. Uses a professional but urgent tone
+7. Includes escalation procedures if needed
+8. Format metadata in a clear, professional table or structured layout
+9. Highlight the urgency and importance of meeting the deadline
 """
         }
 
@@ -673,6 +687,17 @@ TeamLogicIT Support System
         ticket_data['resolution_summary'] = resolution_summary
         email_content = self.generate_email_notification('resolution', ticket_data, recipient_type)
         return self.send_email(recipient_email, email_content)
+
+    def send_due_date_reminder(self, recipient_email: str, ticket_data: Dict, ticket_number: str,
+                             recipient_type: str = "technician") -> bool:
+        """Send due date reminder to assigned technician."""
+        try:
+            ticket_data['ticket_number'] = ticket_number
+            email_content = self.generate_email_notification('due_date_reminder', ticket_data, recipient_type)
+            return self.send_email(recipient_email, email_content)
+        except Exception as e:
+            logger.error(f"Failed to send due date reminder: {e}")
+            return False
 
     def send_email_processing_summary(self, processed_tickets: list, recipient_email: str = None) -> bool:
         """

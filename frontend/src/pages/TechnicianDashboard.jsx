@@ -22,7 +22,8 @@ const TechnicianDashboard = () => {
   const [dashboardData, setDashboardData] = useState({
     myTickets: [],
     allTickets: [],
-    statistics: null
+    statistics: null,
+    technicians: []
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -38,10 +39,11 @@ const TechnicianDashboard = () => {
       setLoading(true);
       setError('');
 
-      // Load all tickets and filter for current technician
-      const [allTickets, statistics] = await Promise.all([
+      // Load all tickets, statistics, and technicians
+      const [allTickets, statistics, technicians] = await Promise.all([
         ticketService.getAllTickets(),
-        ticketService.getTicketStatistics().catch(() => null) // Statistics might not be available
+        ticketService.getTicketStatistics().catch(() => null), // Statistics might not be available
+        technicianService.getAllTechnicians().catch(() => []) // Get all technicians
       ]);
 
       // Filter tickets assigned to current technician using real IDs
@@ -57,7 +59,8 @@ const TechnicianDashboard = () => {
       setDashboardData({
         myTickets,
         allTickets,
-        statistics
+        statistics,
+        technicians
       });
     } catch (error) {
       console.error('Failed to load dashboard data:', error);
@@ -236,67 +239,44 @@ const TechnicianDashboard = () => {
                 </div>
                 <p className="text-gray-600 mb-6">Current workload across the team</p>
 
-                <div className="space-y-4">
-                  {/* Real technician data from Snowflake */}
-                  <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
-                    <div className="flex items-center space-x-3">
-                      <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-                      <div>
-                        <div className="font-semibold text-gray-800">T001</div>
-                        <div className="flex space-x-2 text-xs">
-                          <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded">Technician</span>
+                <div className="space-y-4 max-h-64 overflow-y-auto pr-2">
+                  {/* Dynamic technician data from Snowflake */}
+                  {dashboardData.technicians
+                    .filter(tech => tech.current_workload > 0) // Only show technicians with assigned tickets
+                    .map((tech, index) => {
+                      const colors = [
+                        { bg: 'bg-green-50', dot: 'bg-green-500', tag: 'bg-blue-100 text-blue-800' },
+                        { bg: 'bg-yellow-50', dot: 'bg-yellow-500', tag: 'bg-green-100 text-green-800' },
+                        { bg: 'bg-blue-50', dot: 'bg-blue-500', tag: 'bg-purple-100 text-purple-800' },
+                        { bg: 'bg-purple-50', dot: 'bg-purple-500', tag: 'bg-indigo-100 text-indigo-800' },
+                        { bg: 'bg-pink-50', dot: 'bg-pink-500', tag: 'bg-red-100 text-red-800' },
+                        { bg: 'bg-indigo-50', dot: 'bg-indigo-500', tag: 'bg-blue-100 text-blue-800' }
+                      ];
+                      const colorScheme = colors[index % colors.length];
+                      
+                      return (
+                        <div key={tech.id} className={`flex items-center justify-between p-3 ${colorScheme.bg} rounded-lg`}>
+                          <div className="flex items-center space-x-3">
+                            <div className={`w-3 h-3 ${colorScheme.dot} rounded-full`}></div>
+                            <div>
+                              <div className="font-semibold text-gray-800">{tech.id}</div>
+                              <div className="flex space-x-2 text-xs">
+                                <span className={`${colorScheme.tag} px-2 py-1 rounded`}>{tech.role || 'Technician'}</span>
+                              </div>
+                            </div>
+                          </div>
+                          <span className="text-sm font-medium text-gray-600">
+                            {tech.current_workload} tickets
+                          </span>
                         </div>
-                      </div>
+                      );
+                    })}
+                  
+                  {dashboardData.technicians.filter(tech => tech.current_workload > 0).length === 0 && (
+                    <div className="text-center py-4 text-gray-500">
+                      No technicians with assigned tickets
                     </div>
-                    <span className="text-sm font-medium text-gray-600">
-                      {dashboardData.allTickets.filter(t => t.assigned_technician === 'T001').length} tickets
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between p-3 bg-yellow-50 rounded-lg">
-                    <div className="flex items-center space-x-3">
-                      <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
-                      <div>
-                        <div className="font-semibold text-gray-800">T103</div>
-                        <div className="flex space-x-2 text-xs">
-                          <span className="bg-green-100 text-green-800 px-2 py-1 rounded">Technician</span>
-                        </div>
-                      </div>
-                    </div>
-                    <span className="text-sm font-medium text-gray-600">
-                      {dashboardData.allTickets.filter(t => t.assigned_technician === 'T103').length} tickets
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
-                    <div className="flex items-center space-x-3">
-                      <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
-                      <div>
-                        <div className="font-semibold text-gray-800">T104</div>
-                        <div className="flex space-x-2 text-xs">
-                          <span className="bg-purple-100 text-purple-800 px-2 py-1 rounded">Technician</span>
-                        </div>
-                      </div>
-                    </div>
-                    <span className="text-sm font-medium text-gray-600">
-                      {dashboardData.allTickets.filter(t => t.assigned_technician === 'T104').length} tickets
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between p-3 bg-purple-50 rounded-lg">
-                    <div className="flex items-center space-x-3">
-                      <div className="w-3 h-3 bg-purple-500 rounded-full"></div>
-                      <div>
-                        <div className="font-semibold text-gray-800">T106</div>
-                        <div className="flex space-x-2 text-xs">
-                          <span className="bg-indigo-100 text-indigo-800 px-2 py-1 rounded">Technician</span>
-                        </div>
-                      </div>
-                    </div>
-                    <span className="text-sm font-medium text-gray-600">
-                      {dashboardData.allTickets.filter(t => t.assigned_technician === 'T106').length} tickets
-                    </span>
-                  </div>
+                  )}
                 </div>
               </div>
             </div>

@@ -322,11 +322,8 @@ class PageControllers:
 
                                 if processed_ticket:
                                     ticket_number = processed_ticket.get('ticket_number', 'N/A')
-                                    # Insert into Snowflake DB
-                                    try:
-                                        ticket_db.insert_ticket(processed_ticket)
-                                    except Exception as e:
-                                        st.error(f"Failed to insert ticket into database: {e}")
+                                    # Note: Database insertion is handled by the main /tickets endpoint
+                                    # This prevents duplicate ticket creation
                                     st.success(f"✅ Ticket #{ticket_number} processed, classified, and resolution generated successfully!")
                                     if user_email and user_email.strip():
                                         st.info(f"📧 A confirmation email with resolution steps has been sent to {user_email}")

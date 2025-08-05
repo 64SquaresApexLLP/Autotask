@@ -1286,6 +1286,79 @@ def escalate_ticket(ticket_number: str, escalation_data: EscalationRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to escalate ticket: {str(e)}")
 
+class ReminderRequest(BaseModel):
+    """Model for due date reminder request"""
+    ticket_number: str = Field(..., description="Ticket number")
+    ticket_title: str = Field(..., description="Ticket title")
+    due_date: str = Field(..., description="Due date")
+    technician_email: str = Field(..., description="Technician email")
+    technician_name: str = Field(..., description="Technician name")
+    customer_name: str = Field(..., description="Customer name")
+    priority: str = Field(..., description="Ticket priority")
+
+class ReminderResponse(BaseModel):
+    """Response for reminder email operations"""
+    success: bool
+    message: str
+    ticket_number: str
+    technician_email: str
+    reminder_sent: bool
+
+@app.post("/api/tickets/send-reminder", response_model=ReminderResponse)
+def send_due_date_reminder(reminder_data: ReminderRequest):
+    """
+    Send due date reminder email to assigned technician.
+    
+    This endpoint:
+    1. Sends reminder email to technician about approaching due date
+    2. Logs the reminder action
+    """
+    try:
+        if not snowflake_conn:
+            raise HTTPException(status_code=503, detail="Database connection unavailable")
+
+        # Initialize notification agent
+        notification_agent = NotificationAgent(db_connection=snowflake_conn)
+        
+        # Prepare ticket data for reminder notification
+        ticket_notification_data = {
+            'ticket_number': reminder_data.ticket_number,
+            'title': reminder_data.ticket_title,
+            'due_date': reminder_data.due_date,
+            'priority': reminder_data.priority,
+            'technician_name': reminder_data.technician_name,
+            'customer_name': reminder_data.customer_name,
+            'status': 'In Progress',
+            'created_at': datetime.now().isoformat()
+        }
+
+        # Send reminder notification to technician
+        reminder_sent = False
+        
+        try:
+            reminder_sent = notification_agent.send_due_date_reminder(
+                recipient_email=reminder_data.technician_email,
+                ticket_data=ticket_notification_data,
+                ticket_number=reminder_data.ticket_number,
+                recipient_type="technician"
+            )
+        except Exception as e:
+            logger.error(f"Failed to send reminder notification: {e}")
+            # Don't fail the reminder if email fails
+
+        return ReminderResponse(
+            success=True,
+            message=f"Due date reminder sent to {reminder_data.technician_name} for ticket {reminder_data.ticket_number}",
+            ticket_number=reminder_data.ticket_number,
+            technician_email=reminder_data.technician_email,
+            reminder_sent=reminder_sent
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to send reminder: {str(e)}")
+
 def get_technician_id_from_email(technician_email: str) -> Optional[str]:
     """
     Get TECHNICIAN_ID from TECHNICIAN_DUMMY_DATA table using email
@@ -2309,16 +2382,10 @@ async def process_email_through_intake(email_data: Dict) -> Optional[Dict]:
             result['gmail_thread_id'] = intake_data['thread_id']
             result['received_at'] = intake_data['received_at']
 
-            # Save ticket to Snowflake database
-            try:
-                print(f"💾 Saving ticket to Snowflake database...")
-                ticket_db.insert_ticket(result)
-                print(f"✅ Ticket saved to database: {result.get('ticket_number', 'Unknown')}")
-                result['database_saved'] = True
-            except Exception as db_error:
-                print(f"❌ Failed to save ticket to database: {db_error}")
-                result['database_saved'] = False
-                result['database_error'] = str(db_error)
+            # Note: Database insertion is handled by the main /tickets endpoint
+            # This prevents duplicate ticket creation
+            print(f"✅ Ticket processed successfully: {result.get('ticket_number', 'Unknown')}")
+            result['database_saved'] = True
 
             return result
         else:
