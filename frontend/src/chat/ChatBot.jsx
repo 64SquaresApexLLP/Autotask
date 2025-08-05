@@ -232,7 +232,7 @@ const ChatBot = ({ onClose }) => {
         </div>
         <button
           onClick={onClose}
-          className="text-white hover:bg-white hover:bg-opacity-20 p-1 rounded"
+          className="text-white hover:bg-[#88defb] hover:bg-opacity-20 p-1 rounded"
         >
           <X className="h-5 w-5" />
         </button>

@@ -3,7 +3,7 @@ import Header from "../../components/Header";
 import Sidebar from "../../components/Sidebar";
 import ChatButton from "../../components/ChatButton";
 import { FiSearch, FiUser , FiChevronDown, FiFilter, FiEye } from "react-icons/fi";
-import { IoReload, IoTimeOutline } from "react-icons/io5";
+import { IoTimeOutline } from "react-icons/io5";
 import useAuth from "../../hooks/useAuth";
 import { ticketService } from "../../services/ticketService";
 import { Loader2 } from "lucide-react";
@@ -34,13 +34,8 @@ const MyTickets = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [priorityFilter, setPriorityFilter] = useState("all");
-  const [selectedTicket, setSelectedTicket] = useState(null);
-  const [newWorkNote, setNewWorkNote] = useState("");
-  const [newStatus, setNewStatus] = useState("");
   const [showFilters, setShowFilters] = useState(false);
-  const [timeSpent, setTimeSpent] = useState("");
-
-
+  
   const navigate = useNavigate();
 
   // Real data state
@@ -91,42 +86,15 @@ const MyTickets = () => {
     return matchesSearch && matchesStatus && matchesPriority;
   });
 
-  const handleUpdateTicket = () => {
-    if (!selectedTicket) return;
-    alert(`Ticket ${selectedTicket.id} updated successfully!`);
-    setSelectedTicket(null);
-    setNewWorkNote("");
-    setNewStatus("");
-    setTimeSpent("");
-  };
-
-  const handleSendEmail = () => {
-    if (!selectedTicket) return;
-    const customerName = selectedTicket.requester_name || 'Customer';
-    const customerEmail = selectedTicket.user_email || 'No email available';
-    alert(`Email sent to ${customerName} at ${customerEmail}`);
-  };
-
-  const getSLAStatus = (deadline) => {
-    const now = new Date();
-    const slaDate = new Date(deadline);
-    const hoursRemaining = (slaDate.getTime() - now.getTime()) / (1000 * 60 * 60);
-
-    if (hoursRemaining < 0) {
-      return <span className="bg-red-100 text-red-800 px-2 py-1 rounded-full text-xs font-medium">⚠️ Overdue</span>;
-    } else if (hoursRemaining < 2) {
-      return <span className="bg-orange-100 text-orange-800 px-2 py-1 rounded-full text-xs font-medium">⏰ Due Soon</span>;
-    } else {
-      return <span className="bg-gray-100 text-gray-800 px-2 py-1 rounded-full text-xs font-medium">✅ On Track</span>;
-    }
-  };
+  
+  
 
   return (
     <div className="flex min-h-screen bg-gray-50">
       <Sidebar />
       <div className="flex-1 flex flex-col overflow-y-auto max-h-screen">
         <Header />
-        <main className="p-6 md:p-8 flex-1 overflow-y-auto">
+        <main className=" p-6 md:p-8 flex-1 overflow-y-auto">
           <div className="max-w-6xl mx-auto space-y-6">
             {/* Header Section */}
             <div className="flex items-center justify-between">
@@ -330,180 +298,7 @@ const MyTickets = () => {
         </main>
       </div>
       <ChatButton />
-
-      {/* Ticket Detail Modal */}
-      {selectedTicket && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-            <div className="p-6 space-y-6">
-              <div className="flex justify-between items-start">
-                <div>
-                  <h2 className="text-2xl font-bold text-gray-800">
-                    🎫 {selectedTicket.id} - {selectedTicket.title}
-                  </h2>
-                  <p className="text-gray-600">{selectedTicket.ticket_category || 'General'} • {selectedTicket.ticket_type || 'Support'}</p>
-                </div>
-                <button 
-                  onClick={() => setSelectedTicket(null)}
-                  className="text-gray-500 hover:text-gray-700"
-                >
-                  ✕
-                </button>
-              </div>
-
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Left Column - Ticket Details */}
-                <div className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-                      <span className={`px-2 py-1 rounded-full text-sm font-medium ${statusColors[selectedTicket.status?.toLowerCase()] || 'bg-gray-100 text-gray-800'}`}>
-                        {selectedTicket.status || 'Unknown'}
-                      </span>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Priority</label>
-                      <span className={`px-2 py-1 rounded-full text-sm font-medium ${priorityColors[selectedTicket.priority?.toLowerCase()] || 'bg-gray-100 text-gray-800'}`}>
-                        {selectedTicket.priority?.toUpperCase() || 'UNKNOWN'}
-                      </span>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Customer</label>
-                      <p className="text-sm">{selectedTicket.requester_name || 'Unknown'}</p>
-                      <p className="text-xs text-gray-500">{selectedTicket.user_email || 'No email'}</p>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Due Date</label>
-                      <p className="text-sm">{selectedTicket.due_date || 'Not set'}</p>
-                      <div className="mt-1">
-                        <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs font-medium">
-                          ✅ On Track
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-                    <p className="text-sm text-gray-600 p-3 bg-gray-50 rounded">
-                      {selectedTicket.description || 'No description provided'}
-                    </p>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Ticket Details</label>
-                    <div className="space-y-3 max-h-60 overflow-y-auto">
-                      <div className="border-l-2 border-blue-200 pl-4 pb-2">
-                        <div className="flex items-center gap-2 text-xs text-gray-500">
-                          <span>Created: {selectedTicket.created_at ? new Date(selectedTicket.created_at).toLocaleDateString() : 'Unknown'}</span>
-                        </div>
-                        <p className="text-sm mt-1">Ticket created and assigned to technician</p>
-                      </div>
-
-                      {selectedTicket.resolution && (
-                        <div className="border-l-2 border-green-200 pl-4 pb-2">
-                          <div className="flex items-center gap-2 text-xs text-gray-500">
-                            <span>Resolution</span>
-                          </div>
-                          <p className="text-sm mt-1">{selectedTicket.resolution}</p>
-                        </div>
-                      )}
-
-                      {!selectedTicket.resolution && (
-                        <p className="text-sm text-gray-500 italic">No resolution notes yet</p>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Right Column - Update Form */}
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Update Status</label>
-                    <select
-                      value={newStatus}
-                      onChange={(e) => setNewStatus(e.target.value)}
-                      className="w-full border border-gray-300 rounded-lg p-2 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                    >
-                      <option value="">Select new status</option>
-                      <option value="open">Open</option>
-                      <option value="in-progress">In Progress</option>
-                      <option value="resolved">Resolved</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Time Spent (this session)</label>
-                    <input
-                      type="text"
-                      placeholder="e.g., 30 minutes, 1.5 hours"
-                      value={timeSpent}
-                      onChange={(e) => setTimeSpent(e.target.value)}
-                      className="w-full border border-gray-300 rounded-lg p-2 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Add Work Note</label>
-                    <textarea
-                      placeholder="Describe the work performed, findings, or next steps..."
-                      rows={4}
-                      value={newWorkNote}
-                      onChange={(e) => setNewWorkNote(e.target.value)}
-                      className="w-full border border-gray-300 rounded-lg p-2 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                    />
-                  </div>
-
-                  <div className="flex gap-2">
-                    <button
-                      onClick={handleUpdateTicket}
-                      className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-lg font-medium flex items-center justify-center"
-                    >
-                      Save Update
-                    </button>
-                    <button
-                      onClick={handleSendEmail}
-                      className="flex-1 border border-gray-300 hover:bg-gray-50 py-2 px-4 rounded-lg font-medium flex items-center justify-center"
-                    >
-                      Email Customer
-                    </button>
-                  </div>
-
-                  <div className="p-4 bg-blue-50 rounded-lg">
-                    <h4 className="font-medium text-blue-900 mb-2">📧 Email Templates</h4>
-                    <div className="space-y-2">
-                      <button className="w-full text-left text-xs border border-blue-200 bg-white hover:bg-blue-100 p-2 rounded">
-                        "Working on your issue..."
-                      </button>
-                      <button className="w-full text-left text-xs border border-blue-200 bg-white hover:bg-blue-100 p-2 rounded">
-                        "Need additional information..."
-                      </button>
-                      <button className="w-full text-left text-xs border border-blue-200 bg-white hover:bg-blue-100 p-2 rounded">
-                        "Issue resolved, please test..."
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="p-4 bg-green-50 rounded-lg">
-                    <h4 className="font-medium text-green-900 mb-2">✅ Quick Actions</h4>
-                    <div className="space-y-2">
-                      <button className="w-full text-left text-xs border border-green-200 bg-white hover:bg-green-100 p-2 rounded">
-                        Mark as Resolved
-                      </button>
-                      <button className="w-full text-left text-xs border border-green-200 bg-white hover:bg-green-100 p-2 rounded">
-                        Escalate to Senior Tech
-                      </button>
-                      <button className="w-full text-left text-xs border border-green-200 bg-white hover:bg-green-100 p-2 rounded">
-                        Schedule Follow-up
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      
     </div>
   );
 };
