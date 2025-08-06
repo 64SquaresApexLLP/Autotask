@@ -2317,20 +2317,6 @@ def get_email_processing_status():
         raise HTTPException(status_code=500, detail=f"Failed to get email processing status: {str(e)}")
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 # ==================== GMAIL REAL-TIME INTEGRATION ====================
 
 # Gmail Pub/Sub webhook removed - using direct IMAP integration instead
@@ -2396,6 +2382,25 @@ async def process_email_through_intake(email_data: Dict) -> Optional[Dict]:
         return None
 
 
+@app.get("/webhooks/gmail/test")
+async def test_gmail_webhook():
+    """Test endpoint to verify webhook is working"""
+    return {
+        "status": "success",
+        "message": "Gmail webhook endpoint is accessible",
+        "endpoint": "/webhooks/gmail/simple",
+        "method": "POST",
+        "expected_content_type": "application/json",
+        "sample_payload": {
+            "subject": "Test Email",
+            "from_email": "test@example.com",
+            "from_name": "Test User",
+            "body": "This is a test email body",
+            "received_at": "2025-01-01T12:00:00",
+            "source": "gmail_imap_direct"
+        }
+    }
+
 @app.get("/gmail/status")
 async def get_gmail_status():
     """Get Gmail integration status"""
@@ -2416,6 +2421,23 @@ async def get_gmail_status():
 
 # Gmail OAuth endpoints removed - using direct IMAP integration instead
 
+@app.get("/webhooks/gmail/simple")
+async def gmail_webhook_info():
+    """GET endpoint for Gmail webhook - provides usage information"""
+    return {
+        "message": "Gmail Webhook Endpoint",
+        "method": "POST",
+        "description": "This endpoint receives email data from Gmail IMAP monitoring service",
+        "usage": {
+            "url": "/webhooks/gmail/simple",
+            "method": "POST",
+            "content_type": "application/json",
+            "required_fields": ["subject", "from_email", "from_name", "body", "received_at", "source"],
+            "optional_fields": ["to_email", "message_id", "thread_id", "imap_uid"]
+        },
+        "test_endpoint": "/webhooks/gmail/test",
+        "status_endpoint": "/gmail/status"
+    }
 
 @app.post("/webhooks/gmail/simple")
 async def simple_gmail_webhook(request: Request):
@@ -2426,11 +2448,57 @@ async def simple_gmail_webhook(request: Request):
     try:
         # Get the email data
         body = await request.body()
-        email_data = json.loads(body.decode('utf-8'))
+        
+        # Debug logging
+        print(f"\n📧 Gmail webhook received request:")
+        print(f"   Content-Type: {request.headers.get('content-type', 'Not specified')}")
+        print(f"   Body length: {len(body)} bytes")
+        print(f"   Raw body: {body[:200]}...")  # First 200 bytes for debugging
+        
+        # Handle empty body
+        if not body:
+            print("⚠️ Empty request body received")
+            return {
+                "status": "error", 
+                "message": "Empty request body - no email data provided"
+            }
+        
+        # Parse JSON with better error handling
+        try:
+            body_str = body.decode('utf-8')
+            if not body_str.strip():
+                print("⚠️ Empty JSON string received")
+                return {
+                    "status": "error", 
+                    "message": "Empty JSON string - no email data provided"
+                }
+            email_data = json.loads(body_str)
+        except json.JSONDecodeError as e:
+            print(f"❌ JSON parsing error: {e}")
+            print(f"   Raw body string: '{body.decode('utf-8', errors='replace')}'")
+            return {
+                "status": "error", 
+                "message": f"Invalid JSON format: {str(e)}"
+            }
+        except UnicodeDecodeError as e:
+            print(f"❌ Unicode decoding error: {e}")
+            return {
+                "status": "error", 
+                "message": f"Invalid encoding: {str(e)}"
+            }
+        
+        # Validate email data structure
+        if not isinstance(email_data, dict):
+            print(f"❌ Invalid email data type: {type(email_data)}")
+            return {
+                "status": "error", 
+                "message": f"Expected JSON object, got {type(email_data).__name__}"
+            }
 
-        print(f"\n📧 Simple Gmail webhook received:")
+        print(f"✅ Valid email data received:")
         print(f"   Subject: {email_data.get('subject', 'No subject')}")
         print(f"   From: {email_data.get('from_email', 'Unknown sender')}")
+        print(f"   Keys: {list(email_data.keys())}")
 
         # Check if intake agent is available
         if not intake_agent:
