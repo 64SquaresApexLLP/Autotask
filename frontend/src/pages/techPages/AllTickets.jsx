@@ -29,7 +29,8 @@ const AllTickets = () => {
     try {
       setLoading(true);
       setError('');
-      const allTickets = await ticketService.getAllTickets();
+      // Use the new method that includes both active and closed tickets
+      const allTickets = await ticketService.getAllTicketsIncludingClosed();
       setTickets(allTickets || []);
     } catch (error) {
       console.error('Failed to load tickets:', error);
@@ -45,13 +46,7 @@ const AllTickets = () => {
       setTechnicians(techList || []);
     } catch (error) {
       console.error('Failed to load technicians:', error);
-      // Use fallback technicians with real IDs if API fails
-      setTechnicians([
-        { id: 'T001', name: 'Technician T001', username: 'T001' },
-        { id: 'T103', name: 'Technician T103', username: 'T103' },
-        { id: 'T104', name: 'Technician T104', username: 'T104' },
-        { id: 'T106', name: 'Technician T106', username: 'T106' }
-      ]);
+      setTechnicians([]);
     }
   };
 
@@ -95,6 +90,7 @@ const AllTickets = () => {
     switch (status?.toLowerCase()) {
       case 'completed':
       case 'resolved':
+      case 'closed':
         return <CheckCircle className="w-5 h-5 text-green-600" />;
       case 'in_progress':
       case 'progress':
@@ -174,7 +170,13 @@ const AllTickets = () => {
               <div className="bg-white rounded-lg shadow p-4">
                 <p className="text-sm text-gray-500">Open / Progress</p>
                 <p className="text-2xl font-bold text-blue-600">
-                  {loading ? <Loader2 className="w-6 h-6 animate-spin" /> : tickets.filter(t => ['open', 'progress', 'in_progress'].includes(t.status?.toLowerCase())).length}
+                  {loading ? <Loader2 className="w-6 h-6 animate-spin" /> : tickets.filter(t => ['open', 'progress', 'in_progress', 'assigned'].includes(t.status?.toLowerCase())).length}
+                </p>
+              </div>
+              <div className="bg-white rounded-lg shadow p-4">
+                <p className="text-sm text-gray-500">Resolved / Closed</p>
+                <p className="text-2xl font-bold text-green-600">
+                  {loading ? <Loader2 className="w-6 h-6 animate-spin" /> : tickets.filter(t => ['resolved', 'completed', 'closed'].includes(t.status?.toLowerCase())).length}
                 </p>
               </div>
             </div>
@@ -199,6 +201,7 @@ const AllTickets = () => {
                   <option value="in_progress">In Progress</option>
                   <option value="assigned">Assigned</option>
                   <option value="resolved">Resolved</option>
+                  <option value="closed">Closed</option>
                   <option value="completed">Completed</option>
                 </select>
                 <select value={priorityFilter} onChange={e => setPriorityFilter(e.target.value)} className="px-3 py-2 border rounded w-full">
@@ -323,6 +326,7 @@ const AllTickets = () => {
                               <option value="in_progress">In Progress</option>
                               <option value="assigned">Assigned</option>
                               <option value="resolved">Resolved</option>
+                              <option value="closed">Closed</option>
                               <option value="completed">Completed</option>
                             </select>
                           </div>

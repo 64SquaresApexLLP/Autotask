@@ -49,12 +49,12 @@ const MyTickets = () => {
       setLoading(true);
       setError("");
 
-      // Get all tickets and filter for current technician
-      const allTickets = await ticketService.getAllTickets({ limit: 100 });
+      // Get all tickets including closed ones and filter for current technician
+      const allTickets = await ticketService.getAllTicketsIncludingClosed({ limit: 100 });
       const myTickets = allTickets.filter(ticket => {
         const assignedTech = ticket.assigned_technician;
         const technicianId = ticket.technician_id;
-        const currentUserId = user?.username; 
+        const currentUserId = user?.username;
 
         return assignedTech === currentUserId || technicianId === currentUserId;
       });
@@ -177,6 +177,12 @@ const MyTickets = () => {
                         className={`px-3 py-1 rounded-full text-sm ${statusFilter === "resolved" ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-800"}`}
                       >
                         Resolved
+                      </button>
+                      <button
+                        onClick={() => setStatusFilter("closed")}
+                        className={`px-3 py-1 rounded-full text-sm ${statusFilter === "closed" ? "bg-gray-100 text-gray-800" : "bg-gray-100 text-gray-800"}`}
+                      >
+                        Closed
                       </button>
                     </div>
                   </div>

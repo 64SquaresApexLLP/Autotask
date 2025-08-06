@@ -24,8 +24,8 @@ const TrackStatus = () => {
       setLoading(true);
       setError('');
 
-      // Load all tickets and filter on frontend
-      const allTickets = await ticketService.getAllTickets({ limit: 100 });
+      // Load all tickets including closed ones and filter on frontend
+      const allTickets = await ticketService.getAllTicketsIncludingClosed({ limit: 100 });
 
       // Filter tickets for current user using real user ID from USER_DUMMY_DATA
       const userId = user?.username; // This will be U001 or U002
@@ -60,6 +60,7 @@ const TrackStatus = () => {
     switch (status?.toLowerCase()) {
       case 'completed':
       case 'resolved':
+      case 'closed':
         return <CheckCircle className="w-5 h-5 text-green-600" />;
       case 'in_progress':
       case 'progress':
@@ -89,6 +90,7 @@ const TrackStatus = () => {
     switch (status?.toLowerCase()) {
       case 'completed':
       case 'resolved':
+      case 'closed':
         return 'bg-green-100 text-green-800 border-green-200';
       case 'in_progress':
       case 'progress':
@@ -147,6 +149,7 @@ const TrackStatus = () => {
                     <option value="in_progress">In Progress</option>
                     <option value="assigned">Assigned</option>
                     <option value="resolved">Resolved</option>
+                    <option value="closed">Closed</option>
                     <option value="completed">Completed</option>
                   </select>
                 </div>

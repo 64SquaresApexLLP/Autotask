@@ -35,9 +35,8 @@ const UserDashboard = () => {
       setLoading(true);
       setError('');
 
-      // For demo purposes, let's load all tickets and filter on frontend
-      // In production, you'd want to filter by user email on backend
-      const allTickets = await ticketService.getAllTickets({ limit: 100 });
+      // Load all tickets including closed ones and filter on frontend
+      const allTickets = await ticketService.getAllTicketsIncludingClosed({ limit: 100 });
 
       // Filter tickets for current user using real user ID from USER_DUMMY_DATA
       const userId = user?.username; // This will be U001 or U002

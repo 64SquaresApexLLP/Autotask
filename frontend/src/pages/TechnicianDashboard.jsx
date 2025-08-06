@@ -39,9 +39,9 @@ const TechnicianDashboard = () => {
       setLoading(true);
       setError('');
 
-      // Load all tickets, statistics, and technicians
+      // Load all tickets including closed ones, statistics, and technicians
       const [allTickets, statistics, technicians] = await Promise.all([
-        ticketService.getAllTickets(),
+        ticketService.getAllTicketsIncludingClosed(),
         ticketService.getTicketStatistics().catch(() => null), // Statistics might not be available
         technicianService.getAllTechnicians().catch(() => []) // Get all technicians
       ]);
@@ -77,7 +77,7 @@ const TechnicianDashboard = () => {
     return {
       myTotal: myTickets.length,
       myOpen: myTickets.filter(t => !['completed', 'resolved'].includes(t.status?.toLowerCase())).length,
-      myCompleted: myTickets.filter(t => ['completed', 'resolved'].includes(t.status?.toLowerCase())).length,
+      myCompleted: myTickets.filter(t => ['completed', 'resolved', 'closed'].includes(t.status?.toLowerCase())).length,
       myUrgent: myTickets.filter(t => ['high', 'critical'].includes(t.priority?.toLowerCase())).length,
       totalUnassigned: allTickets.filter(t => !t.assigned_technician).length,
       totalCritical: allTickets.filter(t => t.priority?.toLowerCase() === 'critical').length

@@ -4,7 +4,7 @@
  */
 
 // Get base URL from environment variables
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8001';
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
 // API endpoints
 export const API_ENDPOINTS = {
@@ -21,6 +21,7 @@ export const API_ENDPOINTS = {
     BASE: '/tickets',
     CREATE: '/tickets',
     GET_ALL: '/tickets',
+    GET_CLOSED: '/tickets/closed',
     GET_BY_ID: (id) => `/tickets/${id}`,
     UPDATE: (id) => `/tickets/${id}`,
     DELETE: (id) => `/tickets/${id}`,

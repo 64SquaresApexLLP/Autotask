@@ -4,24 +4,8 @@ import { useParams } from 'react-router-dom';
 import Sidebar from '../../components/Sidebar';
 import Header from '../../components/Header';
 import ChatButton from '../../components/ChatButton';
-
-const mockFetchTicketById = async (id) => {
-    // Replace with your real API or context logic
-    return {
-      id,
-      title: 'Network Issue in Office',
-      ticket_category: 'Networking',
-      ticket_type: 'Issue',
-      status: 'open',
-      priority: 'high',
-      requester_name: 'John Doe',
-      user_email: 'john@example.com',
-      due_date: '2025-08-10',
-      created_at: '2025-08-01T10:00:00Z',
-      description: 'Internet not working in the main office.',
-      resolution: '',
-    };
-  };
+import { ticketService } from '../../services/ticketService.js';
+import { Loader2 } from 'lucide-react';
   
   const statusColors = {
     open: 'bg-yellow-100 text-yellow-800',
@@ -49,19 +33,41 @@ function ViewTicket() {
   const [newStatus, setNewStatus] = useState('');
   const [timeSpent, setTimeSpent] = useState('');
   const [newWorkNote, setNewWorkNote] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     const fetchData = async () => {
-      const data = await mockFetchTicketById(tId);
-      setTicket(data);
+      try {
+        setLoading(true);
+        setError('');
+        const data = await ticketService.getTicketById(tId);
+        setTicket(data);
+        setNewStatus(data?.status || '');
+      } catch (error) {
+        console.error('Failed to load ticket:', error);
+        setError('Failed to load ticket details. Please try again.');
+      } finally {
+        setLoading(false);
+      }
     };
 
     fetchData();
   }, [tId]);
 
-  const handleUpdateTicket = () => {
-    // handle ticket update logic
-    console.log('Saving:', { newStatus, timeSpent, newWorkNote });
+  const handleUpdateTicket = async () => {
+    try {
+      setLoading(true);
+      await ticketService.updateTicketStatus(ticket.id, newStatus);
+      // Reload ticket data
+      const updatedTicket = await ticketService.getTicketById(tId);
+      setTicket(updatedTicket);
+    } catch (error) {
+      console.error('Failed to update ticket:', error);
+      setError('Failed to update ticket. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleSendEmail = () => {
@@ -69,7 +75,48 @@ function ViewTicket() {
     console.log('Sending email...');
   };
 
-  if (!ticket) return <div className="p-6">Loading...</div>;
+  if (loading) return (
+    <div className="flex min-h-screen bg-gray-50">
+      <Sidebar />
+      <div className="flex-1 flex flex-col overflow-y-auto max-h-screen">
+        <Header />
+        <main className="p-6 md:p-8 flex-1 overflow-y-auto">
+          <div className="flex items-center justify-center h-64">
+            <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+            <span className="ml-2 text-gray-600">Loading ticket details...</span>
+          </div>
+        </main>
+      </div>
+    </div>
+  );
+
+  if (error) return (
+    <div className="flex min-h-screen bg-gray-50">
+      <Sidebar />
+      <div className="flex-1 flex flex-col overflow-y-auto max-h-screen">
+        <Header />
+        <main className="p-6 md:p-8 flex-1 overflow-y-auto">
+          <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg">
+            {error}
+          </div>
+        </main>
+      </div>
+    </div>
+  );
+
+  if (!ticket) return (
+    <div className="flex min-h-screen bg-gray-50">
+      <Sidebar />
+      <div className="flex-1 flex flex-col overflow-y-auto max-h-screen">
+        <Header />
+        <main className="p-6 md:p-8 flex-1 overflow-y-auto">
+          <div className="text-center py-8">
+            <p className="text-gray-600">Ticket not found.</p>
+          </div>
+        </main>
+      </div>
+    </div>
+  );
     
 
 

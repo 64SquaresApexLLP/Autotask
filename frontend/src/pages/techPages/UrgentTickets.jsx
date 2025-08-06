@@ -73,13 +73,7 @@ const UrgentTickets = () => {
       setAvailableTechnicians(techsWithLoad);
     } catch (error) {
       console.error('Failed to load technicians:', error);
-      // Fallback to basic data if API fails
-      setAvailableTechnicians([
-        { id: "T001", name: "John Doe", skills: ["General Support"], status: "available", currentLoad: 0 },
-        { id: "T103", name: "Vidhi Dave", skills: ["IT Support"], status: "available", currentLoad: 0 },
-        { id: "T104", name: "Rohan Kulkarni", skills: ["Network Admin"], status: "available", currentLoad: 0 },
-        { id: "T106", name: "Madhavi Ghalme", skills: ["Cybersecurity"], status: "available", currentLoad: 0 },
-      ]);
+      setAvailableTechnicians([]);
     }
   };
 

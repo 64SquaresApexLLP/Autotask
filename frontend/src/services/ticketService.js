@@ -7,14 +7,9 @@ import apiService from './api.js';
 import { API_ENDPOINTS } from '../config/api.js';
 
 /**
- * Map technician IDs to display names (using real IDs from Snowflake)
+ * This will be populated dynamically from the backend
  */
-const TECHNICIAN_DISPLAY_MAP = {
-  'T001': 'Technician T001',
-  'T103': 'Technician T103',
-  'T104': 'Technician T104',
-  'T106': 'Technician T106'
-};
+let TECHNICIAN_DISPLAY_MAP = {};
 
 /**
  * Transform backend ticket data to frontend format
@@ -53,6 +48,57 @@ const transformTicketData = (ticket) => {
   };
 };
 
+/**
+ * Transform backend closed ticket data to frontend format
+ * Closed tickets have slightly different field names from the CLOSED_TICKETS table
+ */
+const transformClosedTicketData = (ticket) => {
+  if (!ticket) return null;
+
+  // Use real technician ID from Snowflake
+  const technicianId = ticket.technician_id || ticket.TECHNICIAN_ID;
+  const assignedTechnician = technicianId; // Use the real ID directly
+  const technicianDisplayName = technicianId ? (TECHNICIAN_DISPLAY_MAP[technicianId] || technicianId) : null;
+
+  return {
+    id: ticket.ticket_number || ticket.TICKETNUMBER,
+    title: ticket.title || ticket.TITLE,
+    description: ticket.description || ticket.DESCRIPTION,
+    status: ticket.status || ticket.STATUS,
+    priority: ticket.priority || ticket.PRIORITY,
+    ticket_type: ticket.ticket_type || ticket.TICKETTYPE,
+    ticket_category: ticket.ticket_category || ticket.TICKETCATEGORY,
+    issue_type: ticket.issue_type || ticket.ISSUETYPE,
+    sub_issue_type: ticket.sub_issue_type || ticket.SUBISSUETYPE,
+    due_date: ticket.due_date || ticket.DUEDATETIME,
+    resolution: ticket.resolution || ticket.RESOLUTION,
+    user_id: ticket.user_id || ticket.USERID,
+    user_email: ticket.user_email || ticket.USEREMAIL,
+    requester_name: ticket.user_id || ticket.USERID,
+    phone_number: ticket.phone_number || ticket.PHONENUMBER,
+    technician_id: technicianId,
+    technician_email: ticket.technician_email || ticket.TECHNICIANEMAIL,
+    assigned_technician: assignedTechnician,
+    assigned_technician_display: technicianDisplayName,
+    created_at: ticket.original_created_at || ticket.ORIGINAL_CREATED_AT || new Date().toISOString(),
+    updated_at: ticket.closed_at || ticket.CLOSED_AT || new Date().toISOString(),
+    closed_at: ticket.closed_at || ticket.CLOSED_AT,
+    original_created_at: ticket.original_created_at || ticket.ORIGINAL_CREATED_AT
+  };
+};
+
+/**
+ * Update technician display map from backend data
+ */
+const updateTechnicianDisplayMap = (technicians) => {
+  TECHNICIAN_DISPLAY_MAP = {};
+  if (Array.isArray(technicians)) {
+    technicians.forEach(tech => {
+      TECHNICIAN_DISPLAY_MAP[tech.id || tech.TECHNICIAN_ID] = tech.name || tech.NAME || `Technician ${tech.id || tech.TECHNICIAN_ID}`;
+    });
+  }
+};
+
 export const ticketService = {
   /**
    * Get all tickets with optional filters
@@ -71,6 +117,16 @@ export const ticketService = {
 
       const tickets = await apiService.get(API_ENDPOINTS.TICKETS.GET_ALL, params);
 
+      // Update technician display map if we don't have it yet
+      if (Object.keys(TECHNICIAN_DISPLAY_MAP).length === 0) {
+        try {
+          const technicians = await apiService.get('/technicians');
+          updateTechnicianDisplayMap(technicians);
+        } catch (error) {
+          console.warn('Failed to load technician names:', error);
+        }
+      }
+
       // Transform the data to match frontend expectations
       return Array.isArray(tickets) ? tickets.map(transformTicketData) : [];
     } catch (error) {
@@ -79,12 +135,76 @@ export const ticketService = {
   },
 
   /**
-   * Get ticket by ID
+   * Get closed tickets
+   */
+  async getClosedTickets(filters = {}) {
+    try {
+      const params = {};
+
+      // Add filters to params
+      if (filters.limit) params.limit = filters.limit;
+      if (filters.offset) params.offset = filters.offset;
+
+      const tickets = await apiService.get(API_ENDPOINTS.TICKETS.GET_CLOSED, params);
+
+      // Transform the data to match frontend expectations
+      return Array.isArray(tickets) ? tickets.map(transformClosedTicketData) : [];
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  /**
+   * Get all tickets including both active and closed tickets
+   */
+  async getAllTicketsIncludingClosed(filters = {}) {
+    try {
+      // If filtering by specific status that's closed/resolved, only get closed tickets
+      if (filters.status && ['closed', 'resolved'].includes(filters.status.toLowerCase())) {
+        return await this.getClosedTickets(filters);
+      }
+
+      // If filtering by specific status that's not closed/resolved, only get active tickets
+      if (filters.status && !['closed', 'resolved'].includes(filters.status.toLowerCase())) {
+        return await this.getAllTickets(filters);
+      }
+
+      // Otherwise, get both active and closed tickets
+      const [activeTickets, closedTickets] = await Promise.all([
+        this.getAllTickets(filters),
+        this.getClosedTickets(filters)
+      ]);
+
+      // Combine and sort by creation date (newest first)
+      const allTickets = [...activeTickets, ...closedTickets];
+      return allTickets.sort((a, b) => {
+        const dateA = new Date(a.created_at || a.original_created_at || 0);
+        const dateB = new Date(b.created_at || b.original_created_at || 0);
+        return dateB - dateA;
+      });
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  /**
+   * Get ticket by ID (checks both active and closed tickets)
    */
   async getTicketById(ticketId) {
     try {
-      const ticket = await apiService.get(API_ENDPOINTS.TICKETS.GET_BY_ID(ticketId));
-      return transformTicketData(ticket);
+      // First try to get from active tickets
+      try {
+        const ticket = await apiService.get(API_ENDPOINTS.TICKETS.GET_BY_ID(ticketId));
+        return transformTicketData(ticket);
+      } catch (activeError) {
+        // If not found in active tickets, try closed tickets
+        const closedTickets = await this.getClosedTickets();
+        const closedTicket = closedTickets.find(t => t.id === ticketId);
+        if (closedTicket) {
+          return closedTicket;
+        }
+        throw activeError; // Re-throw original error if not found in either
+      }
     } catch (error) {
       throw error;
     }
@@ -246,7 +366,8 @@ export const ticketService = {
    */
   async updateTicketStatus(ticketId, status) {
     try {
-      return await apiService.patch(`/tickets/${ticketId}/status`, {
+      // Use the PATCH endpoint that handles moving tickets to closed table
+      return await apiService.patch(`/tickets/${ticketId}`, {
         status: status
       });
     } catch (error) {

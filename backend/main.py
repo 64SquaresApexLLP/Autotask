@@ -105,7 +105,7 @@ def verify_token(token: str) -> Optional[dict]:
     except JWTError:
         return None
 
-def authenticate_user_from_db(username: str, password: str) -> Optional[dict]:
+def authenticate_user_from_db(username: str, password: str = None) -> Optional[dict]:
     """Authenticate user from Snowflake USER_DUMMY_DATA table."""
     try:
         if not snowflake_conn:
@@ -127,8 +127,8 @@ def authenticate_user_from_db(username: str, password: str) -> Optional[dict]:
 
         user = results[0]
 
-        # Check password (in production, use proper password hashing)
-        if user.get('USER_PASSWORD') != password:
+        # Check password only if provided (for login vs token validation)
+        if password is not None and user.get('USER_PASSWORD') != password:
             logger.info(f"Invalid password for user: {username}")
             return None
 
@@ -138,14 +138,15 @@ def authenticate_user_from_db(username: str, password: str) -> Optional[dict]:
             "password": user.get('USER_PASSWORD'),
             "role": "user",
             "email": user.get('USER_EMAIL'),
-            "full_name": user.get('NAME')
+            "full_name": user.get('NAME'),
+            "name": user.get('NAME')
         }
 
     except Exception as e:
         logger.error(f"Error authenticating user from database: {e}")
         return None
 
-def authenticate_technician_from_db(username: str, password: str) -> Optional[dict]:
+def authenticate_technician_from_db(username: str, password: str = None) -> Optional[dict]:
     """Authenticate technician from Snowflake database."""
     try:
         if not snowflake_conn:
@@ -167,8 +168,8 @@ def authenticate_technician_from_db(username: str, password: str) -> Optional[di
 
         technician = results[0]
 
-        # Check password (in production, use proper password hashing)
-        if technician.get('TECHNICIAN_PASSWORD') != password:
+        # Check password only if provided (for login vs token validation)
+        if password is not None and technician.get('TECHNICIAN_PASSWORD') != password:
             logger.info(f"Invalid password for technician: {username}")
             return None
 
@@ -179,6 +180,7 @@ def authenticate_technician_from_db(username: str, password: str) -> Optional[di
             "role": "technician",
             "email": technician.get('EMAIL'),
             "full_name": technician.get('NAME'),
+            "name": technician.get('NAME'),
             "technician_role": technician.get('ROLE')
         }
 
@@ -218,14 +220,26 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
             raise credentials_exception
 
         username: str = payload.get("sub")
+        role: str = payload.get("role")
         if username is None:
             raise credentials_exception
 
+        # Check admin first
         user = DEMO_USERS.get(username)
-        if user is None:
-            raise credentials_exception
+        if user:
+            return user
 
-        return user
+        # Check real users and technicians from database
+        if role == "user":
+            db_user = authenticate_user_from_db(username, "")  # We don't need password for token validation
+            if db_user:
+                return db_user
+        elif role == "technician":
+            db_user = authenticate_technician_from_db(username, "")  # We don't need password for token validation
+            if db_user:
+                return db_user
+
+        raise credentials_exception
     except JWTError:
         raise credentials_exception
 
@@ -331,7 +345,7 @@ async def login(login_request: dict):
                 "username": user["username"],
                 "role": user["role"],
                 "email": user.get("email"),
-                "full_name": user.get("full_name")
+                "full_name": user.get("full_name", user.get("name", user["username"]))
             }
         }
     except HTTPException:
@@ -2481,9 +2495,17 @@ async def startup_event():
 
     print("=" * 50)
     print("✅ Backend startup complete!")
-    print(f"🌐 API server running on http://0.0.0.0:8001")
-    print(f"📖 API docs available at http://localhost:8001/docs")
-    print(f"📧 Gmail webhook: http://localhost:8001/webhooks/gmail/notification")
+
+    # Get the actual port from config
+    try:
+        from config import API_PORT
+        port = API_PORT
+    except ImportError:
+        port = int(os.getenv('APP_PORT', '8000'))
+
+    print(f"🌐 API server running on http://0.0.0.0:{port}")
+    print(f"📖 API docs available at http://localhost:{port}/docs")
+    print(f"📧 Gmail webhook: http://localhost:{port}/webhooks/gmail/notification")
 
 
 @app.on_event("shutdown")
