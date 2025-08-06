@@ -45,10 +45,22 @@ API_PORT = int(os.getenv('APP_PORT', '8001'))
 # Webhook URLs
 GMAIL_WEBHOOK_URL = f"http://localhost:{API_PORT}/webhooks/gmail/simple"
 
-# File paths
-DATA_DIR = "data"
-LOGS_DIR = "logs"
-CREDENTIALS_DIR = "credentials"
+# File paths - Use absolute paths for production reliability
+import os
+from pathlib import Path
+
+# Get project root directory (where config.py is located)
+PROJECT_ROOT = Path(__file__).parent.absolute()
+
+DATA_DIR = PROJECT_ROOT / "data"
+LOGS_DIR = PROJECT_ROOT / "logs"
+CREDENTIALS_DIR = PROJECT_ROOT / "credentials"
+
+# Google Calendar credentials path
+GOOGLE_CALENDAR_CREDENTIALS_PATH = os.getenv(
+    'GOOGLE_CALENDAR_CREDENTIALS_PATH',
+    str(CREDENTIALS_DIR / "google-calendar-credentials.json")
+)
 
 # Data file paths (for backward compatibility)
 DATA_REF_FILE = "data/reference_data.txt"

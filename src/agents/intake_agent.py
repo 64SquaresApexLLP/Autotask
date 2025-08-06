@@ -65,7 +65,15 @@ class IntakeClassificationAgent:
         self.ai_processor = AIProcessor(self.db_connection, self.data_manager.reference_data)
         self.ticket_processor = TicketProcessor(self.data_manager.reference_data)
         self.notification_agent = NotificationAgent(db_connection=self.db_connection)
-        google_calendar_credentials_path = "credentials/google-calendar-credentials.json"
+        # Use centralized configuration for Google Calendar credentials
+        try:
+            from config import GOOGLE_CALENDAR_CREDENTIALS_PATH
+            google_calendar_credentials_path = GOOGLE_CALENDAR_CREDENTIALS_PATH
+        except ImportError:
+            # Fallback for development/testing
+            import os
+            project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            google_calendar_credentials_path = os.path.join(project_root, "credentials", "google-calendar-credentials.json")
         # Check if credentials file exists, if not, assignment agent will work without calendar integration
         self.assignment_agent = AssignmentAgentIntegration(
             self.db_connection,

@@ -114,6 +114,8 @@ class AssignmentAgentIntegration:
         self.google_calendar_credentials_path = google_calendar_credentials_path
         self.calendar_service = None
 
+
+
         # Initialize Google Calendar service if credentials provided
         if GOOGLE_CALENDAR_AVAILABLE and google_calendar_credentials_path:
             self._initialize_calendar_service()
@@ -1141,7 +1143,12 @@ def update_technician_workload_by_email(technician_email: str, increment: int, d
     Returns:
         bool: True if update was successful, False otherwise
     """
-    agent = AssignmentAgentIntegration(db_connection)
+    # Use centralized configuration for credentials
+    try:
+        from config import GOOGLE_CALENDAR_CREDENTIALS_PATH
+        agent = AssignmentAgentIntegration(db_connection, GOOGLE_CALENDAR_CREDENTIALS_PATH)
+    except ImportError:
+        agent = AssignmentAgentIntegration(db_connection)
 
     cursor = None
     try:
@@ -1188,7 +1195,12 @@ def refresh_all_workloads(db_connection) -> Dict[str, int]:
     Returns:
         Dict[str, int]: Dictionary mapping technician email to current workload count
     """
-    agent = AssignmentAgentIntegration(db_connection)
+    # Use centralized configuration for credentials
+    try:
+        from config import GOOGLE_CALENDAR_CREDENTIALS_PATH
+        agent = AssignmentAgentIntegration(db_connection, GOOGLE_CALENDAR_CREDENTIALS_PATH)
+    except ImportError:
+        agent = AssignmentAgentIntegration(db_connection)
     return agent.refresh_all_technician_workloads()
 
 
@@ -1216,6 +1228,14 @@ def assign_ticket(ticket_data: Dict, db_connection, google_calendar_credentials_
     Returns:
         Dict: Assignment result with technician details and assignment metadata
     """
+    # Use centralized configuration if no path provided
+    if google_calendar_credentials_path is None:
+        try:
+            from config import GOOGLE_CALENDAR_CREDENTIALS_PATH
+            google_calendar_credentials_path = GOOGLE_CALENDAR_CREDENTIALS_PATH
+        except ImportError:
+            pass  # Will use None, which disables calendar integration
+
     agent = AssignmentAgentIntegration(db_connection, google_calendar_credentials_path)
 
     # Create a mock intake output format for compatibility
