@@ -4,27 +4,35 @@ This is the main class that provides the same interface as the original monolith
 """
 
 import json
-import uuid
-import hashlib
 import os
-# Email processing imports removed
-# Removed: threading, time, schedule (no longer needed for webhook processing)
-# pytz removed - no longer needed
-import re
+import threading
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
-from email.header import decode_header
-from email.utils import parsedate_to_datetime, parseaddr
-
-import sys
-import os
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 
 from src.database import SnowflakeConnection
 from src.data import DataManager
 from src.processors import AIProcessor, TicketProcessor
 from src.agents.notification_agent import NotificationAgent
 from src.agents.assignment_agent import AssignmentAgentIntegration
+from src.services.email_listener import EmailListenerService
+
+# Cross-platform file locking mechanism
+try:
+    import fcntl
+    HAS_FCNTL = True
+except ImportError:
+    HAS_FCNTL = False
+    # Use threading.Lock as fallback for Windows
+    _file_locks = {}
+    _file_locks_lock = threading.Lock()
+
+
+def _get_file_lock(filename: str) -> threading.Lock:
+    """Get or create a file lock for cross-platform compatibility."""
+    with _file_locks_lock:
+        if filename not in _file_locks:
+            _file_locks[filename] = threading.Lock()
+        return _file_locks[filename]
 
 
 class IntakeClassificationAgent:
@@ -35,7 +43,9 @@ class IntakeClassificationAgent:
 
     def __init__(self, sf_account: str = None, sf_user: str = None, sf_warehouse: str = None,
                  sf_database: str = None, sf_schema: str = None, sf_role: str = None,
-                 data_ref_file: str = 'data.txt', db_connection=None):
+                 data_ref_file: str = 'data.txt', db_connection=None, 
+                 enable_email_monitoring: bool = False, webhook_url: str = "http://localhost:8001/webhooks/gmail/simple",
+                 email_check_interval: int = 30):
         """
         Initializes the agent with Snowflake connection details and loads reference data.
         If db_connection is provided, use it; otherwise, create a new one.
@@ -50,9 +60,9 @@ class IntakeClassificationAgent:
             sf_role: Snowflake role
             data_ref_file: Reference data file path
             db_connection: Existing database connection
-            email_account: Email account for intake processing
-            email_password: Email password for intake processing
-            imap_server: IMAP server for email intake
+            enable_email_monitoring: Whether to start background email monitoring
+            webhook_url: Webhook URL for email processing
+            email_check_interval: Email check interval in seconds
         """
         if db_connection is not None:
             self.db_connection = db_connection
@@ -61,21 +71,44 @@ class IntakeClassificationAgent:
                 sf_account, sf_user, sf_warehouse,
                 sf_database, sf_schema, sf_role
             )
+        
         self.data_manager = DataManager(data_ref_file)
         self.ai_processor = AIProcessor(self.db_connection, self.data_manager.reference_data)
         self.ticket_processor = TicketProcessor(self.data_manager.reference_data)
         self.notification_agent = NotificationAgent(db_connection=self.db_connection)
+        
         google_calendar_credentials_path = "credentials/google-calendar-credentials.json"
-        # Check if credentials file exists, if not, assignment agent will work without calendar integration
         self.assignment_agent = AssignmentAgentIntegration(
             self.db_connection,
             google_calendar_credentials_path=google_calendar_credentials_path
         )
+        
         self.conn = self.db_connection.conn
         self.reference_data = self.data_manager.reference_data
         
-        # Email processing removed - no longer processing emails
-        print("📧 Email processing: Disabled - no longer processing emails")
+        # Initialize email monitoring service (optional)
+        self.email_listener = None
+        if enable_email_monitoring:
+            try:
+                self.email_listener = EmailListenerService(
+                    webhook_url=webhook_url,
+                    check_interval=email_check_interval
+                )
+                
+                # Start email monitoring in background
+                if self.email_listener.start_monitoring():
+                    print("✅ Email monitoring started successfully")
+                else:
+                    print("⚠️ Email monitoring failed to start - continuing without email integration")
+                    self.email_listener = None
+            except Exception as e:
+                print(f"❌ Failed to initialize email monitoring: {e}")
+                print("Continuing without email integration")
+                self.email_listener = None
+        else:
+            print("📧 Email monitoring disabled")
+        
+        print("IntakeClassificationAgent initialized successfully")
 
     def generate_ticket_number(self, ticket_data: Dict) -> str:
         """
@@ -88,7 +121,6 @@ class IntakeClassificationAgent:
         Returns:
             str: Unique ticket number in format TYYYYMMDD.NNNN
         """
-        # Get current timestamp
         now = datetime.now()
         date_part = now.strftime("%Y%m%d")
 
@@ -129,7 +161,6 @@ class IntakeClassificationAgent:
 
         for attempt in range(max_attempts):
             try:
-                # Query both tables to find the highest sequence number for today
                 query = f"""
                 WITH all_tickets AS (
                     SELECT TICKETNUMBER FROM TEST_DB.PUBLIC.TICKETS WHERE TICKETNUMBER LIKE 'T{date_part}.%'
@@ -145,13 +176,12 @@ class IntakeClassificationAgent:
 
                 if result and len(result) > 0 and result[0]['MAX_SEQUENCE'] is not None:
                     max_sequence = result[0]['MAX_SEQUENCE']
-                    next_sequence = max_sequence + 1 + attempt  # Add attempt to avoid collisions
+                    next_sequence = max_sequence + 1 + attempt
                     print(f"Found existing tickets for {date_part}, next sequence: {next_sequence}")
                 else:
                     next_sequence = 1 + attempt
                     print(f"No existing tickets for {date_part}, starting with sequence: {next_sequence}")
 
-                # Test if this number would be unique
                 test_ticket_number = f"T{date_part}.{next_sequence:04d}"
                 if self._is_ticket_number_unique(test_ticket_number):
                     return next_sequence
@@ -162,13 +192,12 @@ class IntakeClassificationAgent:
             except Exception as e:
                 print(f"Error querying database for sequence number (attempt {attempt + 1}): {e}")
 
-        # If all attempts failed, fallback to file-based sequence
         print("All database attempts failed, falling back to file-based sequence")
         return self._get_next_sequence_number_fallback(date_part)
 
     def _get_next_sequence_number_fallback(self, date_part: str) -> int:
         """
-        Fallback method using file-based sequence tracking with uniqueness check.
+        Fallback method using file-based sequence tracking with cross-platform file locking.
         Used when database query fails.
 
         Args:
@@ -177,64 +206,70 @@ class IntakeClassificationAgent:
         Returns:
             int: Next sequential number
         """
-        import fcntl  # For file locking
         sequence_file = "data/ticket_sequence.json"
         max_attempts = 50
 
         for attempt in range(max_attempts):
             try:
-                # Ensure data directory exists
                 os.makedirs("data", exist_ok=True)
 
-                # Load existing sequence data with file locking
-                sequence_data = {}
-                if os.path.exists(sequence_file):
-                    try:
-                        with open(sequence_file, 'r') as f:
-                            fcntl.flock(f.fileno(), fcntl.LOCK_SH)  # Shared lock for reading
-                            sequence_data = json.load(f)
-                    except (json.JSONDecodeError, FileNotFoundError):
-                        sequence_data = {}
+                # Cross-platform file locking
+                file_lock = _get_file_lock(sequence_file) if not HAS_FCNTL else None
+                
+                if file_lock:
+                    file_lock.acquire()
 
-                # Get current sequence for this date, default to 0
-                current_sequence = sequence_data.get(date_part, 0)
+                try:
+                    sequence_data = {}
+                    if os.path.exists(sequence_file):
+                        try:
+                            with open(sequence_file, 'r') as f:
+                                if HAS_FCNTL:
+                                    fcntl.flock(f.fileno(), fcntl.LOCK_SH)
+                                sequence_data = json.load(f)
+                        except (json.JSONDecodeError, FileNotFoundError):
+                            sequence_data = {}
 
-                # Increment sequence
-                next_sequence = current_sequence + 1
+                    current_sequence = sequence_data.get(date_part, 0)
+                    next_sequence = current_sequence + 1
 
-                # Test if this number would be unique
-                test_ticket_number = f"T{date_part}.{next_sequence:04d}"
-                if self._is_ticket_number_unique(test_ticket_number):
-                    # Update sequence data with exclusive lock
-                    sequence_data[date_part] = next_sequence
+                    test_ticket_number = f"T{date_part}.{next_sequence:04d}"
+                    if self._is_ticket_number_unique(test_ticket_number):
+                        sequence_data[date_part] = next_sequence
 
-                    try:
-                        with open(sequence_file, 'w') as f:
-                            fcntl.flock(f.fileno(), fcntl.LOCK_EX)  # Exclusive lock for writing
-                            json.dump(sequence_data, f, indent=2)
-                    except Exception as e:
-                        print(f"Warning: Could not save sequence file: {e}")
+                        try:
+                            with open(sequence_file, 'w') as f:
+                                if HAS_FCNTL:
+                                    fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+                                json.dump(sequence_data, f, indent=2)
+                        except Exception as e:
+                            print(f"Warning: Could not save sequence file: {e}")
 
-                    return next_sequence
-                else:
-                    # If not unique, update the file with a higher number and try again
-                    sequence_data[date_part] = next_sequence
-                    try:
-                        with open(sequence_file, 'w') as f:
-                            fcntl.flock(f.fileno(), fcntl.LOCK_EX)
-                            json.dump(sequence_data, f, indent=2)
-                    except Exception as e:
-                        print(f"Warning: Could not save sequence file: {e}")
+                        return next_sequence
+                    else:
+                        sequence_data[date_part] = next_sequence
+                        try:
+                            with open(sequence_file, 'w') as f:
+                                if HAS_FCNTL:
+                                    fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+                                json.dump(sequence_data, f, indent=2)
+                        except Exception as e:
+                            print(f"Warning: Could not save sequence file: {e}")
 
-                    print(f"Ticket number {test_ticket_number} already exists, trying next...")
-                    continue
+                        print(f"Ticket number {test_ticket_number} already exists, trying next...")
+                        continue
+
+                finally:
+                    if file_lock:
+                        file_lock.release()
 
             except Exception as e:
                 print(f"Error in fallback sequence generation (attempt {attempt + 1}): {e}")
 
         # If all attempts failed, return a high number based on current time
-        from datetime import datetime
-        return int(datetime.now().strftime("%H%M%S")) % 9999 + 1
+        fallback_sequence = int(datetime.now().strftime("%H%M%S")) % 9999 + 1
+        print(f"All fallback attempts failed, using timestamp-based sequence: {fallback_sequence}")
+        return fallback_sequence
 
     def _is_ticket_number_unique(self, ticket_number: str) -> bool:
         """
@@ -263,10 +298,12 @@ class IntakeClassificationAgent:
                 count = result[0]['COUNT']
                 return count == 0
             else:
-                return True  # If query fails, assume unique
+                print(f"No result returned for uniqueness check of {ticket_number}, assuming not unique for safety")
+                return False
 
         except Exception as e:
             print(f"Error checking ticket number uniqueness: {e}")
+            
             # Fallback: check only TICKETS table if CLOSED_TICKETS doesn't exist
             try:
                 fallback_query = """
@@ -277,11 +314,16 @@ class IntakeClassificationAgent:
                 result = self.db_connection.execute_query(fallback_query, (ticket_number,))
                 if result and len(result) > 0:
                     count = result[0]['COUNT']
-                    return count == 0
+                    is_unique = count == 0
+                    if not is_unique:
+                        print(f"Fallback check: ticket {ticket_number} exists in TICKETS table")
+                    return is_unique
             except Exception as e2:
                 print(f"Fallback uniqueness check also failed: {e2}")
 
-            return True  # If all queries fail, assume unique
+            # If all queries fail, assume NOT unique for safety to prevent duplicates
+            print(f"All uniqueness checks failed for {ticket_number}, assuming NOT unique for safety")
+            return False
 
     def extract_metadata(self, title: str, description: str, model: str = 'llama3-8b') -> Optional[Dict]:
         """
@@ -295,7 +337,6 @@ class IntakeClassificationAgent:
         """
         print("Searching for similar tickets using Snowflake Cortex AI semantic similarity...")
 
-        # Use the internal method to find similar tickets with semantic similarity
         similar_tickets = self._find_similar_tickets_by_metadata(
             title=title,
             description=description,
@@ -336,18 +377,14 @@ class IntakeClassificationAgent:
             print("Not connected to Snowflake. Please check connection.")
             return []
 
-        # Combine title and description for the new ticket
         new_ticket_text = f"{title.strip()} {description.strip()}".strip()
 
         if not new_ticket_text:
             print("No ticket text provided for similarity search.")
             return []
 
-        # Escape single quotes for SQL
         escaped_ticket_text = new_ticket_text.replace("'", "''")
 
-        # Use Snowflake Cortex AI_SIMILARITY for semantic matching
-        # Note: AI_SIMILARITY returns values between 0 and 1, where 1 is most similar
         query = f"""
         SELECT
             TITLE,
@@ -376,17 +413,16 @@ class IntakeClassificationAgent:
                 print(f"Found {len(results)} similar tickets based on semantic similarity")
 
                 # Log similarity scores for debugging
-                for i, ticket in enumerate(results[:3]):  # Show top 3 scores
+                for i, ticket in enumerate(results[:3]):
                     score = ticket.get('SIMILARITY_SCORE', 'N/A')
-                    title = ticket.get('TITLE', 'N/A')[:50]
+                    title_preview = ticket.get('TITLE', 'N/A')[:50]
                     if isinstance(score, (int, float)):
-                        print(f"  #{i+1}: Score={score:.4f}, Title='{title}...'")
+                        print(f"  #{i+1}: Score={score:.4f}, Title='{title_preview}...'")
                     else:
-                        print(f"  #{i+1}: Score={score}, Title='{title}...'")
+                        print(f"  #{i+1}: Score={score}, Title='{title_preview}...'")
 
                 # Filter results by minimum similarity threshold
-                # AI_SIMILARITY typically returns values between 0 and 1
-                min_similarity_threshold = 0.1  # Adjust this threshold as needed
+                min_similarity_threshold = 0.1
                 filtered_results = []
 
                 for ticket in results:
@@ -412,11 +448,6 @@ class IntakeClassificationAgent:
             print("Falling back to recent tickets...")
             return []
 
-
-
-
-
-
     def classify_ticket(self, new_ticket_data: Dict, extracted_metadata: Dict,
                        similar_tickets: List[Dict], model: str = 'mixtral-8x7b') -> Optional[Dict]:
         """
@@ -437,7 +468,8 @@ class IntakeClassificationAgent:
     def process_new_ticket(self, ticket_name: str, ticket_description: str, ticket_title: str,
                           due_date: str, priority_initial: str, user_email: Optional[str] = None,
                           user_id: Optional[str] = None, phone_number: Optional[str] = None,
-                          extract_model: str = 'llama3-8b', classify_model: str = 'mixtral-8x7b', resolution_model: str = 'mixtral-8x7b') -> Optional[Dict]:
+                          extract_model: str = 'llama3-8b', classify_model: str = 'mixtral-8x7b', 
+                          resolution_model: str = 'mixtral-8x7b') -> Optional[Dict]:
         """
         Orchestrates the entire process for a new incoming ticket.
 
@@ -481,6 +513,7 @@ class IntakeClassificationAgent:
         if not extracted_metadata:
             print("Failed to extract metadata. Aborting ticket processing.")
             return None
+        
         print("Extracted Metadata:")
         print(json.dumps(extracted_metadata, indent=2))
 
@@ -500,6 +533,7 @@ class IntakeClassificationAgent:
         if not classified_data:
             print("Failed to classify ticket. Aborting ticket processing.")
             return None
+        
         print("\nClassified Ticket Data:")
         print(json.dumps(classified_data, indent=2))
 
@@ -565,4 +599,79 @@ class IntakeClassificationAgent:
         print(f"\n--- Ticket Processing Complete (#{ticket_number}) ---")
         return final_ticket_data
 
-    # Email processing methods removed - no longer processing emails
+    def start_email_monitoring(self, webhook_url: str = "http://localhost:8001/webhooks/gmail/simple",
+                              check_interval: int = 30) -> bool:
+        """
+        Start email monitoring service if not already running.
+        
+        Args:
+            webhook_url: Webhook URL for email processing
+            check_interval: Email check interval in seconds
+            
+        Returns:
+            bool: True if monitoring started successfully
+        """
+        if self.email_listener and self.email_listener.is_running():
+            print("Email monitoring already running")
+            return True
+        
+        try:
+            if not self.email_listener:
+                self.email_listener = EmailListenerService(
+                    webhook_url=webhook_url,
+                    check_interval=check_interval
+                )
+            
+            if self.email_listener.start_monitoring():
+                print("Email monitoring started successfully")
+                return True
+            else:
+                print("Failed to start email monitoring")
+                return False
+                
+        except Exception as e:
+            print(f"Error starting email monitoring: {e}")
+            return False
+
+    def stop_email_monitoring(self):
+        """
+        Stop email monitoring service gracefully.
+        """
+        if self.email_listener:
+            self.email_listener.stop_monitoring()
+            print("Email monitoring stopped")
+        else:
+            print("Email monitoring was not running")
+
+    def get_email_monitoring_status(self) -> Dict:
+        """
+        Get status of email monitoring service.
+        
+        Returns:
+            Dict: Email monitoring status information
+        """
+        if self.email_listener:
+            return self.email_listener.get_status()
+        else:
+            return {
+                "is_monitoring": False,
+                "is_running": False,
+                "email_address": None,
+                "webhook_url": None,
+                "check_interval": None,
+                "processed_emails": 0,
+                "consecutive_failures": 0,
+                "has_app_password": False,
+                "connected_to_gmail": False,
+                "error": "Email listener not initialized"
+            }
+
+    def __del__(self):
+        """
+        Cleanup when agent is destroyed.
+        """
+        try:
+            if hasattr(self, 'email_listener') and self.email_listener:
+                self.email_listener.stop_monitoring()
+        except:
+            pass

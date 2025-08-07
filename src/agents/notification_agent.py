@@ -10,7 +10,7 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from typing import Dict
 from datetime import datetime
-import logging
+# Removed logging import - using print statements
 
 # Add project root to path for imports
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
@@ -30,9 +30,7 @@ except ImportError:
     HIGH_PRIORITY_NOTIFICATIONS = ['Critical', 'High', 'Desktop/User Down']
     ESCALATION_KEYWORDS = ['fallback', 'failed', 'error', 'escalated']
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# Removed logging configuration - using print statements for clean output
 
 
 class NotificationAgent:
@@ -68,9 +66,9 @@ class NotificationAgent:
         self.enabled = bool(self.smtp_password)
 
         if not self.enabled:
-            logger.warning("SMTP password not configured. Email notifications disabled.")
+            print("SMTP password not configured. Email notifications disabled.")
 
-        logger.info(f"NotificationAgent initialized - SMTP: {'enabled' if self.enabled else 'disabled'}, LLM: {'enabled' if self.llm_enabled else 'disabled'}")
+        print(f"NotificationAgent initialized - SMTP: {'enabled' if self.enabled else 'disabled'}, LLM: {'enabled' if self.llm_enabled else 'disabled'}")
 
     def _load_gmail_app_password(self) -> str:
         """Load Gmail app password from the same file used by Gmail monitor"""
@@ -87,14 +85,14 @@ class NotificationAgent:
                 with open(app_password_file, 'r') as f:
                     password = f.read().strip()
                     if password:
-                        logger.info("Gmail app password loaded from .gmail_app_password file")
+                        print("Gmail app password loaded from .gmail_app_password file")
                         return password
 
-            logger.warning("No Gmail app password found. Email notifications will be disabled.")
+            print("No Gmail app password found. Email notifications will be disabled.")
             return None
 
         except Exception as e:
-            logger.warning(f"Error loading Gmail app password: {e}")
+            print(f"Error loading Gmail app password: {e}")
             return None
 
     def generate_email_notification(self, notification_type: str, ticket_data: Dict,
@@ -111,7 +109,7 @@ class NotificationAgent:
             dict: Email content with subject, html_content, text_content
         """
         if not self.llm_enabled:
-            logger.warning("LLM not available - using basic template")
+            print("LLM not available - using basic template")
             return self._generate_basic_template(notification_type, ticket_data, recipient_type)
 
         try:
@@ -119,7 +117,7 @@ class NotificationAgent:
             prompt = self._build_llm_prompt(notification_type, ticket_data, recipient_type)
 
             # Call LLM to generate content with improved JSON handling
-            logger.info(f"Generating {notification_type} email for {recipient_type} using LLM...")
+            print(f"Generating {notification_type} email for {recipient_type} using LLM...")
             llm_response = self._call_llm_with_json_fix(prompt)
 
             if llm_response and isinstance(llm_response, dict):
@@ -129,11 +127,11 @@ class NotificationAgent:
                     'text_content': llm_response.get('text_content', '')
                 }
             else:
-                logger.warning("Invalid LLM response - using basic template")
+                print("Invalid LLM response - using basic template")
                 return self._generate_basic_template(notification_type, ticket_data, recipient_type)
 
         except Exception as e:
-            logger.error(f"LLM email generation failed: {str(e)}")
+            print(f"LLM email generation failed: {str(e)}")
             return self._generate_basic_template(notification_type, ticket_data, recipient_type)
 
     def _build_llm_prompt(self, notification_type: str, ticket_data: Dict, recipient_type: str) -> str:
@@ -234,7 +232,7 @@ REQUIREMENTS:
                 return None
 
         except Exception as e:
-            logger.error(f"LLM call with JSON fix failed: {str(e)}")
+            print(f"LLM call with JSON fix failed: {str(e)}")
             return None
 
     def _fix_json_response(self, raw_response: str) -> str:
@@ -267,7 +265,7 @@ REQUIREMENTS:
             return json_str
 
         except Exception as e:
-            logger.warning(f"Failed to fix JSON response: {str(e)}")
+            print(f"Failed to fix JSON response: {str(e)}")
             return None
 
     def _get_notification_instructions(self, notification_type: str, ticket_data: Dict) -> str:
@@ -546,11 +544,11 @@ TeamLogicIT Support System
             bool: True if sent successfully, False otherwise
         """
         if not self.enabled:
-            logger.warning("Email sending disabled - SMTP not configured")
+            print("Email sending disabled - SMTP not configured")
             return False
 
         if not recipient_email or not recipient_email.strip():
-            logger.warning("No recipient email provided")
+            print("No recipient email provided")
             return False
 
         try:
@@ -573,11 +571,11 @@ TeamLogicIT Support System
                 server.login(self.smtp_username, self.smtp_password)
                 server.send_message(msg)
 
-            logger.info(f"Email sent successfully to {recipient_email}")
+            print(f"Email sent successfully to {recipient_email}")
             return True
 
         except Exception as e:
-            logger.error(f"Failed to send email to {recipient_email}: {str(e)}")
+            print(f"Failed to send email to {recipient_email}: {str(e)}")
             return False
 
     # Convenience methods for backward compatibility and integration
@@ -616,7 +614,7 @@ TeamLogicIT Support System
         # Notify customer about assignment
         customer_email = ticket_data.get('user_email')
         if customer_email and customer_email.strip():
-            logger.info(f"Sending assignment update to customer: {customer_email}")
+            print(f"Sending assignment update to customer: {customer_email}")
             try:
                 # Add assignment info to ticket data for context
                 enhanced_ticket_data = ticket_data.copy()
@@ -625,18 +623,18 @@ TeamLogicIT Support System
                 email_content = self.generate_email_notification('status_update', enhanced_ticket_data, 'customer')
                 results['customer_notified'] = self.send_email(customer_email, email_content)
             except Exception as e:
-                logger.error(f"Failed to send customer assignment notification: {e}")
+                print(f"Failed to send customer assignment notification: {e}")
 
         # Notify assigned technician
         technician_email = assignment_result.get('technician_email')
         if technician_email and technician_email.strip():
-            logger.info(f"Sending assignment notification to technician: {technician_email}")
+            print(f"Sending assignment notification to technician: {technician_email}")
             try:
                 results['technician_notified'] = self.send_technician_assignment(
                     technician_email, ticket_data, ticket_number
                 )
             except Exception as e:
-                logger.error(f"Failed to send technician assignment notification: {e}")
+                print(f"Failed to send technician assignment notification: {e}")
 
         # Notify manager for high priority or fallback assignments
         priority = assignment_result.get('priority', '')
@@ -649,7 +647,7 @@ TeamLogicIT Support System
         )
 
         if should_escalate:
-            logger.info(f"Sending escalation notification to manager: {MANAGER_EMAIL}")
+            print(f"Sending escalation notification to manager: {MANAGER_EMAIL}")
             try:
                 enhanced_ticket_data = ticket_data.copy()
                 if any(keyword in status.lower() for keyword in ESCALATION_KEYWORDS):
@@ -660,7 +658,7 @@ TeamLogicIT Support System
                 email_content = self.generate_email_notification('escalation', enhanced_ticket_data, 'manager')
                 results['manager_notified'] = self.send_email(MANAGER_EMAIL, email_content)
             except Exception as e:
-                logger.error(f"Failed to send manager escalation notification: {e}")
+                print(f"Failed to send manager escalation notification: {e}")
 
         return results
 
@@ -696,7 +694,7 @@ TeamLogicIT Support System
             email_content = self.generate_email_notification('due_date_reminder', ticket_data, recipient_type)
             return self.send_email(recipient_email, email_content)
         except Exception as e:
-            logger.error(f"Failed to send due date reminder: {e}")
+            print(f"Failed to send due date reminder: {e}")
             return False
 
     def send_email_processing_summary(self, processed_tickets: list, recipient_email: str = None) -> bool:
@@ -738,7 +736,7 @@ TeamLogicIT Support System
             return self.send_email(recipient, email_content)
 
         except Exception as e:
-            logger.error(f"Failed to send email processing summary: {e}")
+            print(f"Failed to send email processing summary: {e}")
             return False
 
     def _generate_email_processing_summary(self, summary_data: Dict) -> Dict[str, str]:

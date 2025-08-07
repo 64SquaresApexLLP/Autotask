@@ -38,6 +38,9 @@ from src.agents.notification_agent import NotificationAgent
 from src.database.snowflake_db import SnowflakeConnection
 from src.database.ticket_db import TicketDB
 from src.data.data_manager import DataManager
+
+# Gmail Direct Integration (from parent directory)
+from gmail_direct_integration import DirectGmailIntegration
 # from src.integrations.gmail_realtime import gmail_service  # Disabled - using direct IMAP instead
 
 # Import config for manager email
@@ -294,6 +297,9 @@ try:
 except Exception as e:
     print(f"Warning: Intake agent initialization failed: {e}")
     intake_agent = None
+
+# Initialize Gmail Monitor
+gmail_monitor = None
 
 # --- AUTHENTICATION ENDPOINTS ---
 
@@ -2439,6 +2445,29 @@ async def gmail_webhook_info():
         "status_endpoint": "/gmail/status"
     }
 
+@app.get("/gmail/status")
+async def gmail_monitoring_status():
+    """Get the status of Gmail monitoring service"""
+    global gmail_monitor
+    
+    if not gmail_monitor:
+        return {
+            "status": "disabled",
+            "message": "Gmail monitoring service is not initialized",
+            "monitoring": False,
+            "email_address": None
+        }
+    
+    return {
+        "status": "active" if gmail_monitor.is_monitoring else "inactive",
+        "message": "Gmail monitoring service status",
+        "monitoring": gmail_monitor.is_monitoring,
+        "email_address": gmail_monitor.email_address,
+        "webhook_url": gmail_monitor.webhook_url,
+        "processed_emails": len(gmail_monitor.processed_uids),
+        "connection_active": gmail_monitor.mail is not None
+    }
+
 @app.post("/webhooks/gmail/simple")
 async def simple_gmail_webhook(request: Request):
     """
@@ -2540,23 +2569,60 @@ async def simple_gmail_webhook(request: Request):
 @app.on_event("startup")
 async def startup_event():
     """Initialize services when the application starts"""
+    global gmail_monitor
+    
     print("🚀 Starting TeamLogic AutoTask Backend...")
     print("=" * 50)
 
-    # Gmail real-time service disabled - using direct IMAP integration instead
-    print("📧 Gmail integration: Using direct IMAP (no OAuth required)")
-    print("💡 Direct IMAP integration handles email monitoring")
+    # Initialize and start Gmail monitoring service
+    try:
+        print("📧 Initializing Gmail monitoring service...")
+        gmail_monitor = DirectGmailIntegration(webhook_url="http://localhost:8001/webhooks/gmail/simple")
+        
+        # Test connection first (non-interactive mode for server)
+        if gmail_monitor.test_connection(interactive=False):
+            print("✅ Gmail connection test successful!")
+            
+            # Start monitoring in background
+            if gmail_monitor.start_monitoring(check_interval=5):
+                print("🔍 Gmail monitoring started successfully!")
+                print("📧 Monitoring rohankool2021@gmail.com for new emails...")
+            else:
+                print("⚠️ Failed to start Gmail monitoring")
+        else:
+            print("❌ Gmail connection test failed - monitoring disabled")
+            gmail_monitor = None
+            
+    except Exception as e:
+        print(f"⚠️ Gmail monitoring initialization failed: {e}")
+        gmail_monitor = None
 
     print("=" * 50)
     print("✅ Backend startup complete!")
     print(f"🌐 API server running on http://0.0.0.0:8001")
     print(f"📖 API docs available at http://localhost:8001/docs")
-    print(f"📧 Gmail webhook: http://localhost:8001/webhooks/gmail/notification")
+    print(f"📧 Gmail webhook: http://localhost:8001/webhooks/gmail/simple")
+    if gmail_monitor and gmail_monitor.is_monitoring:
+        print(f"📨 Email monitoring: ACTIVE (checking every 5 seconds)")
+    else:
+        print(f"📨 Email monitoring: DISABLED")
 
 
 @app.on_event("shutdown")
 async def shutdown_event():
     """Cleanup when the application shuts down"""
+    global gmail_monitor
+    
     print("🛑 Shutting down TeamLogic AutoTask Backend...")
+    
+    # Stop Gmail monitoring service
+    if gmail_monitor:
+        try:
+            print("📧 Stopping Gmail monitoring service...")
+            gmail_monitor.stop_monitoring()
+            print("✅ Gmail monitoring stopped")
+        except Exception as e:
+            print(f"⚠️ Error stopping Gmail monitoring: {e}")
+    
     print("✅ Shutdown complete!")
 

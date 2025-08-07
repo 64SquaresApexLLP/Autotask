@@ -13,16 +13,13 @@ Date: 2025-07-10
 """
 
 import json
-import logging
 import time
 import os
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass
 
-# Configure logging first
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# Removed logging configuration - using print statements for clean output
 
 # Google Calendar API imports
 try:
@@ -33,7 +30,7 @@ try:
     GOOGLE_CALENDAR_AVAILABLE = True
 except ImportError:
     GOOGLE_CALENDAR_AVAILABLE = False
-    logger.warning("Google Calendar API libraries not available. Calendar integration disabled.")
+    print("Google Calendar API libraries not available. Calendar integration disabled.")
 
 @dataclass
 class TicketData:
@@ -158,10 +155,10 @@ class AssignmentAgentIntegration:
         """Initialize Google Calendar service with service account credentials"""
         try:
             if not os.path.exists(self.google_calendar_credentials_path):
-                logger.warning(f"Google Calendar credentials file not found: {self.google_calendar_credentials_path}")
-                logger.info("Calendar integration disabled. Technician availability will be assumed as available.")
-                logger.info("To enable calendar integration, place your Google Calendar service account credentials at:")
-                logger.info(f"  {self.google_calendar_credentials_path}")
+                print(f"Google Calendar credentials file not found: {self.google_calendar_credentials_path}")
+                print("Calendar integration disabled. Technician availability will be assumed as available.")
+                print("To enable calendar integration, place your Google Calendar service account credentials at:")
+                print(f"  {self.google_calendar_credentials_path}")
                 return
 
             credentials = service_account.Credentials.from_service_account_file(
@@ -169,10 +166,10 @@ class AssignmentAgentIntegration:
                 scopes=['https://www.googleapis.com/auth/calendar.readonly']
             )
             self.calendar_service = build('calendar', 'v3', credentials=credentials)
-            logger.info("Google Calendar service initialized successfully")
+            print("Google Calendar service initialized successfully")
         except Exception as e:
-            logger.error(f"Failed to initialize Google Calendar service: {str(e)}")
-            logger.info("Calendar integration disabled. Technician availability will be assumed as available.")
+            print(f"Failed to initialize Google Calendar service: {str(e)}")
+            print("Calendar integration disabled. Technician availability will be assumed as available.")
             self.calendar_service = None
 
     # ========================================
@@ -192,10 +189,10 @@ class AssignmentAgentIntegration:
         try:
             ticket = self._validate_ticket_data(ticket_data)
             skill_analysis = self._analyze_skills_with_cortex(ticket)
-            logger.info(f"Extracted skills for ticket {ticket.ticket_id}: {skill_analysis.required_skills}")
+            print(f"Extracted skills for ticket {ticket.ticket_id}: {skill_analysis.required_skills}")
             return skill_analysis.required_skills
         except Exception as e:
-            logger.error(f"Error extracting required skills: {str(e)}")
+            print(f"Error extracting required skills: {str(e)}")
             # Fallback to basic skill mapping
             issue_type = ticket_data.get('issue_type', 'General')
             return self.fallback_skill_mapping.get(issue_type, ['General IT Support'])
@@ -210,7 +207,7 @@ class AssignmentAgentIntegration:
         cursor = None
         try:
             if not self.db_connection.conn:
-                logger.error("No active Snowflake connection available")
+                print("No active Snowflake connection available")
                 return []
 
             cursor = self.db_connection.conn.cursor()
@@ -268,14 +265,14 @@ class AssignmentAgentIntegration:
                     technicians.append(technician_dict)
 
                 except Exception as e:
-                    logger.warning(f"Error parsing technician data for row {row}: {str(e)}")
+                    print(f"Error parsing technician data for row {row}: {str(e)}")
                     continue
 
-            logger.info(f"Retrieved {len(technicians)} technicians from TEST_DB.PUBLIC.TECHNICIAN_DUMMY_DATA")
+            print(f"Retrieved {len(technicians)} technicians from TEST_DB.PUBLIC.TECHNICIAN_DUMMY_DATA")
             return technicians
 
         except Exception as e:
-            logger.error(f"Error retrieving technician data: {str(e)}")
+            print(f"Error retrieving technician data: {str(e)}")
             return []
         finally:
             if cursor:
@@ -332,7 +329,7 @@ class AssignmentAgentIntegration:
         else:
             classification = "Weak"
 
-        logger.debug(f"Skill match calculation: {match_percentage}% ({classification}) - "
+        print(f"Skill match calculation: {match_percentage}% ({classification}) - "
                     f"Matched: {matched_skills}, Missing: {missing_skills}")
 
         return SkillMatchResult(
@@ -354,7 +351,7 @@ class AssignmentAgentIntegration:
             bool: True if technician is available before due date, False otherwise
         """
         if not GOOGLE_CALENDAR_AVAILABLE or not self.calendar_service:
-            logger.warning("Google Calendar integration not available, assuming technician is available")
+            print("Google Calendar integration not available, assuming technician is available")
             return True
 
         try:
@@ -367,7 +364,7 @@ class AssignmentAgentIntegration:
                     try:
                         due_datetime = datetime.strptime(due_date, '%Y-%m-%d')
                     except ValueError:
-                        logger.warning(f"Could not parse due date: {due_date}, assuming available")
+                        print(f"Could not parse due date: {due_date}, assuming available")
                         return True
             else:
                 due_datetime = due_date
@@ -381,7 +378,7 @@ class AssignmentAgentIntegration:
                 due_datetime = due_datetime.replace(tzinfo=timezone.utc)
 
             if due_datetime <= now:
-                logger.warning(f"Due date {due_date} is in the past, assuming available")
+                print(f"Due date {due_date} is in the past, assuming available")
                 return True
 
             # Use Google Calendar freeBusy query as specified in requirements
@@ -410,20 +407,20 @@ class AssignmentAgentIntegration:
             busy_periods = technician_calendar.get('busy', [])
 
             if busy_periods:
-                logger.info(f"Technician {technician_email} has {len(busy_periods)} busy periods before due date")
+                print(f"Technician {technician_email} has {len(busy_periods)} busy periods before due date")
                 # For now, consider unavailable if any busy periods exist
                 # In production, you might want more sophisticated logic
                 return False
             else:
-                logger.info(f"Technician {technician_email} is available before due date")
+                print(f"Technician {technician_email} is available before due date")
                 return True
 
         except HttpError as e:
-            logger.error(f"Google Calendar API error for {technician_email}: {str(e)}")
+            print(f"Google Calendar API error for {technician_email}: {str(e)}")
             # If calendar check fails, assume available to avoid blocking assignments
             return True
         except Exception as e:
-            logger.error(f"Error checking calendar availability for {technician_email}: {str(e)}")
+            print(f"Error checking calendar availability for {technician_email}: {str(e)}")
             return True
 
     def select_best_candidate(self, candidates: List[AssignmentCandidate]) -> Optional[AssignmentCandidate]:
@@ -445,7 +442,7 @@ class AssignmentAgentIntegration:
             Optional[AssignmentCandidate]: Best candidate or None if fallback needed
         """
         if not candidates:
-            logger.warning("No candidates provided for selection")
+            print("No candidates provided for selection")
             return None
 
         # Sort candidates by priority tier first, then by current workload (ascending), then by skill match percentage (descending)
@@ -458,14 +455,14 @@ class AssignmentAgentIntegration:
         best_candidate = sorted_candidates[0]
 
         # Log assignment decision with reasoning
-        logger.info(f"Selected candidate: {best_candidate.technician.name} "
+        print(f"Selected candidate: {best_candidate.technician.name} "
                    f"(Tier {best_candidate.priority_tier}: {self.priority_tiers[best_candidate.priority_tier]}, "
                    f"Current Workload: {best_candidate.technician.current_workload})")
-        logger.info(f"Selection reasoning: {best_candidate.reasoning}")
+        print(f"Selection reasoning: {best_candidate.reasoning}")
 
         # Log rejected candidates with reasons
         for candidate in sorted_candidates[1:]:
-            logger.info(f"Rejected candidate: {candidate.technician.name} - "
+            print(f"Rejected candidate: {candidate.technician.name} - "
                        f"Tier {candidate.priority_tier}, {candidate.skill_match.classification} match "
                        f"({candidate.skill_match.match_percentage}%), "
                        f"Available: {candidate.calendar_available}, "
@@ -491,7 +488,7 @@ class AssignmentAgentIntegration:
         cursor = None
         try:
             if not self.db_connection.conn:
-                logger.error("No active Snowflake connection available")
+                print("No active Snowflake connection available")
                 return False
 
             cursor = self.db_connection.conn.cursor()
@@ -507,14 +504,14 @@ class AssignmentAgentIntegration:
 
             # Check if any rows were affected
             if cursor.rowcount > 0:
-                logger.info(f"Successfully updated workload for technician {technician_id} by {increment}")
+                print(f"Successfully updated workload for technician {technician_id} by {increment}")
                 return True
             else:
-                logger.warning(f"No technician found with ID {technician_id}")
+                print(f"No technician found with ID {technician_id}")
                 return False
 
         except Exception as e:
-            logger.error(f"Error updating technician workload: {str(e)}")
+            print(f"Error updating technician workload: {str(e)}")
             return False
         finally:
             if cursor:
@@ -530,7 +527,7 @@ class AssignmentAgentIntegration:
         cursor = None
         try:
             if not self.db_connection.conn:
-                logger.error("No active Snowflake connection available")
+                print("No active Snowflake connection available")
                 return {}
 
             cursor = self.db_connection.conn.cursor()
@@ -565,11 +562,11 @@ class AssignmentAgentIntegration:
                 """
                 cursor.execute(update_query, (active_count, email))
 
-            logger.info(f"Refreshed workloads for {len(workload_summary)} technicians")
+            print(f"Refreshed workloads for {len(workload_summary)} technicians")
             return workload_summary
 
         except Exception as e:
-            logger.error(f"Error refreshing technician workloads: {str(e)}")
+            print(f"Error refreshing technician workloads: {str(e)}")
             return {}
         finally:
             if cursor:
@@ -588,7 +585,7 @@ class AssignmentAgentIntegration:
         cursor = None
         try:
             if not self.db_connection.conn:
-                logger.error("No active Snowflake connection available")
+                print("No active Snowflake connection available")
                 return 0
 
             cursor = self.db_connection.conn.cursor()
@@ -605,11 +602,11 @@ class AssignmentAgentIntegration:
             if result and result[0] is not None:
                 return int(float(result[0]))  # Convert float to int
             else:
-                logger.warning(f"No technician found with ID {technician_id}")
+                print(f"No technician found with ID {technician_id}")
                 return 0
 
         except Exception as e:
-            logger.error(f"Error getting technician workload: {str(e)}")
+            print(f"Error getting technician workload: {str(e)}")
             return 0
         finally:
             if cursor:
@@ -629,7 +626,7 @@ class AssignmentAgentIntegration:
         cursor = None
         try:
             if not self.db_connection.conn:
-                logger.error("No active Snowflake connection available")
+                print("No active Snowflake connection available")
                 return False
 
             cursor = self.db_connection.conn.cursor()
@@ -645,7 +642,7 @@ class AssignmentAgentIntegration:
             tech_result = cursor.fetchone()
 
             if not tech_result:
-                logger.warning(f"No technician found with email {technician_email}")
+                print(f"No technician found with email {technician_email}")
                 return False
 
             technician_id = tech_result[0]
@@ -660,15 +657,15 @@ class AssignmentAgentIntegration:
             cursor.execute(update_query, (technician_id,))
 
             if cursor.rowcount > 0:
-                logger.info(f"Successfully decremented workload for technician {technician_email} "
+                print(f"Successfully decremented workload for technician {technician_email} "
                            f"upon completion of ticket {ticket_id}")
                 return True
             else:
-                logger.warning(f"Failed to update workload for technician {technician_email}")
+                print(f"Failed to update workload for technician {technician_email}")
                 return False
 
         except Exception as e:
-            logger.error(f"Error handling ticket completion: {str(e)}")
+            print(f"Error handling ticket completion: {str(e)}")
             return False
         finally:
             if cursor:
@@ -706,11 +703,11 @@ class AssignmentAgentIntegration:
                 'user_email': new_ticket.get('user_email', '')
             }
 
-            logger.info(f"Mapped intake data to assignment format for ticket: {assignment_input['ticket_id']}")
+            print(f"Mapped intake data to assignment format for ticket: {assignment_input['ticket_id']}")
             return assignment_input
             
         except Exception as e:
-            logger.error(f"Error mapping intake data to assignment format: {str(e)}")
+            print(f"Error mapping intake data to assignment format: {str(e)}")
             raise AssignmentError(f"Failed to map intake data: {str(e)}")
 
     def _validate_ticket_data(self, ticket_data: Dict) -> TicketData:
@@ -738,7 +735,7 @@ class AssignmentAgentIntegration:
         # Validate priority level
         valid_priorities = ['Low', 'Medium', 'High', 'Critical']
         if ticket_data['priority'] not in valid_priorities:
-            logger.warning(f"Priority '{ticket_data['priority']}' not in standard list, proceeding anyway")
+            print(f"Priority '{ticket_data['priority']}' not in standard list, proceeding anyway")
 
         return TicketData(
             ticket_id=str(ticket_data['ticket_id']),
@@ -766,7 +763,7 @@ class AssignmentAgentIntegration:
         cursor = None
         try:
             if not self.db_connection.conn:
-                logger.error("No active Snowflake connection available")
+                print("No active Snowflake connection available")
                 return self._fallback_skill_analysis(ticket)
 
             cursor = self.db_connection.conn.cursor()
@@ -815,14 +812,14 @@ class AssignmentAgentIntegration:
                         specialized_knowledge=analysis_json.get('specialized_knowledge', [])
                     )
                 except (json.JSONDecodeError, ValueError, KeyError) as e:
-                    logger.warning(f"Failed to parse Cortex LLM response: {str(e)}")
+                    print(f"Failed to parse Cortex LLM response: {str(e)}")
                     return self._fallback_skill_analysis(ticket)
             else:
-                logger.warning("Empty response from Cortex LLM")
+                print("Empty response from Cortex LLM")
                 return self._fallback_skill_analysis(ticket)
 
         except Exception as e:
-            logger.error(f"Error in Cortex skill analysis: {str(e)}")
+            print(f"Error in Cortex skill analysis: {str(e)}")
             return self._fallback_skill_analysis(ticket)
         finally:
             if cursor:
@@ -838,7 +835,7 @@ class AssignmentAgentIntegration:
         Returns:
             SkillAnalysis: Basic skill analysis based on issue type
         """
-        logger.info("Using fallback skill analysis")
+        print("Using fallback skill analysis")
 
         # Map issue type to skills
         required_skills = self.fallback_skill_mapping.get(ticket.issue_type, ['General IT Support'])
@@ -885,14 +882,14 @@ class AssignmentAgentIntegration:
                     )
                     technicians.append(technician)
                 except Exception as e:
-                    logger.warning(f"Error creating TechnicianData object: {str(e)}")
+                    print(f"Error creating TechnicianData object: {str(e)}")
                     continue
 
-            logger.info(f"Converted {len(technicians)} technician records to TechnicianData objects")
+            print(f"Converted {len(technicians)} technician records to TechnicianData objects")
             return technicians
 
         except Exception as e:
-            logger.error(f"Error retrieving available technicians: {str(e)}")
+            print(f"Error retrieving available technicians: {str(e)}")
             return []
 
     def _evaluate_candidates(self, ticket: TicketData, skill_analysis: SkillAnalysis,
@@ -920,7 +917,7 @@ class AssignmentAgentIntegration:
 
                 # FILTER OUT UNAVAILABLE TECHNICIANS - Only consider available ones
                 if not calendar_available:
-                    logger.info(f"Skipping unavailable technician: {technician.name}")
+                    print(f"Skipping unavailable technician: {technician.name}")
                     continue
 
                 # Determine priority tier based on availability and skill match
@@ -945,10 +942,10 @@ class AssignmentAgentIntegration:
                 candidates.append(candidate)
 
             except Exception as e:
-                logger.warning(f"Error evaluating technician {technician.name}: {str(e)}")
+                print(f"Error evaluating technician {technician.name}: {str(e)}")
                 continue
 
-        logger.info(f"Evaluated {len(candidates)} candidates for ticket {ticket.ticket_id}")
+        print(f"Evaluated {len(candidates)} candidates for ticket {ticket.ticket_id}")
         return candidates
 
     def _determine_priority_tier(self, calendar_available: bool, skill_classification: str) -> int:
@@ -1059,70 +1056,70 @@ class AssignmentAgentIntegration:
             AssignmentError: If assignment fails
         """
         try:
-            logger.info("Starting ticket assignment process")
+            print("Starting ticket assignment process")
 
             # Step 1: Map intake output to assignment format
             assignment_input = self.map_intake_to_assignment_format(intake_output)
 
             # Step 2: Validate ticket data
             ticket = self._validate_ticket_data(assignment_input)
-            logger.info(f"Processing assignment for ticket: {ticket.ticket_id}")
+            print(f"Processing assignment for ticket: {ticket.ticket_id}")
 
             # Step 3: Extract required skills using modular function
-            logger.info("Extracting required skills...")
+            print("Extracting required skills...")
             skill_analysis = self._analyze_skills_with_cortex(ticket)
-            logger.info(f"Required skills: {skill_analysis.required_skills}, "
+            print(f"Required skills: {skill_analysis.required_skills}, "
                        f"Complexity: {skill_analysis.complexity_level}")
 
             # Step 4: Get available technicians using modular function
-            logger.info("Retrieving available technicians...")
+            print("Retrieving available technicians...")
             technicians = self._get_available_technicians()
 
             if not technicians:
-                logger.warning("No available technicians found, proceeding with fallback assignment")
+                print("No available technicians found, proceeding with fallback assignment")
                 assignment_response = self._create_assignment_response(ticket, None, is_fallback=True)
-                logger.info(f"Fallback assignment created for ticket {ticket.ticket_id}")
+                print(f"Fallback assignment created for ticket {ticket.ticket_id}")
                 return assignment_response
 
             # Step 5: Evaluate all candidates with priority tiers
-            logger.info("Evaluating assignment candidates...")
+            print("Evaluating assignment candidates...")
             candidates = self._evaluate_candidates(ticket, skill_analysis, technicians)
 
             if not candidates:
-                logger.warning("No valid candidates found, proceeding with fallback assignment")
+                print("No valid candidates found, proceeding with fallback assignment")
                 assignment_response = self._create_assignment_response(ticket, None, is_fallback=True)
-                logger.info(f"Fallback assignment created for ticket {ticket.ticket_id}")
+                print(f"Fallback assignment created for ticket {ticket.ticket_id}")
                 return assignment_response
 
             # Step 6: Select best candidate using strict priority hierarchy
-            logger.info("Selecting best candidate using priority hierarchy...")
+            print("Selecting best candidate using priority hierarchy...")
             best_candidate = self.select_best_candidate(candidates)
 
             if not best_candidate:
-                logger.warning("No suitable candidate selected, proceeding with fallback assignment")
+                print("No suitable candidate selected, proceeding with fallback assignment")
                 assignment_response = self._create_assignment_response(ticket, None, is_fallback=True)
-                logger.info(f"Fallback assignment created for ticket {ticket.ticket_id}")
+                print(f"Fallback assignment created for ticket {ticket.ticket_id}")
                 return assignment_response
 
             # Step 7: Update technician workload (+1) for successful assignment
-            logger.info("Updating technician workload...")
+            print("Updating technician workload...")
             workload_updated = self.update_technician_workload(best_candidate.technician.technician_id, 1)
             if workload_updated:
-                logger.info(f"Incremented workload for {best_candidate.technician.name} "
+                print(f"Incremented workload for {best_candidate.technician.name} "
                            f"from {best_candidate.technician.current_workload} to {best_candidate.technician.current_workload + 1}")
             else:
-                logger.warning(f"Failed to update workload for {best_candidate.technician.name}")
+                print(f"Failed to update workload for {best_candidate.technician.name}")
 
             # Step 8: Create and return successful assignment response
             assignment_response = self._create_assignment_response(ticket, best_candidate)
-            logger.info(f"Successfully assigned ticket {ticket.ticket_id} to {best_candidate.technician.name} "
+            print(f"Successfully assigned ticket {ticket.ticket_id} to {best_candidate.technician.name} "
                        f"(Tier {best_candidate.priority_tier}: {self.priority_tiers[best_candidate.priority_tier]})")
 
             return assignment_response
 
         except Exception as e:
             error_msg = f"Assignment process failed: {str(e)}"
-            logger.error(error_msg)
+            print(error_msg)
             raise AssignmentError(error_msg)
 
     # ========================================
@@ -1146,7 +1143,7 @@ def update_technician_workload_by_email(technician_email: str, increment: int, d
     cursor = None
     try:
         if not db_connection.conn:
-            logger.error("No active Snowflake connection available")
+            print("No active Snowflake connection available")
             return False
 
         cursor = db_connection.conn.cursor()
@@ -1162,7 +1159,7 @@ def update_technician_workload_by_email(technician_email: str, increment: int, d
         tech_result = cursor.fetchone()
 
         if not tech_result:
-            logger.warning(f"No technician found with email {technician_email}")
+            print(f"No technician found with email {technician_email}")
             return False
 
         technician_id = tech_result[0]
@@ -1171,7 +1168,7 @@ def update_technician_workload_by_email(technician_email: str, increment: int, d
         return agent.update_technician_workload(technician_id, increment)
 
     except Exception as e:
-        logger.error(f"Error updating technician workload by email: {str(e)}")
+        print(f"Error updating technician workload by email: {str(e)}")
         return False
     finally:
         if cursor:

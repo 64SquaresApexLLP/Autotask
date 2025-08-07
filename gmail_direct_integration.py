@@ -10,6 +10,7 @@ import time
 import threading
 import requests
 import json
+import os
 from datetime import datetime
 from email.header import decode_header
 from email.utils import parseaddr
@@ -95,24 +96,37 @@ class DirectGmailIntegration:
     
     def load_app_password(self):
         """Load saved app password"""
-        try:
-            with open('.gmail_app_password', 'r') as f:
-                self.app_password = f.read().strip()
-            print("✅ App password loaded from saved file")
-            return True
-        except FileNotFoundError:
-            print("ℹ️ No saved app password found")
-            return False
-        except Exception as e:
-            print(f"⚠️ Error loading app password: {e}")
-            return False
+        # Try multiple possible locations for the password file
+        password_files = [
+            '.gmail_app_password',  # Current directory
+            '../.gmail_app_password',  # Parent directory (when running from backend/)
+            os.path.join(os.path.dirname(__file__), '.gmail_app_password')  # Same directory as this script
+        ]
+        
+        for password_file in password_files:
+            try:
+                if os.path.exists(password_file):
+                    with open(password_file, 'r') as f:
+                        self.app_password = f.read().strip()
+                    print(f"✅ App password loaded from {password_file}")
+                    return True
+            except Exception as e:
+                print(f"⚠️ Error loading app password from {password_file}: {e}")
+                continue
+        
+        print("ℹ️ No saved app password found in any location")
+        return False
     
-    def test_connection(self):
+    def test_connection(self, interactive=True):
         """Test Gmail IMAP connection"""
         try:
             if not self.app_password:
                 if not self.load_app_password():
-                    if not self.setup_app_password():
+                    if interactive and self.setup_app_password():
+                        pass  # Password was set up interactively
+                    else:
+                        print("❌ No Gmail app password available and running in non-interactive mode")
+                        print("💡 Please set up the Gmail app password first by running the script manually")
                         return False
             
             print("🔌 Testing Gmail IMAP connection...")
