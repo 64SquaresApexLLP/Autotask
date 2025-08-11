@@ -43,7 +43,7 @@ class IntakeClassificationAgent:
 
     def __init__(self, sf_account: str = None, sf_user: str = None, sf_warehouse: str = None,
                  sf_database: str = None, sf_schema: str = None, sf_role: str = None,
-                 data_ref_file: str = 'data.txt', db_connection=None, 
+                 data_ref_file: str = 'data/reference_data.txt', db_connection=None,
                  enable_email_monitoring: bool = False, webhook_url: str = "http://localhost:8001/webhooks/gmail/simple",
                  email_check_interval: int = 30):
         """
@@ -387,8 +387,13 @@ class IntakeClassificationAgent:
 
         query = f"""
         SELECT
+            TICKETNUMBER,
             TITLE,
             DESCRIPTION,
+            ISSUETYPE,
+            SUBISSUETYPE,
+            PRIORITY,
+            STATUS,
             SNOWFLAKE.CORTEX.AI_SIMILARITY(
                 COALESCE(TITLE, '') || ' ' || COALESCE(DESCRIPTION, ''),
                 '{escaped_ticket_text}'
@@ -522,9 +527,11 @@ class IntakeClassificationAgent:
         if similar_tickets:
             print(f"\nFound {len(similar_tickets)} similar tickets:")
             for i, ticket in enumerate(similar_tickets):
-                issue_type_label = self.reference_data.get('issuetype', {}).get(str(ticket.get('ISSUETYPE')), 'N/A')
+                issue_type_value = ticket.get('ISSUETYPE')
+                issue_type_label = self.reference_data.get('issuetype', {}).get(str(issue_type_value)) if issue_type_value is not None else None
+                issue_type_display = issue_type_label if issue_type_label else (str(issue_type_value) if issue_type_value is not None else 'N/A')
                 priority_label = self.reference_data.get('priority', {}).get(str(ticket.get('PRIORITY')), 'N/A')
-                print(f"  {i+1}. Title: {ticket.get('TITLE', 'N/A')}, Type: {issue_type_label}, Priority: {priority_label}")
+                print(f"  {i+1}. Title: {ticket.get('TITLE', 'N/A')}, Type: {issue_type_display}, Priority: {priority_label}")
         else:
             print("\nNo similar tickets found.")
 
