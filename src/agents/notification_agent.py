@@ -49,7 +49,8 @@ class NotificationAgent:
         # SMTP Configuration - Use same Gmail account as monitoring
         self.smtp_server = os.getenv('SMTP_SERVER', 'smtp.gmail.com')
         self.smtp_port = int(os.getenv('SMTP_PORT', '587'))
-        self.smtp_username = os.getenv('SMTP_USERNAME', 'rohankool2021@gmail.com')  # Same as monitoring
+        # Prefer explicit SMTP_USERNAME; fall back to SUPPORT_EMAIL from config
+        self.smtp_username = os.getenv('SMTP_USERNAME', SUPPORT_EMAIL)  # Keep consistent with configured support email
 
         # Try to load the same app password used for Gmail monitoring
         self.smtp_password = self._load_gmail_app_password()
