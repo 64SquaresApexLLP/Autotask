@@ -378,7 +378,7 @@ class AIProcessor:
                     return value
         return "N/A"
 
-    def extract_metadata(self, title: str, description: str, model: str = 'llama3-8b') -> Optional[Dict]:
+    def extract_metadata(self, title: str, description: str, model: str = 'llama3-70b') -> Optional[Dict]:
         """
         Extracts structured metadata from the ticket title and description using LLM.
 

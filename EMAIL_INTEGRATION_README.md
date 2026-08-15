@@ -109,7 +109,7 @@ IntakeClassificationAgent(
 ```python
 EmailListenerService(
     webhook_url="http://localhost:8001/webhooks/gmail/simple",  # Webhook endpoint
-    email_address="rohankool2021@gmail.com",  # Gmail address to monitor
+    email_address="venkatehp12@gmail.com",  # Gmail address to monitor
     check_interval=30  # Check interval in seconds
 )
 ```
@@ -141,7 +141,7 @@ print(status)
 {
     "is_monitoring": True,
     "is_running": True,
-    "email_address": "rohankool2021@gmail.com",
+    "email_address": "venkatehp12@gmail.com",
     "webhook_url": "http://localhost:8001/webhooks/gmail/simple",
     "check_interval": 30,
     "processed_emails": 15,
@@ -201,7 +201,7 @@ python example_email_integration.py
    ```python
    agent = IntakeClassificationAgent(enable_email_monitoring=True)
    ```
-3. **Send test email** to `rohankool2021@gmail.com`
+3. **Send test email** to `venkatehp12@gmail.com`
 4. **Check logs** for processing confirmation
 
 ## 📁 File Structure

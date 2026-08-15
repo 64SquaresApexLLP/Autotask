@@ -77,7 +77,7 @@ def example_3_with_email_enabled():
     
     if status['is_monitoring']:
         logger.info("🎉 Email monitoring is active!")
-        logger.info("📧 Send email to rohankool2021@gmail.com to test")
+        logger.info("📧 Send email to venkatehp12@gmail.com to test")
     else:
         logger.warning("⚠️ Email monitoring failed to start")
         logger.info("💡 To enable email monitoring:")

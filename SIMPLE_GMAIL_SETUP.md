@@ -1,7 +1,7 @@
 # Simple Gmail Real-time Setup
 
 ## Overview
-This is a **simplified Gmail integration** that uses your existing `credentials.json` file to authenticate with `rohankool2021@gmail.com` and monitor for new emails in real-time.
+This is a **simplified Gmail integration** that uses your existing `credentials.json` file to authenticate with `venkatehp12@gmail.com` and monitor for new emails in real-time.
 
 ## ✅ What You Have
 - ✅ `client_secret_826171701006-6biqf0hffn6bhvit91tp0j015beo10s7.apps.googleusercontent.com.json`
@@ -19,7 +19,7 @@ python gmail_simple_auth.py
 
 **What this does:**
 - Uses your existing credentials.json
-- Opens browser for OAuth with rohankool2021@gmail.com
+- Opens browser for OAuth with venkatehp12@gmail.com
 - Creates token.json for future use
 - Validates you're connected to the correct account
 
@@ -43,13 +43,13 @@ python gmail_monitor_simple.py
 ```
 
 **What this does:**
-- Monitors rohankool2021@gmail.com for new emails
+- Monitors venkatehp12@gmail.com for new emails
 - Sends new emails to webhook for processing
 - Creates tickets automatically via intake agent
 
 ## 🧪 Testing
 
-1. **Send a test email** to `rohankool2021@gmail.com`
+1. **Send a test email** to `venkatehp12@gmail.com`
 2. **Watch the monitor logs** for email detection
 3. **Check backend logs** for ticket creation
 4. **Verify ticket** was created successfully
@@ -57,7 +57,7 @@ python gmail_monitor_simple.py
 ## 📊 How It Works
 
 ```
-📧 Email arrives at rohankool2021@gmail.com
+📧 Email arrives at venkatehp12@gmail.com
     ↓
 🔍 Gmail Monitor detects new email (every 5 seconds)
     ↓
@@ -74,7 +74,7 @@ python gmail_monitor_simple.py
 
 ### Email Monitoring
 - **Check interval:** 5 seconds
-- **Target account:** rohankool2021@gmail.com
+- **Target account:** venkatehp12@gmail.com
 - **Webhook URL:** http://localhost:8001/webhooks/gmail/simple
 
 ### Authentication
@@ -90,7 +90,7 @@ python gmail_monitor_simple.py
 rm token.json
 python gmail_simple_auth.py
 
-# Make sure to select rohankool2021@gmail.com in browser
+# Make sure to select venkatehp12@gmail.com in browser
 ```
 
 ### Monitor Not Starting
@@ -114,7 +114,7 @@ curl http://localhost:8001/webhooks/gmail/simple
 
 ### Authentication Success
 ```
-🎉 Successfully authenticated with: rohankool2021@gmail.com
+🎉 Successfully authenticated with: venkatehp12@gmail.com
 📊 Total messages: 1234
 📊 Total threads: 567
 ✅ Token saved for future use
@@ -123,7 +123,7 @@ curl http://localhost:8001/webhooks/gmail/simple
 ### Monitor Running
 ```
 🔍 Starting email monitoring (checking every 5 seconds)
-📧 Send an email to rohankool2021@gmail.com to test!
+📧 Send an email to venkatehp12@gmail.com to test!
 🚨 Only NEW emails will be processed!
 ```
 
@@ -140,7 +140,7 @@ curl http://localhost:8001/webhooks/gmail/simple
 
 1. **Start backend:** `cd backend && python -m uvicorn main:app --host 0.0.0.0 --port 8001`
 2. **Start monitor:** `python gmail_monitor_simple.py`
-3. **Send emails** to rohankool2021@gmail.com
+3. **Send emails** to venkatehp12@gmail.com
 4. **Watch automatic** ticket creation
 
 ## 🛑 Stopping

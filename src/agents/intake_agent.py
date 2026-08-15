@@ -325,7 +325,7 @@ class IntakeClassificationAgent:
             print(f"All uniqueness checks failed for {ticket_number}, assuming NOT unique for safety")
             return False
 
-    def extract_metadata(self, title: str, description: str, model: str = 'llama3-8b') -> Optional[Dict]:
+    def extract_metadata(self, title: str, description: str, model: str = 'llama3-70b') -> Optional[Dict]:
         """
         Extracts structured metadata from the ticket title and description using LLM.
         """
@@ -473,7 +473,7 @@ class IntakeClassificationAgent:
     def process_new_ticket(self, ticket_name: str, ticket_description: str, ticket_title: str,
                           due_date: str, priority_initial: str, user_email: Optional[str] = None,
                           user_id: Optional[str] = None, phone_number: Optional[str] = None,
-                          extract_model: str = 'llama3-8b', classify_model: str = 'mixtral-8x7b', 
+                          extract_model: str = 'llama3-70b', classify_model: str = 'mixtral-8x7b',
                           resolution_model: str = 'mixtral-8x7b') -> Optional[Dict]:
         """
         Orchestrates the entire process for a new incoming ticket.

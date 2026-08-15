@@ -20,7 +20,7 @@ SF_WAREHOUSE = os.getenv('SNOWFLAKE_WAREHOUSE', 'S_WHH')
 SF_ROLE = os.getenv('SNOWFLAKE_ROLE', 'ACCOUNTADMIN')
 
 # Email Configuration (loaded from .env)
-SUPPORT_EMAIL = os.getenv('SUPPORT_EMAIL', 'rohankool2021@gmail.com')
+SUPPORT_EMAIL = os.getenv('SUPPORT_EMAIL', 'venkatehp12@gmail.com')
 SUPPORT_EMAIL_PASSWORD = os.getenv('SUPPORT_EMAIL_PASSWORD', '')
 
 # Manager and escalation email configuration

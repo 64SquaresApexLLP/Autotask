@@ -19,12 +19,12 @@ from email.utils import parseaddr
 class DirectGmailIntegration:
     """
     Direct Gmail integration using IMAP - no OAuth required
-    Uses rohankool2021@gmail.com with App Password
+    Uses venkatehp12@gmail.com with App Password
     """
     
     def __init__(self, webhook_url="http://localhost:8001/webhooks/gmail/simple"):
         self.webhook_url = webhook_url
-        self.email_address = "rohankool2021@gmail.com"
+        self.email_address = "venkatehp12@gmail.com"
         self.app_password = None
         self.imap_server = "imap.gmail.com"
         self.imap_port = 993
@@ -36,7 +36,7 @@ class DirectGmailIntegration:
         
         print("📧 DIRECT GMAIL INTEGRATION")
         print("=" * 50)
-        print("🎯 Target: rohankool2021@gmail.com")
+        print("🎯 Target: venkatehp12@gmail.com")
         print("🔧 Method: IMAP + App Password (No OAuth)")
         print("📡 Webhook: " + self.webhook_url)
         print("=" * 50)
@@ -50,7 +50,7 @@ class DirectGmailIntegration:
         print("")
         print("1️⃣  Enable 2-Factor Authentication (if not already):")
         print("   • Go to: https://myaccount.google.com/security")
-        print("   • Login with: rohankool2021@gmail.com")
+        print("   • Login with: venkatehp12@gmail.com")
         print("   • Enable 2-Step Verification")
         print("")
         print("2️⃣  Generate App Password:")
@@ -316,7 +316,7 @@ class DirectGmailIntegration:
         
         def monitor_loop():
             print(f"🔍 Monitoring started (checking every {check_interval} seconds)")
-            print("📧 Send email to rohankool2021@gmail.com to test!")
+            print("📧 Send email to venkatehp12@gmail.com to test!")
             print("=" * 60)
             
             while self.is_monitoring:

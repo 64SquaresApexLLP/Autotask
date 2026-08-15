@@ -27,9 +27,10 @@ class SnowflakeConnection:
     """
 
     def __init__(self, sf_account: str, sf_user: str, sf_warehouse: str,
-                 sf_database: str, sf_schema: str, sf_role: str):
+                 sf_database: str, sf_schema: str, sf_role: str,
+                 sf_password: str = None, sf_authenticator: str = 'externalbrowser'):
         """
-        Initialize Snowflake connection parameters for SSO authentication.
+        Initialize Snowflake connection parameters.
 
         Args:
             sf_account (str): Snowflake account identifier
@@ -38,6 +39,8 @@ class SnowflakeConnection:
             sf_database (str): Snowflake database to use
             sf_schema (str): Snowflake schema to use
             sf_role (str): Snowflake role to use
+            sf_password (str, optional): Password, used when sf_authenticator is not 'externalbrowser'
+            sf_authenticator (str): 'externalbrowser' for SSO, or 'snowflake' for username/password
         """
         self.sf_account = sf_account
         self.sf_user = sf_user
@@ -45,26 +48,29 @@ class SnowflakeConnection:
         self.sf_database = sf_database
         self.sf_schema = sf_schema
         self.sf_role = sf_role
+        self.sf_password = sf_password
+        self.sf_authenticator = sf_authenticator or 'externalbrowser'
         self.conn = None
 
         self._connect_to_snowflake()
 
     def _connect_to_snowflake(self):
-        """Establishes a connection to Snowflake using SSO (externalbrowser) authentication."""
+        """Establishes a connection to Snowflake using SSO or username/password authentication."""
         try:
-            # Use SSO authentication with externalbrowser
             connection_params = {
                 'user': self.sf_user,
                 'account': self.sf_account,
-                'authenticator': 'externalbrowser',
+                'authenticator': self.sf_authenticator,
                 'warehouse': self.sf_warehouse,
                 'database': self.sf_database,
                 'schema': self.sf_schema,
                 'role': self.sf_role
             }
+            if self.sf_authenticator != 'externalbrowser':
+                connection_params['password'] = self.sf_password
 
             self.conn = snowflake.connector.connect(**connection_params)
-            print("Successfully connected to Snowflake using SSO.")
+            print(f"Successfully connected to Snowflake using {self.sf_authenticator}.")
         except Exception as e:
             error_msg = str(e)
             print(f"Error connecting to Snowflake: {e}")

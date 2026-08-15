@@ -35,7 +35,7 @@ def test_webhook_with_valid_data():
         "subject": "Test Email - Webhook Integration",
         "from_email": "test@example.com",
         "from_name": "Test User",
-        "to_email": "rohankool2021@gmail.com",
+        "to_email": "venkatehp12@gmail.com",
         "body": "This is a test email to verify the webhook integration is working properly.",
         "received_at": datetime.now().isoformat(),
         "source": "gmail_imap_test",
@@ -204,7 +204,7 @@ def main():
     
     print("\n💡 Next steps:")
     print("1. Start email monitoring: python gmail_direct_integration.py")
-    print("2. Send test email to rohankool2021@gmail.com")
+    print("2. Send test email to venkatehp12@gmail.com")
     print("3. Check backend logs for processing confirmation")
 
 if __name__ == "__main__":

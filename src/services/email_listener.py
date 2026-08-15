@@ -23,7 +23,7 @@ class EmailListenerService:
     """
     
     def __init__(self, webhook_url: str = "http://localhost:8001/webhooks/gmail/simple",
-                 email_address: str = "rohankool2021@gmail.com",
+                 email_address: str = "venkatehp12@gmail.com",
                  check_interval: int = 30):
         """
         Initialize the email listener service.

@@ -1,6 +1,14 @@
 import sys
 import os
 import logging
+
+# Windows console defaults to cp1252, which can't print emoji used in log
+# messages throughout this codebase (crashes agent init with UnicodeEncodeError).
+if sys.platform == "win32":
+    for _stream in (sys.stdout, sys.stderr):
+        if hasattr(_stream, "reconfigure"):
+            _stream.reconfigure(encoding="utf-8")
+
 from fastapi import FastAPI, HTTPException, Query, Header, Request, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -263,7 +271,9 @@ try:
         sf_warehouse=config.SF_WAREHOUSE,
         sf_database=config.SF_DATABASE,
         sf_schema=config.SF_SCHEMA,
-        sf_role=config.SF_ROLE
+        sf_role=config.SF_ROLE,
+        sf_password=config.SF_PASSWORD,
+        sf_authenticator=config.SF_AUTHENTICATOR
     )
 except Exception as e:
     print(f"Warning: Snowflake connection failed: {e}")
@@ -283,12 +293,7 @@ data_manager = DataManager(data_ref_file=reference_data_path)
 notification_agent = NotificationAgent()
 try:
     intake_agent = IntakeClassificationAgent(
-        sf_account=config.SF_ACCOUNT,
-        sf_user=config.SF_USER,
-        sf_warehouse=config.SF_WAREHOUSE,
-        sf_database=config.SF_DATABASE,
-        sf_schema=config.SF_SCHEMA,
-        sf_role=config.SF_ROLE,
+        db_connection=snowflake_conn,
         data_ref_file=reference_data_path
     )
     # The intake_agent already creates its own assignment_agent in __init__
@@ -2586,7 +2591,7 @@ async def startup_event():
             # Start monitoring in background
             if gmail_monitor.start_monitoring(check_interval=5):
                 print("🔍 Gmail monitoring started successfully!")
-                print("📧 Monitoring rohankool2021@gmail.com for new emails...")
+                print("📧 Monitoring venkatehp12@gmail.com for new emails...")
             else:
                 print("⚠️ Failed to start Gmail monitoring")
         else:
