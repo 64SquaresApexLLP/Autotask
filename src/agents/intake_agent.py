@@ -14,6 +14,7 @@ from src.data import DataManager
 from src.processors import AIProcessor, TicketProcessor
 from src.agents.notification_agent import NotificationAgent
 from src.agents.assignment_agent import AssignmentAgentIntegration
+from src.agents.resolution_agent import ResolutionAgent
 from src.services.email_listener import EmailListenerService
 
 # Cross-platform file locking mechanism
@@ -76,6 +77,7 @@ class IntakeClassificationAgent:
         self.ai_processor = AIProcessor(self.db_connection, self.data_manager.reference_data)
         self.ticket_processor = TicketProcessor(self.data_manager.reference_data)
         self.notification_agent = NotificationAgent(db_connection=self.db_connection)
+        self.resolution_agent = ResolutionAgent(db_connection=self.db_connection)
         
         google_calendar_credentials_path = "credentials/google-calendar-credentials.json"
         self.assignment_agent = AssignmentAgentIntegration(
@@ -461,20 +463,19 @@ class IntakeClassificationAgent:
         return self.ai_processor.classify_ticket(new_ticket_data, extracted_metadata, similar_tickets, model)
 
     def generate_resolution_note(self, ticket_data: Dict, classified_data: Dict,
-                               extracted_metadata: Dict, model: str = 'mixtral-8x7b') -> str:
+                               extracted_metadata: Dict, ticket_number: str = "") -> str:
         """
-        Generates a resolution note using Cortex LLM.
+        Generates a resolution note via the ResolutionAgent (Cortex LLM with
+        retry logic and template fallback).
         """
-        try:
-            return self.ai_processor.generate_resolution_note(ticket_data, classified_data, extracted_metadata, model)
-        except TypeError:
-            return self.ai_processor.generate_resolution_note(ticket_data, classified_data, extracted_metadata)
+        return self.resolution_agent.generate_resolution(
+            ticket_data, classified_data, extracted_metadata, ticket_number
+        )
 
     def process_new_ticket(self, ticket_name: str, ticket_description: str, ticket_title: str,
                           due_date: str, priority_initial: str, user_email: Optional[str] = None,
                           user_id: Optional[str] = None, phone_number: Optional[str] = None,
-                          extract_model: str = 'llama3-70b', classify_model: str = 'mixtral-8x7b',
-                          resolution_model: str = 'mixtral-8x7b') -> Optional[Dict]:
+                          extract_model: str = 'llama3-70b', classify_model: str = 'mixtral-8x7b') -> Optional[Dict]:
         """
         Orchestrates the entire process for a new incoming ticket.
 
@@ -489,7 +490,6 @@ class IntakeClassificationAgent:
             phone_number (str, optional): User's phone number.
             extract_model (str): Model to use for metadata extraction.
             classify_model (str): Model to use for classification.
-            resolution_model (str): Model to use for resolution note generation.
 
         Returns:
             dict: The classified ticket data, or None if the process fails.
@@ -546,7 +546,7 @@ class IntakeClassificationAgent:
 
         # Generate resolution note
         print("\n--- Generating Resolution Note ---")
-        resolution_note = self.generate_resolution_note(new_ticket_raw, classified_data, extracted_metadata, model=resolution_model)
+        resolution_note = self.generate_resolution_note(new_ticket_raw, classified_data, extracted_metadata, ticket_number=ticket_number)
         print("Generated Resolution Note:")
         print(resolution_note)
 

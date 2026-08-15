@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Header from '../../components/Header';
 import Sidebar from '../../components/Sidebar';
 import ChatButton from '../../components/ChatButton';
@@ -17,6 +17,10 @@ const UrgentTickets = () => {
   const [availableTechnicians, setAvailableTechnicians] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+
+  // Tracks ticket numbers already auto-escalated this session, so re-checking
+  // overdue tickets (after a reload) doesn't re-escalate the same ones forever.
+  const autoEscalatedRef = useRef(new Set());
 
   // Load urgent tickets (Critical and High priority)
   const loadUrgentTickets = async () => {
@@ -96,9 +100,14 @@ const UrgentTickets = () => {
           const dueDate = new Date(dueDateStr);
           
           // Check if ticket is overdue (due date is in the past)
-          if (dueDate < now) {
-            console.log(`Auto-escalating overdue ticket: ${ticket.TICKETNUMBER || ticket.ticketnumber || ticket.id}`);
-            
+          const ticketNumber = ticket.TICKETNUMBER || ticket.ticketnumber || ticket.id;
+          if (dueDate < now && !autoEscalatedRef.current.has(ticketNumber)) {
+            console.log(`Auto-escalating overdue ticket: ${ticketNumber}`);
+
+            // Mark as escalated before awaiting so a reload triggered by this
+            // escalation can't re-enter this same ticket while we're mid-flight.
+            autoEscalatedRef.current.add(ticketNumber);
+
             // Auto-escalate the overdue ticket
             await handleEscalate(ticket);
           }

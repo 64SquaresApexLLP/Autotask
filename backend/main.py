@@ -453,6 +453,11 @@ class TicketUpdateRequest(BaseModel):
     """Model for updating ticket status and priority"""
     status: Optional[str] = Field(None, description="New ticket status (Open, In Progress, Closed, Resolved, etc.)")
     priority: Optional[str] = Field(None, description="New ticket priority (Low, Medium, High, Critical)")
+    work_note: Optional[str] = Field(None, description="Work note to append to the ticket resolution log")
+
+class EmailCustomerRequest(BaseModel):
+    """Model for emailing the customer from the technician ticket view"""
+    message: str = Field(..., description="Update message to send to the customer")
 
 class TicketUpdateResponse(BaseModel):
     """Response for ticket update operations"""
@@ -1013,6 +1018,36 @@ def update_ticket_status(ticket_number: str, status_data: dict):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to update ticket status: {str(e)}")
 
+@app.post("/tickets/{ticket_number}/email-customer")
+def email_customer(ticket_number: str, request: EmailCustomerRequest):
+    """Send a status/work-note update email to the ticket's customer."""
+    try:
+        if not snowflake_conn:
+            raise HTTPException(status_code=503, detail="Database connection unavailable")
+
+        query = "SELECT * FROM TEST_DB.PUBLIC.TICKETS WHERE TICKETNUMBER = %s"
+        results = snowflake_conn.execute_query(query, (ticket_number,))
+        if not results:
+            raise HTTPException(status_code=404, detail="Ticket not found")
+
+        ticket = results[0]
+        customer_email = ticket.get('USEREMAIL')
+        if not customer_email:
+            raise HTTPException(status_code=400, detail="This ticket has no customer email on file")
+
+        sent = notification_agent.send_status_update(
+            customer_email, ticket, ticket_number, request.message, recipient_type="customer"
+        )
+
+        if not sent:
+            raise HTTPException(status_code=502, detail="Failed to send email to customer")
+
+        return {"success": True, "message": f"Email sent to {customer_email}"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to email customer: {str(e)}")
+
 @app.patch("/tickets/{ticket_number}", response_model=TicketUpdateResponse)
 def update_ticket_status_priority(ticket_number: str, update_request: TicketUpdateRequest):
     """
@@ -1027,8 +1062,8 @@ def update_ticket_status_priority(ticket_number: str, update_request: TicketUpda
             raise HTTPException(status_code=503, detail="Database connection unavailable")
 
         # Validate that at least one field is being updated
-        if not update_request.status and not update_request.priority:
-            raise HTTPException(status_code=400, detail="At least one field (status or priority) must be provided")
+        if not update_request.status and not update_request.priority and not update_request.work_note:
+            raise HTTPException(status_code=400, detail="At least one field (status, priority, or work_note) must be provided")
 
         cursor = snowflake_conn.conn.cursor()
 
@@ -1168,6 +1203,15 @@ def update_ticket_status_priority(ticket_number: str, update_request: TicketUpda
                 update_parts.append("PRIORITY = %s")
                 update_values.append(update_request.priority)
                 updated_fields['priority'] = update_request.priority
+
+            if update_request.work_note:
+                existing_resolution = ticket_dict.get('RESOLUTION') or ''
+                timestamp = datetime.now().strftime('%Y-%m-%d %H:%M')
+                note_entry = f"[{timestamp}] {update_request.work_note}"
+                new_resolution = f"{existing_resolution}\n{note_entry}" if existing_resolution else note_entry
+                update_parts.append("RESOLUTION = %s")
+                update_values.append(new_resolution)
+                updated_fields['work_note'] = update_request.work_note
 
             if update_parts:
                 update_query = f"""

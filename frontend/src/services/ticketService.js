@@ -170,11 +170,33 @@ export const ticketService = {
   },
 
   /**
-   * Update existing ticket
+   * Update existing ticket (status, priority, and/or work note)
    */
   async updateTicket(ticketId, updateData) {
     try {
-      return await apiService.put(API_ENDPOINTS.TICKETS.UPDATE(ticketId), updateData);
+      return await apiService.patch(API_ENDPOINTS.TICKETS.UPDATE(ticketId), updateData);
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  /**
+   * Append a work note to the ticket's resolution log
+   */
+  async addWorkNote(ticketId, workNote) {
+    try {
+      return await apiService.patch(API_ENDPOINTS.TICKETS.UPDATE(ticketId), { work_note: workNote });
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  /**
+   * Send an update email to the ticket's customer
+   */
+  async emailCustomer(ticketId, message) {
+    try {
+      return await apiService.post(API_ENDPOINTS.TICKETS.EMAIL_CUSTOMER(ticketId), { message });
     } catch (error) {
       throw error;
     }
@@ -246,7 +268,7 @@ export const ticketService = {
    */
   async updateTicketStatus(ticketId, status) {
     try {
-      return await apiService.patch(`/tickets/${ticketId}/status`, {
+      return await apiService.patch(API_ENDPOINTS.TICKETS.UPDATE_STATUS(ticketId), {
         status: status
       });
     } catch (error) {
