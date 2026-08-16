@@ -59,12 +59,30 @@ teamlogic-autotask/
    cd teamlogic-autotask
    ```
 
-2. **Install dependencies**
+2. **Create and activate a virtual environment**
+   ```bash
+   python -m venv venv
+   ```
+   Activate it (you must do this every time before running the app):
+   - Windows (PowerShell):
+     ```powershell
+     venv\Scripts\Activate.ps1
+     ```
+   - Windows (cmd):
+     ```cmd
+     venv\Scripts\activate.bat
+     ```
+   - macOS/Linux:
+     ```bash
+     source venv/bin/activate
+     ```
+
+3. **Install dependencies**
    ```bash
    pip install -r requirements.txt
    ```
 
-3. **Configure environment variables**
+4. **Configure environment variables**
    Create a `.env` file with:
    ```env
    # Snowflake Configuration for SSO Authentication
