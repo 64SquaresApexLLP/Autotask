@@ -40,11 +40,14 @@ class LLMService:
                 'database': settings.snowflake_database,
                 'schema': settings.snowflake_schema,
                 'warehouse': settings.snowflake_warehouse,
+                'role': settings.snowflake_role,
                 'authenticator': settings.snowflake_authenticator or 'snowflake'
             }
             
-            # Add password if available
-            if settings.snowflake_password:
+            # Password is only meaningful for non-SSO auth; sending it alongside
+            # externalbrowser can confuse the connector, so only include it when
+            # actually using password-based authentication.
+            if settings.snowflake_authenticator != 'externalbrowser' and settings.snowflake_password:
                 connection_params['password'] = settings.snowflake_password
             
             # Create connection with timeout

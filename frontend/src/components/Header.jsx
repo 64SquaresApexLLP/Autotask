@@ -2,6 +2,7 @@ import React from 'react';
 import { User, LogOut, Bot, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import useAuth from '../hooks/useAuth';
+import teamLogicLogo from '../assets/TeamlogicIT.png';
 
 const Header = () => {
   const { user, logout, loading } = useAuth();
@@ -21,12 +22,16 @@ const Header = () => {
   return (
     <header className="bg-white shadow-sm border-b border-gray-200 px-6 py-4">
       <div className="flex items-center justify-between">
-        {/* Left side - App name with icon */}
-        <div className="flex items-center space-x-3">
-          <Bot className="w-8 h-8 text-[#00ABE4]" />
-          <div className="flex items-baseline space-x-2">
-            <h1 className="text-2xl font-bold text-gray-800">Autotask</h1>
-            <span className="text-xs font-medium text-gray-400 tracking-wide">by InnoSquares</span>
+        {/* Left side - Logo and app name */}
+        <div className="flex items-center space-x-4">
+          <img src={teamLogicLogo} alt="TeamLogic IT" className="h-10 w-auto object-contain" />
+          <div className="h-8 w-px bg-gray-200" />
+          <div className="flex items-center space-x-3">
+            <Bot className="w-8 h-8 text-[#00ABE4]" />
+            <div className="flex items-baseline space-x-2">
+              <h1 className="text-2xl font-bold text-gray-800">Autotask</h1>
+              <span className="text-xs font-medium text-gray-400 tracking-wide">by InnoSquares</span>
+            </div>
           </div>
         </div>
 

@@ -90,15 +90,18 @@ export const chatbotService = {
   },
 
   /**
-   * Send a chat message to the chatbot (no authentication required)
+   * Send a chat message to the chatbot (no authentication required).
+   * `sessionId` should stay the same for the whole conversation - the backend
+   * uses it to remember short-lived context (e.g. "which ticket did they mean?")
+   * across turns. Falls back to a one-off id if the caller doesn't pass one.
    */
-  async sendChatMessage(message, context = {}) {
+  async sendChatMessage(message, context = {}, sessionId = null) {
     try {
       return await this.makeRequest('/chatbot/chat', {
         method: 'POST',
         body: JSON.stringify({
           message: message,
-          session_id: `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          session_id: sessionId || `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
           message_type: context.type || 'user',
           timestamp: new Date().toISOString()
         })
@@ -111,12 +114,12 @@ export const chatbotService = {
   /**
    * Get FAQ information
    */
-  async getFAQ() {
+  async getFAQ(sessionId = null) {
     try {
       // Use the chat endpoint to get FAQ
       return await this.sendChatMessage('Show me frequently asked questions and help topics', {
         type: 'faq_request'
-      });
+      }, sessionId);
     } catch (error) {
       throw error;
     }

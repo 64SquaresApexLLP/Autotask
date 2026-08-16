@@ -1,6 +1,7 @@
 """Chatbot API Router for Autotask integration without authentication requirement."""
 
 import logging
+import re
 import jwt
 from datetime import datetime, timedelta
 from typing import List, Optional, Dict, Any
@@ -11,6 +12,16 @@ from pydantic import BaseModel
 # Global variables to store connections (will be set by main app)
 snowflake_conn = None
 llm_service = None
+
+# Matches ticket numbers like T20260815.0004 anywhere in a free-text message.
+TICKET_NUMBER_PATTERN = re.compile(r'\bT\d{6,10}\.\d{3,6}\b', re.IGNORECASE)
+
+# Very small in-memory conversation state, keyed by session_id, so a one-word
+# follow-up ("T20260815.0004") can be understood in the context of what the
+# bot just asked (e.g. "which ticket do you want similar tickets for?").
+# This resets on server restart and isn't meant to be a durable store - it's
+# just enough to carry a single pending clarification across one turn.
+_session_context: Dict[str, Dict[str, Any]] = {}
 
 def set_database_connection(conn):
     """Set the database connection from the main app."""
@@ -189,150 +200,262 @@ async def get_ticket(ticket_id: str, request: Request = None):
         logger.error(f"Error fetching ticket {ticket_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to fetch ticket: {str(e)}")
 
+def _find_similar_tickets_for_ticket(ticket_number: str, limit: int = 10) -> List[TicketResponse]:
+    """Core semantic-similarity search, shared by the REST endpoint and the chat handler."""
+    if not snowflake_conn:
+        raise HTTPException(status_code=503, detail="Database connection not available. Please ensure Snowflake connection is properly configured.")
+
+    # First, get the original ticket to find similar ones - pull category and
+    # issue-type context too, not just title/description, so the similarity
+    # search reflects the whole ticket, not just its free-text fields.
+    original_query = """
+        SELECT TITLE, DESCRIPTION, STATUS, PRIORITY, ISSUETYPE, SUBISSUETYPE, TICKETCATEGORY
+        FROM TEST_DB.PUBLIC.TICKETS
+        WHERE TICKETNUMBER = %s
+    """
+    original_results = snowflake_conn.execute_query(original_query, (ticket_number,))
+
+    if not original_results:
+        raise HTTPException(status_code=404, detail="Original ticket not found")
+
+    original_ticket = original_results[0]
+
+    # Combine title, description, category and issue details into one text
+    # blob for semantic comparison - a ticket categorized as "Network/Wi-Fi"
+    # should weigh toward other network tickets even if the wording differs.
+    search_text = " ".join(filter(None, [
+        original_ticket.get('TITLE'),
+        original_ticket.get('DESCRIPTION'),
+        original_ticket.get('TICKETCATEGORY'),
+        original_ticket.get('ISSUETYPE'),
+        original_ticket.get('SUBISSUETYPE'),
+    ])).strip()
+
+    if not search_text:
+        raise HTTPException(status_code=400, detail="Original ticket has no content to search for similar tickets")
+
+    escaped_search_text = search_text.replace("'", "''")
+
+    # Compare candidate tickets using the same combined fields, so matching is
+    # based on the full ticket context (title + description + category +
+    # issue type), not title/description alone.
+    candidate_text_expr = (
+        "COALESCE(TITLE, '') || ' ' || COALESCE(DESCRIPTION, '') || ' ' || "
+        "COALESCE(TICKETCATEGORY, '') || ' ' || COALESCE(ISSUETYPE, '') || ' ' || "
+        "COALESCE(SUBISSUETYPE, '')"
+    )
+
+    # NOTE: SNOWFLAKE.CORTEX.AI_SIMILARITY() isn't available on every Snowflake
+    # account/region (this one included - it errors with "Unknown
+    # user-defined function"). EMBED_TEXT_768 + VECTOR_COSINE_SIMILARITY is
+    # the broadly-available equivalent: embed both texts, compare vectors.
+    # The source ticket's embedding is computed once via a CTE and reused for
+    # every candidate row instead of recomputing it per row.
+    EMBED_MODEL = 'e5-base-v2'
+
+    # Use Snowflake Cortex embeddings for semantic similarity search in TICKETS table
+    tickets_similarity_query = f"""
+        WITH source_embedding AS (
+            SELECT SNOWFLAKE.CORTEX.EMBED_TEXT_768('{EMBED_MODEL}', '{escaped_search_text}') AS EMB
+        )
+        SELECT
+            TICKETNUMBER,
+            TITLE,
+            DESCRIPTION,
+            STATUS,
+            PRIORITY,
+            TECHNICIANEMAIL,
+            ISSUETYPE,
+            SUBISSUETYPE,
+            TICKETCATEGORY,
+            RESOLUTION,
+            VECTOR_COSINE_SIMILARITY(
+                SNOWFLAKE.CORTEX.EMBED_TEXT_768('{EMBED_MODEL}', {candidate_text_expr}),
+                (SELECT EMB FROM source_embedding)
+            ) AS SIMILARITY_SCORE
+        FROM TEST_DB.PUBLIC.TICKETS
+        WHERE TICKETNUMBER != %s
+        AND TITLE IS NOT NULL
+        AND DESCRIPTION IS NOT NULL
+        AND TRIM(TITLE) != ''
+        AND TRIM(DESCRIPTION) != ''
+        AND LENGTH(TRIM(TITLE || ' ' || DESCRIPTION)) > 10
+        ORDER BY SIMILARITY_SCORE DESC
+        LIMIT 5
+    """
+
+    tickets_results = snowflake_conn.execute_query(tickets_similarity_query, (ticket_number,))
+
+    # Use Snowflake Cortex embeddings for semantic similarity search in COMPANY_4130_DATA table
+    company_similarity_query = f"""
+        WITH source_embedding AS (
+            SELECT SNOWFLAKE.CORTEX.EMBED_TEXT_768('{EMBED_MODEL}', '{escaped_search_text}') AS EMB
+        )
+        SELECT
+            TICKETNUMBER,
+            TITLE,
+            DESCRIPTION,
+            STATUS,
+            PRIORITY,
+            ISSUETYPE,
+            SUBISSUETYPE,
+            TICKETCATEGORY,
+            RESOLUTION,
+            VECTOR_COSINE_SIMILARITY(
+                SNOWFLAKE.CORTEX.EMBED_TEXT_768('{EMBED_MODEL}', {candidate_text_expr}),
+                (SELECT EMB FROM source_embedding)
+            ) AS SIMILARITY_SCORE
+        FROM TEST_DB.PUBLIC.COMPANY_4130_DATA
+        WHERE TITLE IS NOT NULL
+        AND DESCRIPTION IS NOT NULL
+        AND TRIM(TITLE) != ''
+        AND TRIM(DESCRIPTION) != ''
+        AND LENGTH(TRIM(TITLE || ' ' || DESCRIPTION)) > 10
+        ORDER BY SIMILARITY_SCORE DESC
+        LIMIT 5
+    """
+
+    company_results = snowflake_conn.execute_query(company_similarity_query)
+
+    # Combine and sort results by similarity score
+    all_results = []
+
+    # Add TICKETS results
+    for row in tickets_results:
+        score = row.get('SIMILARITY_SCORE', 0)
+        if isinstance(score, (int, float)) and score >= 0.1:  # Minimum similarity threshold
+            all_results.append({
+                'source': 'TICKETS',
+                'data': row,
+                'score': score
+            })
+
+    # Add COMPANY_4130_DATA results
+    for row in company_results:
+        score = row.get('SIMILARITY_SCORE', 0)
+        if isinstance(score, (int, float)) and score >= 0.1:  # Minimum similarity threshold
+            all_results.append({
+                'source': 'COMPANY_4130_DATA',
+                'data': row,
+                'score': score
+            })
+
+    # Sort by similarity score (highest first)
+    all_results.sort(key=lambda x: x['score'], reverse=True)
+
+    # Convert to TicketResponse format
+    tickets = []
+    for result in all_results[:limit]:
+        row = result['data']
+        source = result['source']
+
+        # Create enhanced description with source and resolution info
+        description = row.get('DESCRIPTION', '')
+        resolution = row.get('RESOLUTION', '')
+
+        enhanced_description = f"[Source: {source}] {description}"
+        if resolution and resolution.strip():
+            enhanced_description += f"\n\nResolution: {resolution[:200]}{'...' if len(resolution) > 200 else ''}"
+
+        tickets.append(TicketResponse(
+            ticket_id=row.get('TICKETNUMBER', ''),
+            title=row.get('TITLE', ''),
+            description=enhanced_description,
+            status=row.get('STATUS', ''),
+            priority=row.get('PRIORITY', ''),
+            assigned_technician=row.get('TECHNICIANEMAIL', '') if source == 'TICKETS' else None
+        ))
+
+    return tickets
+
 # 4. GET /chatbot/tickets/similar/{ticket_number} – Finds tickets similar to the specified ticket number
 @router.get("/tickets/similar/{ticket_number}", response_model=List[TicketResponse])
 async def find_similar_tickets(ticket_number: str, request: Request = None):
     """Finds tickets similar to the specified ticket number using semantic similarity."""
     try:
-        current_user = await get_current_technician_from_main_app(request) if request else "T001"
-        
-        if not snowflake_conn:
-            raise HTTPException(status_code=503, detail="Database connection not available. Please ensure Snowflake connection is properly configured.")
-
-        # First, get the original ticket to find similar ones
-        original_query = f"""
-            SELECT TITLE, DESCRIPTION, STATUS, PRIORITY, ISSUETYPE, SUBISSUETYPE
-            FROM TEST_DB.PUBLIC.TICKETS
-            WHERE TICKETNUMBER = '{ticket_number}'
-        """
-        original_results = snowflake_conn.execute_query(original_query)
-
-        if not original_results:
-            raise HTTPException(status_code=404, detail="Original ticket not found")
-
-        original_ticket = original_results[0]
-        original_title = original_ticket.get('TITLE', '')
-        original_description = original_ticket.get('DESCRIPTION', '')
-        original_issue_type = original_ticket.get('ISSUETYPE', '')
-        
-        # Combine title and description for semantic search
-        search_text = f"{original_title} {original_description}".strip()
-        
-        if not search_text:
-            raise HTTPException(status_code=400, detail="Original ticket has no content to search for similar tickets")
-
-        # Use Snowflake Cortex AI for semantic similarity search in TICKETS table
-        tickets_similarity_query = f"""
-            SELECT 
-                TICKETNUMBER,
-                TITLE,
-                DESCRIPTION,
-                STATUS,
-                PRIORITY,
-                TECHNICIANEMAIL,
-                ISSUETYPE,
-                SUBISSUETYPE,
-                RESOLUTION,
-                SNOWFLAKE.CORTEX.AI_SIMILARITY(
-                    COALESCE(TITLE, '') || ' ' || COALESCE(DESCRIPTION, ''),
-                    '{search_text.replace("'", "''")}'
-                ) AS SIMILARITY_SCORE
-            FROM TEST_DB.PUBLIC.TICKETS
-            WHERE TICKETNUMBER != '{ticket_number}'
-            AND TITLE IS NOT NULL
-            AND DESCRIPTION IS NOT NULL
-            AND TRIM(TITLE) != ''
-            AND TRIM(DESCRIPTION) != ''
-            AND LENGTH(TRIM(TITLE || ' ' || DESCRIPTION)) > 10
-            ORDER BY SIMILARITY_SCORE DESC
-            LIMIT 5
-        """
-        
-        tickets_results = snowflake_conn.execute_query(tickets_similarity_query)
-        
-        # Use Snowflake Cortex AI for semantic similarity search in COMPANY_4130_DATA table
-        company_similarity_query = f"""
-            SELECT 
-                TICKETNUMBER,
-                TITLE,
-                DESCRIPTION,
-                STATUS,
-                PRIORITY,
-                ISSUETYPE,
-                SUBISSUETYPE,
-                RESOLUTION,
-                SNOWFLAKE.CORTEX.AI_SIMILARITY(
-                    COALESCE(TITLE, '') || ' ' || COALESCE(DESCRIPTION, ''),
-                    '{search_text.replace("'", "''")}'
-                ) AS SIMILARITY_SCORE
-            FROM TEST_DB.PUBLIC.COMPANY_4130_DATA
-            WHERE TITLE IS NOT NULL
-            AND DESCRIPTION IS NOT NULL
-            AND TRIM(TITLE) != ''
-            AND TRIM(DESCRIPTION) != ''
-            AND LENGTH(TRIM(TITLE || ' ' || DESCRIPTION)) > 10
-            ORDER BY SIMILARITY_SCORE DESC
-            LIMIT 5
-        """
-        
-        company_results = snowflake_conn.execute_query(company_similarity_query)
-        
-        # Combine and sort results by similarity score
-        all_results = []
-        
-        # Add TICKETS results
-        for row in tickets_results:
-            score = row.get('SIMILARITY_SCORE', 0)
-            if isinstance(score, (int, float)) and score >= 0.1:  # Minimum similarity threshold
-                all_results.append({
-                    'source': 'TICKETS',
-                    'data': row,
-                    'score': score
-                })
-        
-        # Add COMPANY_4130_DATA results
-        for row in company_results:
-            score = row.get('SIMILARITY_SCORE', 0)
-            if isinstance(score, (int, float)) and score >= 0.1:  # Minimum similarity threshold
-                all_results.append({
-                    'source': 'COMPANY_4130_DATA',
-                    'data': row,
-                    'score': score
-                })
-        
-        # Sort by similarity score (highest first)
-        all_results.sort(key=lambda x: x['score'], reverse=True)
-        
-        # Convert to TicketResponse format
-        tickets = []
-        for result in all_results[:10]:  # Return top 10 most similar
-            row = result['data']
-            source = result['source']
-            
-            # Create enhanced description with source and resolution info
-            description = row.get('DESCRIPTION', '')
-            resolution = row.get('RESOLUTION', '')
-            
-            enhanced_description = f"[Source: {source}] {description}"
-            if resolution and resolution.strip():
-                enhanced_description += f"\n\nResolution: {resolution[:200]}{'...' if len(resolution) > 200 else ''}"
-            
-            tickets.append(TicketResponse(
-                ticket_id=row.get('TICKETNUMBER', ''),
-                title=row.get('TITLE', ''),
-                description=enhanced_description,
-                status=row.get('STATUS', ''),
-                priority=row.get('PRIORITY', ''),
-                assigned_technician=row.get('TECHNICIANEMAIL', '') if source == 'TICKETS' else None
-            ))
-
-        return tickets
+        await get_current_technician_from_main_app(request) if request else "T001"
+        return _find_similar_tickets_for_ticket(ticket_number, limit=10)
 
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Error finding similar tickets for {ticket_number}: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to find similar tickets: {str(e)}")
+
+def _extract_ticket_number(message: str) -> Optional[str]:
+    """Pull a ticket number like T20260815.0004 out of free-text, if present."""
+    match = TICKET_NUMBER_PATTERN.search(message)
+    return match.group(0).upper() if match else None
+
+
+def _get_ticket_details(ticket_number: str) -> Optional[Dict[str, Any]]:
+    """Fetch full details for a single ticket, checking active then closed tickets."""
+    if not snowflake_conn:
+        return None
+
+    fields = """
+        TICKETNUMBER, TITLE, DESCRIPTION, STATUS, PRIORITY, TICKETTYPE,
+        TICKETCATEGORY, ISSUETYPE, SUBISSUETYPE, DUEDATETIME, RESOLUTION,
+        TECHNICIANEMAIL, USEREMAIL, PHONENUMBER
+    """
+
+    active_query = f"SELECT {fields} FROM TEST_DB.PUBLIC.TICKETS WHERE TICKETNUMBER = %s"
+    results = snowflake_conn.execute_query(active_query, (ticket_number,))
+
+    if not results:
+        # Ticket may have already been closed and moved to CLOSED_TICKETS
+        closed_query = f"SELECT {fields} FROM TEST_DB.PUBLIC.CLOSED_TICKETS WHERE TICKETNUMBER = %s"
+        results = snowflake_conn.execute_query(closed_query, (ticket_number,))
+
+    return results[0] if results else None
+
+
+def _format_ticket_details_message(ticket: Dict[str, Any]) -> str:
+    """Render a single ticket's fields as a structured chat response."""
+    def val(key: str, default: str = 'Not specified'):
+        value = ticket.get(key)
+        if value is None or (isinstance(value, str) and not value.strip()):
+            return default
+        return value
+
+    lines = [
+        f"📋 **Ticket Details: {val('TICKETNUMBER', '')}**",
+        "",
+        f"**Title:** {val('TITLE')}",
+        f"**Status:** {val('STATUS')}",
+        f"**Priority:** {val('PRIORITY')}",
+        f"**Category:** {val('TICKETCATEGORY')}",
+        f"**Issue Type:** {val('ISSUETYPE')}",
+        f"**Sub Issue Type:** {val('SUBISSUETYPE')}",
+        f"**Assigned Technician:** {val('TECHNICIANEMAIL')}",
+        f"**Due Date:** {val('DUEDATETIME')}",
+        "",
+        "**Description:**",
+        str(val('DESCRIPTION', 'No description provided')),
+    ]
+
+    resolution = ticket.get('RESOLUTION')
+    if resolution and str(resolution).strip():
+        lines += ["", "**Resolution / Notes:**", str(resolution)]
+
+    lines += ["", "💡 Ask me for tickets similar to this one, or let me know if you need anything else!"]
+    return "\n".join(lines)
+
+
+def _format_similar_tickets_message(original_number: str, tickets: List[TicketResponse]) -> str:
+    """Render a similar-tickets search result as a chat response."""
+    if not tickets:
+        return (
+            f"I couldn't find any tickets similar to **{original_number}**.\n\n"
+            f"This could mean the issue is unique, or there simply aren't close matches yet."
+        )
+
+    lines = [f"🧾 Here are tickets similar to **{original_number}**:", ""]
+    for ticket in tickets[:5]:
+        lines.append(f"• **{ticket.ticket_id}**: {ticket.title} ({ticket.status or 'Unknown'})")
+    lines += ["", "💡 Want the full details on any of these? Just give me the ticket number."]
+    return "\n".join(lines)
+
 
 # 5. POST /chatbot/chat – Sends a chat message to the chatbot for the resolution and general message
 @router.post("/chat", response_model=ChatResponse)
@@ -341,6 +464,49 @@ async def chat_message(message: ChatMessage, request: Request = None):
     try:
         current_user = await get_current_technician_from_main_app(request) if request else "T001"
         user_message = message.message.strip()
+        message_lower = user_message.lower()
+
+        # Sessions without an id all share one bucket - harmless since it just
+        # means the "which ticket?" follow-up won't be remembered for them.
+        session_id = message.session_id or "no-session"
+        pending_action = _session_context.get(session_id, {}).get('pending_action')
+
+        ticket_number = _extract_ticket_number(user_message)
+        wants_similar_tickets = ('similar ticket' in message_lower) or (pending_action == 'similar_tickets')
+
+        if wants_similar_tickets:
+            if ticket_number:
+                _session_context.pop(session_id, None)
+                try:
+                    similar = _find_similar_tickets_for_ticket(ticket_number, limit=5)
+                    return ChatResponse(response=_format_similar_tickets_message(ticket_number, similar))
+                except HTTPException as e:
+                    if e.status_code == 404:
+                        return ChatResponse(response=(
+                            f"I couldn't find a ticket numbered **{ticket_number}** to compare against. "
+                            f"Could you double-check the number?"
+                        ))
+                    logger.error(f"Similar tickets lookup failed for {ticket_number}: {e.detail}")
+                    return ChatResponse(response=(
+                        "I ran into a problem searching for similar tickets. Please try again shortly."
+                    ))
+            else:
+                _session_context[session_id] = {'pending_action': 'similar_tickets'}
+                return ChatResponse(response=(
+                    "Sure! Which ticket would you like me to find similar tickets for? "
+                    "Just share the ticket number (e.g., T20260815.0004)."
+                ))
+
+        elif ticket_number:
+            _session_context.pop(session_id, None)
+            ticket = _get_ticket_details(ticket_number)
+            if ticket:
+                return ChatResponse(response=_format_ticket_details_message(ticket))
+            return ChatResponse(response=(
+                f"I couldn't find a ticket numbered **{ticket_number}**. Could you double-check the number?"
+            ))
+
+        _session_context.pop(session_id, None)
 
         # ALWAYS try to use LLM service first for ALL questions
         if llm_service:

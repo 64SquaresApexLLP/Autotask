@@ -3,6 +3,10 @@ import { Bot, X, Loader2, Send } from 'lucide-react';
 import useAuth from '../hooks/useAuth';
 import chatbotService from '../services/chatbotService';
 
+// Matches ticket numbers like T20260815.0004 anywhere in free text - kept in
+// sync with the backend's TICKET_NUMBER_PATTERN in simple_router.py.
+const TICKET_NUMBER_REGEX = /\bT\d{6,10}\.\d{3,6}\b/i;
+
 const ChatBot = ({ onClose }) => {
   const { user } = useAuth();
   const [messages, setMessages] = useState([
@@ -15,6 +19,15 @@ const ChatBot = ({ onClose }) => {
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef(null);
+  // One session id for the whole conversation (not per message) so the
+  // backend can remember short-lived context across turns - e.g. "which
+  // ticket do you mean?" after asking for similar tickets.
+  const sessionIdRef = useRef(`session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`);
+  // Tracks a clarifying question we're waiting on an answer to (currently
+  // just 'similar_tickets'). Set client-side, not relied on from the server,
+  // so the next reply is routed correctly even if the backend's own
+  // in-memory session state gets out of sync (server restart, etc.).
+  const pendingIntentRef = useRef(null);
 
   // Scroll to bottom when new messages arrive
   const scrollToBottom = () => {
@@ -37,7 +50,9 @@ const ChatBot = ({ onClose }) => {
   // Handle predefined button clicks
   const handleQuickAction = async (action) => {
     setIsLoading(true);
-    
+    // Starting a fresh quick action supersedes any earlier pending question.
+    pendingIntentRef.current = null;
+
     try {
       let response;
       
@@ -97,7 +112,8 @@ const ChatBot = ({ onClose }) => {
       // Use the enhanced AI resolution endpoint
       const response = await chatbotService.sendChatMessage(
         'AI resolution: I need help with technical troubleshooting',
-        { type: 'ai_resolution' }
+        { type: 'ai_resolution' },
+        sessionIdRef.current
       );
 
       return response.response || response.message || `🤖 **AI Resolution Ready!**\n\nI'm here to help solve your technical issues.\n\n📝 **Please tell me:**\n• What problem are you experiencing?\n• Any error messages you see?\n• When did it start?\n• What have you tried so far?\n\nThe more details you provide, the better I can assist you!`;
@@ -111,12 +127,21 @@ const ChatBot = ({ onClose }) => {
   const handleSimilarTickets = async () => {
     try {
       // Use the enhanced similar tickets functionality
+      const requestMessage = 'Similar tickets: Find tickets similar to my latest ticket';
       const response = await chatbotService.sendChatMessage(
-        'Similar tickets: Find tickets similar to my latest ticket',
-        { type: 'similar_tickets' }
+        requestMessage,
+        { type: 'similar_tickets' },
+        sessionIdRef.current
       );
 
       if (response.response || response.message) {
+        // This request had no ticket number, so the backend is asking us
+        // which ticket to compare against - remember that so the user's next
+        // reply (often just a bare ticket number) is understood as answering
+        // it, instead of being treated as a "show me details" request.
+        if (!TICKET_NUMBER_REGEX.test(requestMessage)) {
+          pendingIntentRef.current = 'similar_tickets';
+        }
         return response.response || response.message;
       }
 
@@ -152,7 +177,7 @@ const ChatBot = ({ onClose }) => {
   // Get FAQ information
   const handleGetFAQ = async () => {
     try {
-      const response = await chatbotService.getFAQ();
+      const response = await chatbotService.getFAQ(sessionIdRef.current);
       if (response.response || response.message) {
         return response.response || response.message;
       }
@@ -167,24 +192,33 @@ const ChatBot = ({ onClose }) => {
   // Handle regular chat messages
   const handleChatMessage = async (message) => {
     try {
+      // If we're waiting on an answer to "which ticket do you mean?" for a
+      // similar-tickets request, this reply answers it - route it as such
+      // regardless of wording, so a bare ticket number resolves to a
+      // similarity search rather than a "show me details" lookup.
+      const answeringSimilarTicketsPrompt = pendingIntentRef.current === 'similar_tickets';
+      pendingIntentRef.current = null;
+
       // Check if the message contains AI resolution keywords
       const aiKeywords = ['ai resolution', 'ai help', 'ai support', 'troubleshoot', 'fix', 'problem', 'issue', 'error'];
       const hasAIKeywords = aiKeywords.some(keyword => message.toLowerCase().includes(keyword));
-      
+
       // Check if the message contains similar tickets keywords
       const similarKeywords = ['similar tickets', 'find similar', 'like this', 'same issue'];
       const hasSimilarKeywords = similarKeywords.some(keyword => message.toLowerCase().includes(keyword));
 
       let enhancedMessage = message;
-      
+
       // Add appropriate prefix for better intent detection
-      if (hasAIKeywords && !message.toLowerCase().startsWith('ai resolution')) {
+      if (answeringSimilarTicketsPrompt || hasSimilarKeywords) {
+        if (!message.toLowerCase().includes('similar ticket')) {
+          enhancedMessage = `Similar tickets: ${message}`;
+        }
+      } else if (hasAIKeywords && !message.toLowerCase().startsWith('ai resolution')) {
         enhancedMessage = `AI resolution: ${message}`;
-      } else if (hasSimilarKeywords && !message.toLowerCase().startsWith('similar tickets')) {
-        enhancedMessage = `Similar tickets: ${message}`;
       }
 
-      const response = await chatbotService.sendChatMessage(enhancedMessage);
+      const response = await chatbotService.sendChatMessage(enhancedMessage, {}, sessionIdRef.current);
       return response.response || response.message || `I understand you're asking about "${message}". Let me help you with that. Could you provide more details about what specific assistance you need?`;
     } catch (error) {
       console.error('Chat message error:', error);
