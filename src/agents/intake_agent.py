@@ -396,7 +396,7 @@ class IntakeClassificationAgent:
             SUBISSUETYPE,
             PRIORITY,
             STATUS,
-            SNOWFLAKE.CORTEX.AI_SIMILARITY(
+            AI_SIMILARITY(
                 COALESCE(TITLE, '') || ' ' || COALESCE(DESCRIPTION, ''),
                 '{escaped_ticket_text}'
             ) AS SIMILARITY_SCORE
@@ -452,11 +452,50 @@ class IntakeClassificationAgent:
 
         except Exception as e:
             print(f"Error in semantic similarity search: {e}")
-            print("Falling back to recent tickets...")
+            print("Falling back to keyword-based similarity search...")
+            return self._find_similar_tickets_keyword_fallback(title, description, top_n)
+
+    def _find_similar_tickets_keyword_fallback(self, title: str, description: str, top_n: int = 10) -> List[Dict]:
+        """
+        Keyword-based similar-ticket search used when Cortex's AI_SIMILARITY
+        function is unavailable on this Snowflake account/region.
+        """
+        stopwords = {
+            "the", "a", "an", "is", "are", "was", "were", "in", "on", "at", "to",
+            "for", "of", "and", "or", "with", "my", "it", "this", "that", "not",
+            "working", "issue", "problem", "please", "help"
+        }
+        text = f"{title} {description}".lower()
+        words = [w.strip('.,!?"\'') for w in text.split()]
+        keywords = [w for w in dict.fromkeys(words) if len(w) > 3 and w not in stopwords][:8]
+
+        if not keywords:
+            return []
+
+        escaped_keywords = [kw.replace("'", "''") for kw in keywords]
+        conditions = " OR ".join(
+            f"TITLE ILIKE '%{kw}%' OR DESCRIPTION ILIKE '%{kw}%'"
+            for kw in escaped_keywords
+        )
+        query = f"""
+        SELECT TICKETNUMBER, TITLE, DESCRIPTION, ISSUETYPE, SUBISSUETYPE, PRIORITY, STATUS, RESOLUTION
+        FROM TEST_DB.PUBLIC.COMPANY_4130_DATA
+        WHERE TITLE IS NOT NULL AND DESCRIPTION IS NOT NULL
+        AND ({conditions})
+        LIMIT {min(top_n, 10)}
+        """
+
+        try:
+            results = self.db_connection.execute_query(query)
+            if results:
+                print(f"Keyword fallback found {len(results)} similar tickets")
+            return results or []
+        except Exception as e:
+            print(f"Keyword fallback search also failed: {e}")
             return []
 
     def classify_ticket(self, new_ticket_data: Dict, extracted_metadata: Dict,
-                       similar_tickets: List[Dict], model: str = 'mixtral-8x7b') -> Optional[Dict]:
+                       similar_tickets: List[Dict], model: str = 'llama3-70b') -> Optional[Dict]:
         """
         Classifies the new ticket based on extracted metadata and similar tickets using LLM.
         """
@@ -475,7 +514,7 @@ class IntakeClassificationAgent:
     def process_new_ticket(self, ticket_name: str, ticket_description: str, ticket_title: str,
                           due_date: str, priority_initial: str, user_email: Optional[str] = None,
                           user_id: Optional[str] = None, phone_number: Optional[str] = None,
-                          extract_model: str = 'llama3-70b', classify_model: str = 'mixtral-8x7b') -> Optional[Dict]:
+                          extract_model: str = 'llama3-70b', classify_model: str = 'llama3-70b') -> Optional[Dict]:
         """
         Orchestrates the entire process for a new incoming ticket.
 
@@ -559,7 +598,8 @@ class IntakeClassificationAgent:
             "phone_number": phone_number if phone_number and phone_number.strip() else "",
             "extracted_metadata": extracted_metadata,
             "classified_data": classified_data,
-            "resolution_note": resolution_note
+            "resolution_note": resolution_note,
+            "similar_tickets": similar_tickets
         }
 
         # Process assignment after classification

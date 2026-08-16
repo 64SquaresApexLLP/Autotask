@@ -404,6 +404,16 @@ class TicketResponse(BaseModel):
     technician_email: Optional[str] = None
     technician_id: Optional[str] = None
     phone_number: Optional[str] = None
+    # AI pipeline output - surfaced so the frontend can show the real
+    # extraction/classification/resolution/similar-ticket results, not
+    # placeholder text, as the AI process is visualized step by step.
+    issue_type: Optional[str] = None
+    sub_issue_type: Optional[str] = None
+    ticket_category: Optional[str] = None
+    ticket_type: Optional[str] = None
+    resolution: Optional[str] = None
+    extracted_metadata: Optional[Dict[str, Any]] = None
+    similar_tickets: Optional[List[Dict[str, Any]]] = None
 
 class TechnicianResponse(BaseModel):
     technician_email: str
@@ -1581,6 +1591,24 @@ def create_ticket(request: TicketCreateRequest):
             technician_id = get_technician_id_from_email(technician_email)
             print(f"🔍 Technician ID: '{technician_id}'")
 
+        def sanitize_similar_tickets(raw_similar_tickets):
+            """Reduce raw Snowflake rows to a small, JSON-safe summary for the frontend."""
+            sanitized = []
+            for t in raw_similar_tickets or []:
+                issue_type_value = t.get('ISSUETYPE')
+                issue_type_label = intake_agent.reference_data.get('issuetype', {}).get(str(issue_type_value)) if issue_type_value is not None else None
+                priority_value = t.get('PRIORITY')
+                priority_label = intake_agent.reference_data.get('priority', {}).get(str(priority_value)) if priority_value is not None else None
+                sanitized.append({
+                    "ticket_number": str(t.get('TICKETNUMBER', '')),
+                    "title": str(t.get('TITLE', '')),
+                    "issue_type": issue_type_label or (str(issue_type_value) if issue_type_value is not None else 'N/A'),
+                    "priority": priority_label or (str(priority_value) if priority_value is not None else 'N/A'),
+                    "status": str(t.get('STATUS', '')),
+                    "resolution": str(t.get('RESOLUTION') or ''),
+                })
+            return sanitized
+
         # Extract classified data with proper fallbacks
         def extract_classified_value(data, key, default=''):
             """Extract value from classified data which may have Label/Value structure"""
@@ -1645,7 +1673,14 @@ def create_ticket(request: TicketCreateRequest):
             assigned_technician=assignment.get("assigned_technician", ""),
             technician_email=assignment.get("technician_email", ""),
             technician_id=technician_id,
-            phone_number=request.phone_number
+            phone_number=request.phone_number,
+            issue_type=issue_type,
+            sub_issue_type=sub_issue_type,
+            ticket_category=ticket_category,
+            ticket_type=ticket_type,
+            resolution=resolution,
+            extracted_metadata=result.get('extracted_metadata') or {},
+            similar_tickets=sanitize_similar_tickets(result.get('similar_tickets', []))
         )
 
     except Exception as e:

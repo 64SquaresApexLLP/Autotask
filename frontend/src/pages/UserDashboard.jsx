@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { FileText, Plus, Clock, AlertCircle, CheckCircle, User, Calendar, Phone, Mail, Loader2 } from 'lucide-react';
+import { FileText, Plus, Clock, AlertCircle, CheckCircle, User, Calendar, Phone, Mail, Loader2, Sparkles } from 'lucide-react';
 import Header from '../components/Header';
 import Sidebar from '../components/Sidebar';
+import AiPipelineModal from '../components/AiPipelineModal.jsx';
 import { ticketService } from '../services/ticketService.js';
 import { ApiError } from '../services/api.js';
 import useAuth from '../hooks/useAuth';
@@ -13,7 +14,9 @@ const UserDashboard = () => {
   const [error, setError] = useState('');
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [creatingTicket, setCreatingTicket] = useState(false);
-  const [creationProgress, setCreationProgress] = useState(null);
+  const [aiPipelineOpen, setAiPipelineOpen] = useState(false);
+  const [aiPipelineSubmitted, setAiPipelineSubmitted] = useState(null);
+  const [aiPipelineResult, setAiPipelineResult] = useState(null);
   const [successMessage, setSuccessMessage] = useState('');
   const [formData, setFormData] = useState({
     title: '',
@@ -75,7 +78,9 @@ const UserDashboard = () => {
     try {
       setCreatingTicket(true);
       setError('');
-      setCreationProgress(null);
+      setAiPipelineResult(null);
+      setAiPipelineSubmitted({ title: formData.title, description: formData.description });
+      setAiPipelineOpen(true);
 
       const ticketData = {
         ...formData,
@@ -83,23 +88,13 @@ const UserDashboard = () => {
         requester_name: formData.requester_name || user?.full_name || user?.username
       };
 
-      // Use the new polling method with progress updates
-      try {
-        await ticketService.createTicketWithPolling(ticketData, (progress) => {
-          setCreationProgress(progress);
-        });
-      } catch (pollingError) {
-        // Fallback to regular creation if polling fails
-        console.warn('Polling method failed, falling back to regular creation:', pollingError);
-        setCreationProgress({
-          stage: 'fallback',
-          message: 'Processing with standard method...',
-          progress: 50
-        });
-        await ticketService.createTicket(ticketData);
-      }
+      // Single real call to the AI workflow - the pipeline modal shows a
+      // loading state until this resolves, then renders the actual
+      // extraction/classification/resolution/assignment output it returns.
+      const created = await ticketService.createTicket(ticketData);
+      setAiPipelineResult(created);
 
-      // Reset form and reload tickets
+      // Reset form now; the AI pipeline modal stays up until the user closes it
       setFormData({
         title: '',
         description: '',
@@ -110,23 +105,28 @@ const UserDashboard = () => {
         user_email: ''
       });
       setShowCreateForm(false);
-      setCreationProgress(null);
-      setSuccessMessage('Ticket created successfully! Your request has been submitted and processed by our AI system.');
 
-      // Wait a moment then reload tickets
-      setTimeout(async () => {
-        await loadUserTickets();
-        // Clear success message after showing tickets
-        setTimeout(() => setSuccessMessage(''), 5000);
-      }, 1000);
+      await loadUserTickets();
 
     } catch (error) {
       console.error('Failed to create ticket:', error);
       setError(error.message || 'Failed to create ticket. Please try again.');
-      setCreationProgress(null);
+      setAiPipelineOpen(false);
     } finally {
       setCreatingTicket(false);
     }
+  };
+
+  const closeAiPipeline = () => {
+    setAiPipelineOpen(false);
+    setAiPipelineResult(null);
+    setAiPipelineSubmitted(null);
+    setSuccessMessage('Ticket created successfully! Your request has been submitted and processed by our AI system.');
+    setTimeout(() => setSuccessMessage(''), 5000);
+    // Re-fetch right as the modal closes so the new ticket is guaranteed to
+    // be visible immediately, even if the earlier background reload raced
+    // with the ticket becoming visible in the database.
+    loadUserTickets();
   };
 
   const getPriorityColor = (priority) => {
@@ -408,6 +408,20 @@ const UserDashboard = () => {
                           </div>
                           <p className="text-gray-600 mb-3">{ticket.description}</p>
 
+                          {(ticket.ticket_category || ticket.issue_type) && (
+                            <div className="flex items-center flex-wrap gap-2 mb-3">
+                              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium bg-[#E9F1FA] text-[#00ABE4]">
+                                <Sparkles className="w-3 h-3" />
+                                {ticket.ticket_category || ticket.issue_type}
+                              </span>
+                              {ticket.issue_type && ticket.issue_type !== ticket.ticket_category && (
+                                <span className="px-2 py-1 rounded-md text-xs font-medium bg-gray-100 text-gray-600">
+                                  {ticket.issue_type}
+                                </span>
+                              )}
+                            </div>
+                          )}
+
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-gray-500">
                             <div className="flex items-center space-x-2">
                               <User className="w-4 h-4" />
@@ -465,53 +479,13 @@ const UserDashboard = () => {
         </main>
       </div>
 
-      {/* Progress Modal */}
-      {creatingTicket && creationProgress && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-8 max-w-md w-full mx-4">
-            <div className="text-center">
-              <div className="mb-4">
-                <Loader2 className="w-12 h-12 animate-spin text-[#00ABE4] mx-auto" />
-              </div>
-
-              <h3 className="text-lg font-semibold text-gray-800 mb-2">
-                Creating Your Ticket
-              </h3>
-
-              <p className="text-gray-600 mb-4">
-                {creationProgress.message}
-              </p>
-
-              {/* Progress Bar */}
-              <div className="w-full bg-gray-200 rounded-full h-2 mb-4">
-                <div
-                  className="bg-[#00ABE4] h-2 rounded-full transition-all duration-500"
-                  style={{ width: `${creationProgress.progress}%` }}
-                ></div>
-              </div>
-
-              <div className="flex justify-between text-sm text-gray-500">
-                <span>{creationProgress.progress}% Complete</span>
-                {creationProgress.elapsed && (
-                  <span>{creationProgress.elapsed}s elapsed</span>
-                )}
-              </div>
-
-              {creationProgress.stage === 'processing' && (
-                <div className="mt-4 text-xs text-gray-500">
-                  <p>⚡ Our AI is analyzing your request and generating an automated resolution.</p>
-                  <p className="mt-1">This process typically takes 60-90 seconds.</p>
-                  {creationProgress.isLongRunning && (
-                    <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-yellow-700">
-                      <p>⏱️ This is taking longer than usual. Please don't close this window.</p>
-                      <p>Your ticket will be created successfully.</p>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
+      {/* Real AI Pipeline Visualization */}
+      {aiPipelineOpen && (
+        <AiPipelineModal
+          submitted={aiPipelineSubmitted}
+          result={aiPipelineResult}
+          onClose={closeAiPipeline}
+        />
       )}
     </div>
   );

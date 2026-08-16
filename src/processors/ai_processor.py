@@ -428,7 +428,7 @@ class AIProcessor:
         return extracted_data
 
     def classify_ticket(self, new_ticket_data: Dict, extracted_metadata: Dict,
-                       similar_tickets: List[Dict], model: str = 'mixtral-8x7b') -> Optional[Dict]:
+                       similar_tickets: List[Dict], model: str = 'llama3-70b') -> Optional[Dict]:
         """
         Classifies the new ticket (ISSUETYPE, SUBISSUETYPE, TICKETCATEGORY, TICKETTYPE, PRIORITY)
         based on extracted metadata and similar tickets using LLM.
@@ -691,7 +691,7 @@ JSON Schema:
         '''
 
         print("Calling Cortex LLM for resolution generation...")
-        llm_response = self.db_connection.call_cortex_llm(prompt, model='mixtral-8x7b', expect_json=False)
+        llm_response = self.db_connection.call_cortex_llm(prompt, model='llama3-70b', expect_json=False)
 
         if isinstance(llm_response, str) and llm_response.strip():
             return llm_response.strip()

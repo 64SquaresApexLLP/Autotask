@@ -52,7 +52,7 @@ def test_sso_connection():
             print("\n🤖 Testing Cortex LLM...")
             llm_result = conn.call_cortex_llm(
                 "What is 2+2? Respond with just the number.",
-                model='mixtral-8x7b',
+                model='llama3-70b',
                 expect_json=False
             )
             if llm_result:

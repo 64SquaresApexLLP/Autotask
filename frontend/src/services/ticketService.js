@@ -25,11 +25,11 @@ const transformTicketData = (ticket) => {
 
   // Use real technician ID from Snowflake
   const technicianId = ticket.TECHNICIAN_ID || ticket.technician_id;
-  const assignedTechnician = technicianId; // Use the real ID directly
-  const technicianDisplayName = technicianId ? (TECHNICIAN_DISPLAY_MAP[technicianId] || technicianId) : null;
+  const assignedTechnician = technicianId || ticket.assigned_technician || null;
+  const technicianDisplayName = assignedTechnician ? (TECHNICIAN_DISPLAY_MAP[assignedTechnician] || assignedTechnician) : null;
 
   return {
-    id: ticket.TICKETNUMBER || ticket.id,
+    id: ticket.TICKETNUMBER || ticket.ticket_number || ticket.id,
     title: ticket.TITLE || ticket.title,
     description: ticket.DESCRIPTION || ticket.description,
     status: ticket.STATUS || ticket.status,
@@ -48,6 +48,9 @@ const transformTicketData = (ticket) => {
     technician_email: ticket.TECHNICIANEMAIL || ticket.technician_email,
     assigned_technician: assignedTechnician,
     assigned_technician_display: technicianDisplayName,
+    // AI pipeline output - only present on the ticket-creation response
+    extracted_metadata: ticket.extracted_metadata || null,
+    similar_tickets: ticket.similar_tickets || null,
     created_at: ticket.created_at || new Date().toISOString(),
     updated_at: ticket.updated_at || new Date().toISOString()
   };
@@ -100,70 +103,6 @@ export const ticketService = {
         timeout: 120000 // 2 minutes timeout for agentic workflow
       });
       return transformTicketData(ticket);
-    } catch (error) {
-      throw error;
-    }
-  },
-
-  /**
-   * Create ticket with optimistic updates and polling
-   */
-  async createTicketWithPolling(ticketData, onProgress) {
-    try {
-      // Start the ticket creation process
-      const startTime = Date.now();
-
-      // Notify progress
-      if (onProgress) {
-        onProgress({
-          stage: 'submitting',
-          message: 'Submitting your ticket...',
-          progress: 10
-        });
-      }
-
-      // Create ticket with extended timeout
-      const createPromise = this.createTicket(ticketData);
-
-      // Set up progress updates
-      const progressInterval = setInterval(() => {
-        const elapsed = Date.now() - startTime;
-        const progress = Math.min(90, 10 + (elapsed / 120000) * 80); // Progress from 10% to 90% over 2 minutes
-
-        let message = 'Processing your ticket...';
-        if (elapsed > 20000) message = 'Analyzing your request with AI...';
-        if (elapsed > 40000) message = 'Generating automated resolution...';
-        if (elapsed > 60000) message = 'Finalizing ticket details...';
-        if (elapsed > 90000) message = 'Almost done, please wait...';
-
-        if (onProgress) {
-          onProgress({
-            stage: 'processing',
-            message,
-            progress: Math.round(progress),
-            elapsed: Math.round(elapsed / 1000),
-            isLongRunning: elapsed > 90000
-          });
-        }
-      }, 2000);
-
-      try {
-        const ticket = await createPromise;
-        clearInterval(progressInterval);
-
-        if (onProgress) {
-          onProgress({
-            stage: 'completed',
-            message: 'Ticket created successfully!',
-            progress: 100
-          });
-        }
-
-        return ticket;
-      } catch (error) {
-        clearInterval(progressInterval);
-        throw error;
-      }
     } catch (error) {
       throw error;
     }
@@ -295,6 +234,37 @@ export const ticketService = {
   async escalateTicket(ticketId, escalationData = {}) {
     try {
       return await apiService.post(`/tickets/${ticketId}/escalate`, escalationData);
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  /**
+   * Find tickets similar to the given ticket, using real ticket data from
+   * the existing /tickets API (no mock/hardcoded data). Similarity is scored
+   * by matching issue type, ticket category, and priority against the same
+   * fields on other tickets, excluding the ticket itself.
+   */
+  async getSimilarTickets(ticket, limit = 5) {
+    if (!ticket) return [];
+
+    try {
+      const allTickets = await this.getAllTickets({ limit: 100 });
+
+      const scored = allTickets
+        .filter((t) => t.id && t.id !== ticket.id)
+        .map((t) => {
+          let score = 0;
+          if (ticket.issue_type && t.issue_type && ticket.issue_type === t.issue_type) score += 3;
+          if (ticket.sub_issue_type && t.sub_issue_type && ticket.sub_issue_type === t.sub_issue_type) score += 2;
+          if (ticket.ticket_category && t.ticket_category && ticket.ticket_category === t.ticket_category) score += 2;
+          if (ticket.priority && t.priority && ticket.priority.toLowerCase() === t.priority.toLowerCase()) score += 1;
+          return { ticket: t, score };
+        })
+        .filter((entry) => entry.score > 0)
+        .sort((a, b) => b.score - a.score);
+
+      return scored.slice(0, limit).map((entry) => entry.ticket);
     } catch (error) {
       throw error;
     }

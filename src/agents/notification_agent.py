@@ -61,7 +61,7 @@ class NotificationAgent:
         # LLM Configuration
         self.db_connection = db_connection
         self.llm_enabled = db_connection is not None
-        self.llm_model = 'mixtral-8x7b'
+        self.llm_model = 'llama3-70b'
 
         # Email Configuration
         self.enabled = bool(self.smtp_password)

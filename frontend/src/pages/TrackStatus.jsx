@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Clock, AlertCircle, CheckCircle, User, Calendar, Phone, Mail, Loader2, FileText } from 'lucide-react';
+import { Search, Clock, AlertCircle, CheckCircle, User, Calendar, Phone, Mail, Loader2, FileText, Sparkles, ChevronDown, ChevronUp, Tag } from 'lucide-react';
 import Header from '../components/Header';
 import Sidebar from '../components/Sidebar';
 import { ticketService } from '../services/ticketService.js';
@@ -13,10 +13,15 @@ const TrackStatus = () => {
   const [error, setError] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [expandedTicketId, setExpandedTicketId] = useState(null);
 
-  // Load user's tickets on component mount
+  // Load user's tickets on component mount, then keep status fresh so
+  // technician updates (status changes, AI resolution) show up automatically.
   useEffect(() => {
     loadUserTickets();
+
+    const refreshInterval = setInterval(loadUserTickets, 30000);
+    return () => clearInterval(refreshInterval);
   }, []);
 
   const loadUserTickets = async () => {
@@ -194,7 +199,21 @@ const TrackStatus = () => {
                             </span>
                           </div>
                           <p className="text-gray-600 mb-3">{ticket.description}</p>
-                          
+
+                          {(ticket.ticket_category || ticket.issue_type) && (
+                            <div className="flex items-center flex-wrap gap-2 mb-3">
+                              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium bg-[#E9F1FA] text-[#00ABE4]">
+                                <Sparkles className="w-3 h-3" />
+                                {ticket.ticket_category || ticket.issue_type}
+                              </span>
+                              {ticket.issue_type && ticket.issue_type !== ticket.ticket_category && (
+                                <span className="px-2 py-1 rounded-md text-xs font-medium bg-gray-100 text-gray-600">
+                                  {ticket.issue_type}
+                                </span>
+                              )}
+                            </div>
+                          )}
+
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-500">
                             <div className="flex items-center space-x-2">
                               <User className="w-4 h-4" />
@@ -225,6 +244,53 @@ const TrackStatus = () => {
                           </span>
                         </div>
                       </div>
+
+                      {(ticket.issue_type || ticket.sub_issue_type || ticket.resolution) && (
+                        <div className="mt-2 pt-3 border-t border-gray-100">
+                          <button
+                            onClick={() => setExpandedTicketId(expandedTicketId === ticket.id ? null : ticket.id)}
+                            className="flex items-center gap-1 text-sm text-[#00ABE4] hover:text-blue-600 font-medium"
+                          >
+                            <Sparkles className="w-4 h-4" />
+                            AI Analysis & Resolution
+                            {expandedTicketId === ticket.id ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                          </button>
+
+                          {expandedTicketId === ticket.id && (
+                            <div className="mt-3 space-y-3">
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+                                <div className="bg-gray-50 rounded-lg p-3">
+                                  <div className="flex items-center gap-1 text-gray-500 text-xs mb-1">
+                                    <Tag className="w-3 h-3" /> Category
+                                  </div>
+                                  <p className="font-medium text-gray-800">{ticket.ticket_category || 'N/A'}</p>
+                                </div>
+                                <div className="bg-gray-50 rounded-lg p-3">
+                                  <div className="text-gray-500 text-xs mb-1">Issue Type</div>
+                                  <p className="font-medium text-gray-800">{ticket.issue_type || 'N/A'}</p>
+                                </div>
+                                <div className="bg-gray-50 rounded-lg p-3">
+                                  <div className="text-gray-500 text-xs mb-1">Sub Issue Type</div>
+                                  <p className="font-medium text-gray-800">{ticket.sub_issue_type || 'N/A'}</p>
+                                </div>
+                              </div>
+
+                              <div>
+                                <div className="text-xs text-gray-500 mb-1">🤖 AI Suggested Resolution</div>
+                                {ticket.resolution ? (
+                                  <p className="text-sm text-gray-700 p-3 bg-purple-50 border border-purple-100 rounded whitespace-pre-line">
+                                    {ticket.resolution}
+                                  </p>
+                                ) : (
+                                  <p className="text-sm text-gray-500 italic p-3 bg-gray-50 rounded">
+                                    No AI resolution generated yet.
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>

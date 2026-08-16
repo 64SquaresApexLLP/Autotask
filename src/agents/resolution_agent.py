@@ -42,7 +42,7 @@ class ResolutionAgent:
             db_connection: Snowflake database connection for LLM access
         """
         self.db_connection = db_connection
-        self.llm_model = 'llama2-70b-chat'
+        self.llm_model = 'llama3-70b'
         self.enabled = db_connection is not None
         self.max_retries = 2
         self.retry_delay = 1  # seconds

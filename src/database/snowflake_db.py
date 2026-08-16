@@ -128,7 +128,7 @@ class SnowflakeConnection:
             print(f"Error executing Snowflake query: {e}")
             return []
 
-    def call_cortex_llm(self, prompt_text: str, model: str = 'mixtral-8x7b', expect_json: bool = True):
+    def call_cortex_llm(self, prompt_text: str, model: str = 'llama3-70b', expect_json: bool = True):
         """
         Calls the Snowflake Cortex LLM (CORTEX_COMPLETE) with the given prompt.
 

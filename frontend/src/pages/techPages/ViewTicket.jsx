@@ -1,11 +1,11 @@
 import React from 'react'
 import { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import Sidebar from '../../components/Sidebar';
 import Header from '../../components/Header';
 import ChatButton from '../../components/ChatButton';
 import { ticketService } from '../../services/ticketService';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Sparkles, Tag, Layers, Link2, CheckCircle2, Pencil, PlayCircle, CheckCircle, XCircle } from 'lucide-react';
 
 const statusColors = {
   open: 'bg-yellow-100 text-yellow-800',
@@ -26,6 +26,7 @@ const priorityColors = {
 function ViewTicket() {
   const { ticketId } = useParams();
   const tId = ticketId.replace('-', '.');
+  const navigate = useNavigate();
 
   const [ticket, setTicket] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -41,15 +42,28 @@ function ViewTicket() {
   const [emailing, setEmailing] = useState(false);
   const [emailMessage, setEmailMessage] = useState(null);
 
+  const [similarTickets, setSimilarTickets] = useState([]);
+  const [loadingSimilar, setLoadingSimilar] = useState(false);
+
+  const [editingResolution, setEditingResolution] = useState(false);
+  const [editedResolutionText, setEditedResolutionText] = useState('');
+  const [resolutionMessage, setResolutionMessage] = useState(null);
+  const [resolutionActionLoading, setResolutionActionLoading] = useState(false);
+
+  const [quickAction, setQuickAction] = useState(null); // which lifecycle action is in flight
+  const [quickActionMessage, setQuickActionMessage] = useState(null);
+
   const fetchTicket = async () => {
     try {
       setLoading(true);
       setLoadError('');
       const data = await ticketService.getTicketById(tId);
       setTicket(data);
+      return data;
     } catch (error) {
       console.error('Failed to load ticket:', error);
       setLoadError('Failed to load this ticket. Please try again.');
+      return null;
     } finally {
       setLoading(false);
     }
@@ -59,6 +73,28 @@ function ViewTicket() {
     fetchTicket();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tId]);
+
+  // Load similar tickets once we know the current ticket's classification
+  useEffect(() => {
+    if (!ticket) return;
+
+    let cancelled = false;
+    const loadSimilar = async () => {
+      try {
+        setLoadingSimilar(true);
+        const results = await ticketService.getSimilarTickets(ticket, 5);
+        if (!cancelled) setSimilarTickets(results);
+      } catch (error) {
+        console.error('Failed to load similar tickets:', error);
+        if (!cancelled) setSimilarTickets([]);
+      } finally {
+        if (!cancelled) setLoadingSimilar(false);
+      }
+    };
+
+    loadSimilar();
+    return () => { cancelled = true; };
+  }, [ticket?.id, ticket?.issue_type, ticket?.ticket_category]);
 
   const handleUpdateTicket = async () => {
     if (!newStatus && !newWorkNote) {
@@ -104,6 +140,67 @@ function ViewTicket() {
     } finally {
       setEmailing(false);
     }
+  };
+
+  const handleAcceptResolution = async () => {
+    setResolutionActionLoading(true);
+    setResolutionMessage(null);
+    try {
+      await ticketService.addWorkNote(tId, 'Technician accepted the AI suggested resolution.');
+      if (ticket?.status?.toLowerCase() === 'open' || ticket?.status?.toLowerCase() === 'new') {
+        await ticketService.updateTicketStatus(tId, 'In Progress');
+      }
+      setResolutionMessage({ type: 'success', text: 'Resolution accepted.' });
+      await fetchTicket();
+    } catch (error) {
+      console.error('Failed to accept resolution:', error);
+      setResolutionMessage({ type: 'error', text: error.message || 'Failed to accept resolution.' });
+    } finally {
+      setResolutionActionLoading(false);
+    }
+  };
+
+  const startEditingResolution = () => {
+    setEditedResolutionText(ticket?.resolution || '');
+    setEditingResolution(true);
+    setResolutionMessage(null);
+  };
+
+  const handleSaveEditedResolution = async () => {
+    if (!editedResolutionText.trim()) return;
+
+    setResolutionActionLoading(true);
+    setResolutionMessage(null);
+    try {
+      await ticketService.addWorkNote(tId, `Edited Resolution: ${editedResolutionText.trim()}`);
+      setResolutionMessage({ type: 'success', text: 'Edited resolution saved.' });
+      setEditingResolution(false);
+      await fetchTicket();
+    } catch (error) {
+      console.error('Failed to save edited resolution:', error);
+      setResolutionMessage({ type: 'error', text: error.message || 'Failed to save edited resolution.' });
+    } finally {
+      setResolutionActionLoading(false);
+    }
+  };
+
+  const handleQuickStatus = async (status) => {
+    setQuickAction(status);
+    setQuickActionMessage(null);
+    try {
+      await ticketService.updateTicketStatus(tId, status);
+      setQuickActionMessage({ type: 'success', text: `Ticket marked as ${status}.` });
+      await fetchTicket();
+    } catch (error) {
+      console.error(`Failed to mark ticket as ${status}:`, error);
+      setQuickActionMessage({ type: 'error', text: error.message || `Failed to mark ticket as ${status}.` });
+    } finally {
+      setQuickAction(null);
+    }
+  };
+
+  const goToTicket = (ticketNumber) => {
+    navigate(`/technician/my-tickets/view/${ticketNumber.replace('.', '-')}`);
   };
 
   if (loading) {
@@ -161,6 +258,40 @@ function ViewTicket() {
                 </div>
               </div>
 
+              {/* Lifecycle Quick Actions */}
+              <div className="flex flex-wrap items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg p-3">
+                <span className="text-xs font-medium text-gray-500 mr-1">Lifecycle:</span>
+                <button
+                  onClick={() => handleQuickStatus('In Progress')}
+                  disabled={quickAction !== null}
+                  className="flex items-center gap-1 text-sm px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 disabled:opacity-50"
+                >
+                  {quickAction === 'In Progress' ? <Loader2 className="w-4 h-4 animate-spin" /> : <PlayCircle className="w-4 h-4" />}
+                  Mark In Progress
+                </button>
+                <button
+                  onClick={() => handleQuickStatus('Resolved')}
+                  disabled={quickAction !== null}
+                  className="flex items-center gap-1 text-sm px-3 py-1.5 rounded-lg bg-green-50 text-green-700 hover:bg-green-100 disabled:opacity-50"
+                >
+                  {quickAction === 'Resolved' ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                  Resolve
+                </button>
+                <button
+                  onClick={() => handleQuickStatus('Closed')}
+                  disabled={quickAction !== null}
+                  className="flex items-center gap-1 text-sm px-3 py-1.5 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 disabled:opacity-50"
+                >
+                  {quickAction === 'Closed' ? <Loader2 className="w-4 h-4 animate-spin" /> : <XCircle className="w-4 h-4" />}
+                  Close
+                </button>
+                {quickActionMessage && (
+                  <span className={`text-sm ${quickActionMessage.type === 'success' ? 'text-green-600' : 'text-red-600'}`}>
+                    {quickActionMessage.text}
+                  </span>
+                )}
+              </div>
+
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Left Column */}
                 <div className="space-y-4">
@@ -195,18 +326,135 @@ function ViewTicket() {
                     </p>
                   </div>
 
+                  {/* AI Analysis */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
+                      <Sparkles className="w-4 h-4 text-[#00ABE4]" /> AI Analysis
+                    </label>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div className="bg-gray-50 rounded-lg p-3">
+                        <div className="flex items-center gap-1 text-gray-500 text-xs mb-1">
+                          <Tag className="w-3 h-3" /> Category
+                        </div>
+                        <p className="text-sm font-medium text-gray-800">{ticket.ticket_category || 'N/A'}</p>
+                      </div>
+                      <div className="bg-gray-50 rounded-lg p-3">
+                        <div className="flex items-center gap-1 text-gray-500 text-xs mb-1">
+                          <Layers className="w-3 h-3" /> Issue Type
+                        </div>
+                        <p className="text-sm font-medium text-gray-800">{ticket.issue_type || 'N/A'}</p>
+                      </div>
+                      <div className="bg-gray-50 rounded-lg p-3">
+                        <div className="text-gray-500 text-xs mb-1">Sub Issue Type</div>
+                        <p className="text-sm font-medium text-gray-800">{ticket.sub_issue_type || 'N/A'}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* AI Suggested Resolution */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1">
                       🤖 AI Suggested Resolution
                     </label>
-                    {ticket.resolution ? (
-                      <p className="text-sm text-gray-700 p-3 bg-purple-50 border border-purple-100 rounded whitespace-pre-line">
-                        {ticket.resolution}
+                    {editingResolution ? (
+                      <div className="space-y-2">
+                        <textarea
+                          rows={5}
+                          value={editedResolutionText}
+                          onChange={(e) => setEditedResolutionText(e.target.value)}
+                          className="w-full border border-gray-300 rounded-lg p-2 text-sm"
+                        />
+                        <div className="flex gap-2">
+                          <button
+                            onClick={handleSaveEditedResolution}
+                            disabled={resolutionActionLoading}
+                            className="flex items-center gap-1 text-sm px-3 py-1.5 rounded-lg bg-[#00ABE4] text-white disabled:opacity-50"
+                          >
+                            {resolutionActionLoading && <Loader2 className="w-4 h-4 animate-spin" />}
+                            Save Edited Resolution
+                          </button>
+                          <button
+                            onClick={() => setEditingResolution(false)}
+                            disabled={resolutionActionLoading}
+                            className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        {ticket.resolution ? (
+                          <p className="text-sm text-gray-700 p-3 bg-purple-50 border border-purple-100 rounded whitespace-pre-line">
+                            {ticket.resolution}
+                          </p>
+                        ) : (
+                          <p className="text-sm text-gray-500 italic p-3 bg-gray-50 rounded">
+                            No AI resolution generated for this ticket yet.
+                          </p>
+                        )}
+                        {ticket.resolution && (
+                          <div className="flex gap-2 mt-2">
+                            <button
+                              onClick={handleAcceptResolution}
+                              disabled={resolutionActionLoading}
+                              className="flex items-center gap-1 text-sm px-3 py-1.5 rounded-lg bg-green-50 text-green-700 hover:bg-green-100 disabled:opacity-50"
+                            >
+                              {resolutionActionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                              Accept Resolution
+                            </button>
+                            <button
+                              onClick={startEditingResolution}
+                              disabled={resolutionActionLoading}
+                              className="flex items-center gap-1 text-sm px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                            >
+                              <Pencil className="w-4 h-4" />
+                              Edit Resolution
+                            </button>
+                          </div>
+                        )}
+                        {resolutionMessage && (
+                          <p className={`text-sm mt-1 ${resolutionMessage.type === 'success' ? 'text-green-600' : 'text-red-600'}`}>
+                            {resolutionMessage.text}
+                          </p>
+                        )}
+                      </>
+                    )}
+                  </div>
+
+                  {/* Similar Tickets */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
+                      <Link2 className="w-4 h-4 text-[#00ABE4]" /> Similar Tickets
+                    </label>
+                    {loadingSimilar ? (
+                      <div className="flex items-center gap-2 text-sm text-gray-500 p-3">
+                        <Loader2 className="w-4 h-4 animate-spin" /> Finding similar tickets...
+                      </div>
+                    ) : similarTickets.length === 0 ? (
+                      <p className="text-sm text-gray-500 italic p-3 bg-gray-50 rounded">
+                        No similar tickets found.
                       </p>
                     ) : (
-                      <p className="text-sm text-gray-500 italic p-3 bg-gray-50 rounded">
-                        No AI resolution generated for this ticket yet.
-                      </p>
+                      <div className="space-y-2 max-h-56 overflow-y-auto">
+                        {similarTickets.map((sim) => (
+                          <button
+                            key={sim.id}
+                            onClick={() => goToTicket(sim.id)}
+                            className="w-full text-left border border-gray-200 rounded-lg p-3 hover:shadow-sm hover:border-[#00ABE4] transition-shadow"
+                          >
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-sm font-medium text-gray-800">{sim.id} - {sim.title}</span>
+                              <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusColors[sim.status?.toLowerCase()] || 'bg-gray-100 text-gray-800'}`}>
+                                {sim.status || 'Unknown'}
+                              </span>
+                            </div>
+                            {sim.resolution && (
+                              <p className="text-xs text-gray-500 line-clamp-2">{sim.resolution}</p>
+                            )}
+                          </button>
+                        ))}
+                      </div>
                     )}
                   </div>
 
