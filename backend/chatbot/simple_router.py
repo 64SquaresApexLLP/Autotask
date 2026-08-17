@@ -1,6 +1,7 @@
 """Chatbot API Router for Autotask integration without authentication requirement."""
 
 import logging
+import os
 import re
 import jwt
 from datetime import datetime, timedelta
@@ -63,6 +64,12 @@ class TicketResponse(BaseModel):
     priority: Optional[str] = None
     assigned_technician: Optional[str] = None
 
+# Must match backend/main.py's SECRET_KEY/ALGORITHM - tokens are minted there
+# (create_access_token, data={"sub": technician["username"], ...}) and verified here.
+JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-secret-key-change-in-production")
+JWT_ALGORITHM = "HS256"
+DEFAULT_TECHNICIAN_ID = "T001"
+
 # Helper function to get current technician from main app's authentication
 async def get_current_technician_from_main_app(request: Request) -> str:
     """Get the current technician ID from the main application's authentication."""
@@ -70,19 +77,25 @@ async def get_current_technician_from_main_app(request: Request) -> str:
         # Get the Authorization header
         auth_header = request.headers.get("Authorization")
         if not auth_header or not auth_header.startswith("Bearer "):
-            # If no auth header, try to get from query params or default to a test user
-            return "T001"  # Default technician for testing
-        
-        # Extract token
+            # No token supplied (e.g. anonymous chat) - fall back to the demo technician
+            return DEFAULT_TECHNICIAN_ID
+
         token = auth_header.split(" ")[1]
-        
-        # For now, we'll use a simple approach - in production, this should validate against the main app's JWT
-        # Since we're removing authentication, we'll return a default technician
-        return "T001"
-        
+
+        payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
+        technician_id = payload.get("sub")
+        if not technician_id:
+            logger.warning("JWT payload missing 'sub' claim; using default technician")
+            return DEFAULT_TECHNICIAN_ID
+
+        return technician_id
+
+    except jwt.PyJWTError as e:
+        logger.warning(f"Could not decode auth token: {e}")
+        return DEFAULT_TECHNICIAN_ID
     except Exception as e:
         logger.warning(f"Could not extract technician from auth: {e}")
-        return "T001"  # Default technician
+        return DEFAULT_TECHNICIAN_ID
 
 # 1. GET /chatbot/tickets/my – Retrieves tickets assigned to the logged-in user
 @router.get("/tickets/my", response_model=List[TicketResponse])
