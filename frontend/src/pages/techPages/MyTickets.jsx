@@ -43,23 +43,62 @@ const MyTickets = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  // Load tickets assigned to current technician
+  // Load tickets assigned to current technician (both active and resolved/closed)
   const loadMyTickets = async () => {
     try {
       setLoading(true);
       setError("");
 
-      // Get all tickets and filter for current technician
+      const currentUserId = user?.username;
+
+      // Fetch active tickets from TICKETS table
       const allTickets = await ticketService.getAllTickets({ limit: 100 });
-      const myTickets = allTickets.filter(ticket => {
+      const myActiveTickets = allTickets.filter(ticket => {
         const assignedTech = ticket.assigned_technician;
         const technicianId = ticket.technician_id;
-        const currentUserId = user?.username; 
-
         return assignedTech === currentUserId || technicianId === currentUserId;
       });
 
-      setTickets(myTickets);
+      // Also fetch resolved/closed tickets from CLOSED_TICKETS table
+      let myClosedTickets = [];
+      try {
+        const closedResponse = await fetch(`http://localhost:8001/tickets/closed?limit=100`);
+        if (closedResponse.ok) {
+          const closedData = await closedResponse.json();
+          myClosedTickets = closedData
+            .filter(ticket => ticket.technician_id === currentUserId)
+            .map(ticket => ({
+              id: ticket.ticket_number,
+              title: ticket.title,
+              description: ticket.description,
+              status: ticket.status,
+              priority: ticket.priority,
+              ticket_type: ticket.ticket_type,
+              ticket_category: ticket.ticket_category,
+              issue_type: ticket.issue_type,
+              sub_issue_type: ticket.sub_issue_type,
+              due_date: ticket.due_date,
+              resolution: ticket.resolution,
+              user_id: ticket.user_id,
+              user_email: ticket.user_email,
+              requester_name: ticket.user_id,
+              phone_number: ticket.phone_number,
+              technician_id: ticket.technician_id,
+              technician_email: ticket.technician_email,
+              assigned_technician: ticket.technician_id,
+              created_at: ticket.original_created_at,
+              closed_at: ticket.closed_at,
+              time_spent: ticket.time_spent,
+            }));
+        }
+      } catch (closedError) {
+        console.warn('Could not fetch closed tickets:', closedError);
+      }
+
+      // Merge: avoid duplicates (closed tickets have been removed from active table)
+      const activeIds = new Set(myActiveTickets.map(t => t.id));
+      const uniqueClosedTickets = myClosedTickets.filter(t => !activeIds.has(t.id));
+      setTickets([...myActiveTickets, ...uniqueClosedTickets]);
     } catch (error) {
       console.error('Failed to load tickets:', error);
       setError('Failed to load your tickets. Please try again.');
@@ -271,7 +310,9 @@ const MyTickets = () => {
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="flex items-center">
                             <IoTimeOutline className="h-4 w-4 text-gray-400 mr-1" />
-                            <span className="text-gray-500">-</span>
+                            <span className={ticket.time_spent ? "text-gray-900 font-medium" : "text-gray-400"}>
+                              {ticket.time_spent || '-'}
+                            </span>
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">

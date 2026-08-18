@@ -6,6 +6,7 @@ This is the main class that provides the same interface as the original monolith
 import json
 import os
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 
@@ -552,17 +553,23 @@ class IntakeClassificationAgent:
         # Generate unique ticket number
         ticket_number = self.generate_ticket_number(new_ticket_raw)
 
-        # Extract metadata
-        extracted_metadata = self.extract_metadata(ticket_title, ticket_description, model=extract_model)
+        # Extract metadata and find similar tickets concurrently - they are
+        # independent of each other (similarity search only uses title/description),
+        # so running them in parallel saves one full LLM round-trip off the critical path.
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            metadata_future = executor.submit(self.extract_metadata, ticket_title, ticket_description, extract_model)
+            similar_future = executor.submit(self.find_similar_tickets, ticket_title, ticket_description, {})
+
+            extracted_metadata = metadata_future.result()
+            similar_tickets = similar_future.result()
+
         if not extracted_metadata:
             print("Failed to extract metadata. Aborting ticket processing.")
             return None
-        
+
         print("Extracted Metadata:")
         print(json.dumps(extracted_metadata, indent=2))
 
-        # Find similar tickets using semantic similarity
-        similar_tickets = self.find_similar_tickets(ticket_title, ticket_description, extracted_metadata)
         if similar_tickets:
             print(f"\nFound {len(similar_tickets)} similar tickets:")
             for i, ticket in enumerate(similar_tickets):
@@ -583,13 +590,8 @@ class IntakeClassificationAgent:
         print("\nClassified Ticket Data:")
         print(json.dumps(classified_data, indent=2))
 
-        # Generate resolution note
-        print("\n--- Generating Resolution Note ---")
-        resolution_note = self.generate_resolution_note(new_ticket_raw, classified_data, extracted_metadata, ticket_number=ticket_number)
-        print("Generated Resolution Note:")
-        print(resolution_note)
-
-        # Prepare final ticket data
+        # Base ticket data needed for assignment (assignment only needs classified_data
+        # and ticket text - it never reads resolution_note).
         final_ticket_data = {
             **new_ticket_raw,
             "ticket_number": ticket_number,
@@ -598,53 +600,80 @@ class IntakeClassificationAgent:
             "phone_number": phone_number if phone_number and phone_number.strip() else "",
             "extracted_metadata": extracted_metadata,
             "classified_data": classified_data,
-            "resolution_note": resolution_note,
             "similar_tickets": similar_tickets
         }
 
-        # Process assignment after classification
-        print("\n--- Processing Ticket Assignment ---")
-        try:
-            assignment_result = self.assignment_agent.process_ticket_assignment({"new_ticket": final_ticket_data})
-            final_ticket_data["assignment_result"] = assignment_result.get("assignment_result", {})
-            print("Assignment Result:")
-            print(json.dumps(assignment_result, indent=2))
-        except Exception as e:
-            print(f"❌ Assignment failed: {e}")
-            # Continue processing even if assignment fails
-            final_ticket_data["assignment_result"] = {
-                "status": "Assignment Failed",
-                "error": str(e),
-                "assigned_technician": "IT Manager",
-                "technician_email": "itmanager@company.com"
-            }
-
-        # Send comprehensive notifications
-        print(f"\n--- Sending Notifications ---")
-
-        # Send customer confirmation email
-        if user_email and user_email.strip():
-            print(f"Sending confirmation email to customer: {user_email}")
-            confirmation_sent = self.notification_agent.send_ticket_confirmation(
-                user_email=user_email,
-                ticket_data=final_ticket_data,
-                ticket_number=ticket_number
+        # Generate resolution note and run assignment concurrently - they are
+        # independent (assignment doesn't consume the resolution note), so running
+        # them in parallel saves another full LLM round-trip off the critical path.
+        print("\n--- Generating Resolution Note & Processing Assignment (parallel) ---")
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            resolution_future = executor.submit(
+                self.generate_resolution_note, new_ticket_raw, classified_data, extracted_metadata, ticket_number
             )
-            if confirmation_sent:
-                print("✅ Customer confirmation email sent successfully")
-            else:
-                print("❌ Failed to send customer confirmation email")
+            assignment_future = executor.submit(
+                self.assignment_agent.process_ticket_assignment, {"new_ticket": final_ticket_data}
+            )
 
-        # Send assignment notifications (technician, customer update, manager if needed)
-        assignment_notifications = self.notification_agent.send_assignment_notifications(final_ticket_data)
+            resolution_note = resolution_future.result()
+            print("Generated Resolution Note:")
+            print(resolution_note)
+            final_ticket_data["resolution_note"] = resolution_note
 
-        # Log notification results
-        for notification_type, success in assignment_notifications.items():
-            status = "✅ Success" if success else "❌ Failed"
-            print(f"{status}: {notification_type.replace('_', ' ').title()}")
+            try:
+                assignment_result = assignment_future.result()
+                final_ticket_data["assignment_result"] = assignment_result.get("assignment_result", {})
+                print("Assignment Result:")
+                print(json.dumps(assignment_result, indent=2))
+            except Exception as e:
+                print(f"❌ Assignment failed: {e}")
+                # Continue processing even if assignment fails
+                final_ticket_data["assignment_result"] = {
+                    "status": "Assignment Failed",
+                    "error": str(e),
+                    "assigned_technician": "IT Manager",
+                    "technician_email": "itmanager@company.com"
+                }
+
+        # Send comprehensive notifications in the background - emails (4 separate
+        # SMTP logins) were blocking the HTTP response and causing request timeouts,
+        # so fire them off on a daemon thread instead of waiting for them here.
+        print(f"\n--- Sending Notifications (background) ---")
+        notification_ticket_data = final_ticket_data.copy()
+        notification_thread = threading.Thread(
+            target=self._send_notifications,
+            args=(notification_ticket_data, ticket_number, user_email),
+            daemon=True
+        )
+        notification_thread.start()
 
         print(f"\n--- Ticket Processing Complete (#{ticket_number}) ---")
         return final_ticket_data
+
+    def _send_notifications(self, ticket_data: Dict, ticket_number: str, user_email: Optional[str]) -> None:
+        """
+        Sends customer/technician/manager notification emails. Runs on a background
+        thread so slow SMTP calls never delay the ticket-creation response.
+        """
+        try:
+            if user_email and user_email.strip():
+                print(f"Sending confirmation email to customer: {user_email}")
+                confirmation_sent = self.notification_agent.send_ticket_confirmation(
+                    user_email=user_email,
+                    ticket_data=ticket_data,
+                    ticket_number=ticket_number
+                )
+                print("✅ Customer confirmation email sent successfully" if confirmation_sent
+                      else "❌ Failed to send customer confirmation email")
+
+            assignment_notifications = self.notification_agent.send_assignment_notifications(ticket_data)
+            for notification_type, success in assignment_notifications.items():
+                status = "✅ Success" if success else "❌ Failed"
+                print(f"{status}: {notification_type.replace('_', ' ').title()}")
+
+            print(f"--- Notifications Complete (#{ticket_number}) ---")
+        except Exception as e:
+            print(f"❌ Notification thread failed for ticket {ticket_number}: {e}")
 
     def start_email_monitoring(self, webhook_url: str = "http://localhost:8001/webhooks/gmail/simple",
                               check_interval: int = 30) -> bool:

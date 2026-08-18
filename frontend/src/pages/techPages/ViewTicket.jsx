@@ -97,21 +97,20 @@ function ViewTicket() {
   }, [ticket?.id, ticket?.issue_type, ticket?.ticket_category]);
 
   const handleUpdateTicket = async () => {
-    if (!newStatus && !newWorkNote) {
-      setSaveMessage({ type: 'error', text: 'Select a new status or add a work note before saving.' });
+    if (!newStatus && !newWorkNote && !timeSpent) {
+      setSaveMessage({ type: 'error', text: 'Select a new status, enter time spent, or add a work note before saving.' });
       return;
     }
 
     setSaving(true);
     setSaveMessage(null);
     try {
-      if (newStatus) {
-        await ticketService.updateTicketStatus(tId, newStatus);
-      }
-      if (newWorkNote) {
-        const note = timeSpent ? `(${timeSpent}) ${newWorkNote}` : newWorkNote;
-        await ticketService.addWorkNote(tId, note);
-      }
+      const updateData = {};
+      if (newStatus) updateData.status = newStatus;
+      if (newWorkNote) updateData.work_note = newWorkNote;
+      if (timeSpent) updateData.time_spent = timeSpent;
+      
+      await ticketService.updateTicket(tId, updateData);
 
       setSaveMessage({ type: 'success', text: 'Ticket updated successfully.' });
       setNewStatus('');

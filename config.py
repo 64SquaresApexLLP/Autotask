@@ -24,7 +24,7 @@ SUPPORT_EMAIL = os.getenv('SUPPORT_EMAIL', 'venkatehp12@gmail.com')
 SUPPORT_EMAIL_PASSWORD = os.getenv('SUPPORT_EMAIL_PASSWORD', '')
 
 # Manager and escalation email configuration
-MANAGER_EMAIL = os.getenv('MANAGER_EMAIL', 'anantlad66@gmail.com')
+MANAGER_EMAIL = os.getenv('MANAGER_EMAIL', 'venkatehp341@gmail.com')
 FALLBACK_TECHNICIAN_EMAIL = os.getenv('FALLBACK_TECHNICIAN_EMAIL', 'support@company.com')
 SUPPORT_PHONE = os.getenv('SUPPORT_PHONE', '1-800-SUPPORT')
 

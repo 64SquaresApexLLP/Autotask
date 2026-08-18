@@ -464,6 +464,7 @@ class TicketUpdateRequest(BaseModel):
     status: Optional[str] = Field(None, description="New ticket status (Open, In Progress, Closed, Resolved, etc.)")
     priority: Optional[str] = Field(None, description="New ticket priority (Low, Medium, High, Critical)")
     work_note: Optional[str] = Field(None, description="Work note to append to the ticket resolution log")
+    time_spent: Optional[str] = Field(None, description="Time spent on the ticket (e.g. '30 mins')")
 
 class EmailCustomerRequest(BaseModel):
     """Model for emailing the customer from the technician ticket view"""
@@ -746,7 +747,7 @@ def get_closed_tickets(limit: int = Query(50, le=100), offset: int = 0):
         SELECT
             TICKETNUMBER, TITLE, DESCRIPTION, TICKETTYPE, TICKETCATEGORY,
             ISSUETYPE, SUBISSUETYPE, DUEDATETIME, PRIORITY, STATUS, RESOLUTION,
-            TECHNICIANEMAIL, TECHNICIAN_ID, USEREMAIL, USERID, PHONENUMBER, CLOSED_AT, ORIGINAL_CREATED_AT
+            TECHNICIANEMAIL, TECHNICIAN_ID, USEREMAIL, USERID, PHONENUMBER, CLOSED_AT, ORIGINAL_CREATED_AT, TIME_SPENT
         FROM TEST_DB.PUBLIC.CLOSED_TICKETS
         ORDER BY CLOSED_AT DESC
         LIMIT %s OFFSET %s
@@ -777,7 +778,8 @@ def get_closed_tickets(limit: int = Query(50, le=100), offset: int = 0):
                 "user_id": row[14],
                 "phone_number": row[15],
                 "closed_at": str(row[16]) if row[16] else None,
-                "original_created_at": str(row[17]) if row[17] else None
+                "original_created_at": str(row[17]) if row[17] else None,
+                "time_spent": row[18]
             }
             tickets.append(ticket)
 
@@ -853,6 +855,13 @@ def get_ticket(ticket_number: str):
         results = snowflake_conn.execute_query(query, (ticket_number,))
 
         if not results:
+            try:
+                query_closed = "SELECT * FROM TEST_DB.PUBLIC.CLOSED_TICKETS WHERE TICKETNUMBER = %s"
+                results = snowflake_conn.execute_query(query_closed, (ticket_number,))
+            except Exception:
+                pass
+
+        if not results:
             raise HTTPException(status_code=404, detail="Ticket not found")
 
         return results[0]
@@ -870,6 +879,13 @@ def get_technician(ticket_number: str):
         # Get ticket first to get technician email
         query = "SELECT * FROM TEST_DB.PUBLIC.TICKETS WHERE TICKETNUMBER = %s"
         results = snowflake_conn.execute_query(query, (ticket_number,))
+
+        if not results:
+            try:
+                query_closed = "SELECT * FROM TEST_DB.PUBLIC.CLOSED_TICKETS WHERE TICKETNUMBER = %s"
+                results = snowflake_conn.execute_query(query_closed, (ticket_number,))
+            except Exception:
+                pass
 
         if not results:
             raise HTTPException(status_code=404, detail="Ticket not found")
@@ -1077,6 +1093,11 @@ def update_ticket_status_priority(ticket_number: str, update_request: TicketUpda
 
         cursor = snowflake_conn.conn.cursor()
 
+        # Ensure CREATED_AT and TIME_SPENT exist before reading the ticket so its real
+        # creation time (if any) carries over into CLOSED_TICKETS below.
+        ensure_created_at_column()
+        ensure_time_spent_column()
+
         # First, get the current ticket data
         get_ticket_query = """
         SELECT * FROM TEST_DB.PUBLIC.TICKETS WHERE TICKETNUMBER = %s
@@ -1122,6 +1143,7 @@ def update_ticket_status_priority(ticket_number: str, update_request: TicketUpda
                 USEREMAIL VARCHAR(100),
                 USERID VARCHAR(50),
                 PHONENUMBER VARCHAR(20),
+                TIME_SPENT VARCHAR(100),
                 CLOSED_AT TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 ORIGINAL_CREATED_AT TIMESTAMP
             )
@@ -1133,13 +1155,16 @@ def update_ticket_status_priority(ticket_number: str, update_request: TicketUpda
             INSERT INTO TEST_DB.PUBLIC.CLOSED_TICKETS (
                 TICKETNUMBER, TITLE, DESCRIPTION, TICKETTYPE, TICKETCATEGORY,
                 ISSUETYPE, SUBISSUETYPE, DUEDATETIME, PRIORITY, STATUS, RESOLUTION,
-                TECHNICIANEMAIL, TECHNICIAN_ID, USEREMAIL, USERID, PHONENUMBER, ORIGINAL_CREATED_AT
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+                TECHNICIANEMAIL, TECHNICIAN_ID, USEREMAIL, USERID, PHONENUMBER, TIME_SPENT, ORIGINAL_CREATED_AT
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, COALESCE(%s, CURRENT_TIMESTAMP))
             """
 
             # Use updated values or original values
             final_priority = update_request.priority or ticket_dict.get('PRIORITY')
             final_status = update_request.status or ticket_dict.get('STATUS')
+            # Preserve the ticket's real creation time (if the TICKETS table tracks one)
+            # so avg resolution time can be computed from real timestamps.
+            original_created_at = ticket_dict.get('CREATED_AT')
 
             # Get TECHNICIAN_ID from email for closed ticket
             closed_technician_id = None
@@ -1164,7 +1189,9 @@ def update_ticket_status_priority(ticket_number: str, update_request: TicketUpda
                     closed_technician_id,  # TECHNICIAN_ID
                     ticket_dict.get('USEREMAIL'),
                     ticket_dict.get('USERID'),
-                    ticket_dict.get('PHONENUMBER')
+                    ticket_dict.get('PHONENUMBER'),
+                    update_request.time_spent or ticket_dict.get('TIME_SPENT'),
+                    original_created_at
                 ))
                 print(f"✅ Successfully inserted ticket {ticket_number} into CLOSED_TICKETS")
             except Exception as insert_error:
@@ -1222,6 +1249,11 @@ def update_ticket_status_priority(ticket_number: str, update_request: TicketUpda
                 update_parts.append("RESOLUTION = %s")
                 update_values.append(new_resolution)
                 updated_fields['work_note'] = update_request.work_note
+
+            if update_request.time_spent is not None:
+                update_parts.append("TIME_SPENT = %s")
+                update_values.append(update_request.time_spent)
+                updated_fields['time_spent'] = update_request.time_spent
 
             if update_parts:
                 update_query = f"""
@@ -1456,10 +1488,15 @@ def get_technician_id_from_email(technician_email: str) -> Optional[str]:
         print(f"Error getting technician ID from email {technician_email}: {e}")
         return None
 
+_schema_cache = {}
+
 def ensure_technician_id_column():
     """
     Ensure TECHNICIAN_ID column exists in both TICKETS and CLOSED_TICKETS tables
     """
+    if _schema_cache.get('technician_id_checked'):
+        return True
+
     if not snowflake_conn:
         return False
 
@@ -1522,10 +1559,95 @@ def ensure_technician_id_column():
                 print("✅ TECHNICIAN_ID column already exists in CLOSED_TICKETS table")
 
         cursor.close()
+        _schema_cache['technician_id_checked'] = True
         return True
 
     except Exception as e:
         print(f"Error ensuring TECHNICIAN_ID column: {e}")
+        return False
+
+def ensure_created_at_column():
+    """
+    Ensure CREATED_AT column exists on TICKETS so real ticket-creation
+    timestamps are available for analytics (resolution time, daily trends).
+    """
+    if _schema_cache.get('created_at_checked'):
+        return True
+
+    if not snowflake_conn:
+        return False
+
+    try:
+        cursor = snowflake_conn.conn.cursor()
+
+        check_column_query = """
+        SELECT COUNT(*)
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = 'PUBLIC'
+        AND TABLE_NAME = 'TICKETS'
+        AND COLUMN_NAME = 'CREATED_AT'
+        """
+        cursor.execute(check_column_query)
+        column_exists = cursor.fetchone()[0] > 0
+
+        if not column_exists:
+            # Snowflake rejects non-deterministic defaults (e.g. CURRENT_TIMESTAMP)
+            # on ALTER TABLE ADD COLUMN, so this is set explicitly on insert instead.
+            alter_query = """
+            ALTER TABLE TEST_DB.PUBLIC.TICKETS
+            ADD COLUMN CREATED_AT TIMESTAMP_NTZ
+            """
+            cursor.execute(alter_query)
+            print("✅ Added CREATED_AT column to TICKETS table")
+        else:
+            print("✅ CREATED_AT column already exists in TICKETS table")
+
+        cursor.close()
+        return True
+
+    except Exception as e:
+        print(f"Error ensuring CREATED_AT column: {e}")
+        return False
+
+def ensure_time_spent_column():
+    """
+    Ensure TIME_SPENT column exists on TICKETS and CLOSED_TICKETS.
+    """
+    if _schema_cache.get('time_spent_checked'):
+        return True
+
+    if not snowflake_conn:
+        return False
+
+    try:
+        cursor = snowflake_conn.conn.cursor()
+        
+        for table in ['TICKETS', 'CLOSED_TICKETS']:
+            check_column_query = f"""
+            SELECT COUNT(*)
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = 'PUBLIC'
+            AND TABLE_NAME = '{table}'
+            AND COLUMN_NAME = 'TIME_SPENT'
+            """
+            cursor.execute(check_column_query)
+            column_exists = cursor.fetchone()[0] > 0
+
+            if not column_exists:
+                alter_query = f"""
+                ALTER TABLE TEST_DB.PUBLIC.{table}
+                ADD COLUMN TIME_SPENT VARCHAR(100)
+                """
+                cursor.execute(alter_query)
+                print(f"✅ Added TIME_SPENT column to {table} table")
+            else:
+                print(f"✅ TIME_SPENT column already exists in {table} table")
+
+        cursor.close()
+        return True
+
+    except Exception as e:
+        print(f"Error ensuring TIME_SPENT column: {e}")
         return False
 
 @app.post("/tickets", status_code=201, response_model=TicketResponse)
@@ -1582,8 +1704,10 @@ def create_ticket(request: TicketCreateRequest):
 
         print(f"🔍 Technician email to save: '{technician_email}'")
 
-        # Ensure TECHNICIAN_ID column exists in TICKETS table
+        # Ensure TECHNICIAN_ID / CREATED_AT / TIME_SPENT columns exist in TICKETS table
         ensure_technician_id_column()
+        ensure_created_at_column()
+        ensure_time_spent_column()
 
         # Get TECHNICIAN_ID from email if technician is assigned
         technician_id = None
@@ -1635,8 +1759,8 @@ def create_ticket(request: TicketCreateRequest):
             INSERT INTO TEST_DB.PUBLIC.TICKETS (
                 TICKETNUMBER, TITLE, DESCRIPTION, TICKETTYPE, TICKETCATEGORY,
                 ISSUETYPE, SUBISSUETYPE, DUEDATETIME, PRIORITY, STATUS, RESOLUTION,
-                TECHNICIANEMAIL, TECHNICIAN_ID, USEREMAIL, USERID, PHONENUMBER
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                TECHNICIANEMAIL, TECHNICIAN_ID, USEREMAIL, USERID, PHONENUMBER, CREATED_AT, TIME_SPENT
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP(), NULL)
         """
         params = (
             ticket_number,
@@ -1852,99 +1976,242 @@ def get_technician_analytics(technician_id: str):
 
         logger.info(f"Executing analytics queries for technician {technician_id}")
 
-        # Use COUNT queries since SELECT queries seem to have issues
-        # Get total tickets count
-        count_query = f"""
-        SELECT COUNT(*) as total_count
-        FROM TEST_DB.PUBLIC.TICKETS
-        WHERE TECHNICIAN_ID = '{technician_id}'
-        """
-
-        count_result = snowflake_conn.execute_query(count_query)
-        total_tickets = count_result[0]["TOTAL_COUNT"] if count_result else 0
-
-        logger.info(f"Analytics for {technician_id}: Found {total_tickets} tickets")
-
-        if total_tickets == 0:
-            # Return empty analytics if no tickets found
-            return {
-                "personal_metrics": {
-                    "tickets_resolved": 0,
-                    "avg_resolution_time": "0 hours",
-                    "customer_satisfaction": 0.0,
-                    "sla_compliance": 0,
-                    "this_week_resolved": 0,
-                    "this_month_resolved": 0
-                },
-                "weekly_data": [],
-                "category_data": [],
-                "priority_trends": [],
-                "team_comparison": []
-            }
-
-        # Calculate analytics using COUNT queries
         from datetime import datetime, timedelta
-        import calendar
 
         now = datetime.now()
         week_ago = now - timedelta(days=7)
         month_ago = now - timedelta(days=30)
 
-        # Get resolved tickets count
-        resolved_query = f"""
-        SELECT COUNT(*) as resolved_count
-        FROM TEST_DB.PUBLIC.TICKETS
-        WHERE TECHNICIAN_ID = '{technician_id}' AND STATUS = 'resolved'
-        """
+        from concurrent.futures import ThreadPoolExecutor
 
-        resolved_result = snowflake_conn.execute_query(resolved_query)
-        resolved_tickets = resolved_result[0]["RESOLVED_COUNT"] if resolved_result else 0
+        def query_all_in_tickets():
+            return snowflake_conn.execute_query(
+                """
+                SELECT
+                    COUNT(*) as total_count,
+                    SUM(CASE WHEN STATUS NOT IN ('Resolved', 'Closed', 'resolved', 'closed') THEN 1 ELSE 0 END) as open_count,
+                    SUM(CASE WHEN STATUS IN ('Open', 'New', 'open', 'new') THEN 1 ELSE 0 END) as pending_count,
+                    SUM(CASE WHEN STATUS IN ('In Progress', 'in progress', 'In progress') THEN 1 ELSE 0 END) as in_progress_count,
+                    SUM(CASE WHEN STATUS IN ('Resolved', 'Closed', 'resolved', 'closed') THEN 1 ELSE 0 END) as still_resolved_count
+                FROM TEST_DB.PUBLIC.TICKETS
+                WHERE TECHNICIAN_ID = %s
+                """,
+                (technician_id,)
+            )
 
-        # Personal metrics using COUNT queries
-        # Calculate basic metrics
-        this_week_resolved = max(1, total_tickets // 4)  # Estimate weekly activity
-        this_month_resolved = total_tickets
+        def query_resolved_summary():
+            return snowflake_conn.execute_query(
+                """
+                SELECT
+                    COUNT(*) as resolved_count,
+                    AVG(CASE WHEN ORIGINAL_CREATED_AT IS NOT NULL
+                             THEN DATEDIFF('hour', ORIGINAL_CREATED_AT, CLOSED_AT) END) as avg_resolution_hours,
+                    SUM(CASE WHEN TRY_TO_TIMESTAMP(DUEDATETIME) IS NOT NULL THEN 1 ELSE 0 END) as sla_trackable_count,
+                    SUM(CASE WHEN TRY_TO_TIMESTAMP(DUEDATETIME) IS NOT NULL
+                             AND CLOSED_AT <= TRY_TO_TIMESTAMP(DUEDATETIME) THEN 1 ELSE 0 END) as sla_met_count,
+                    SUM(CASE WHEN CLOSED_AT >= %s THEN 1 ELSE 0 END) as week_resolved,
+                    SUM(CASE WHEN CLOSED_AT >= %s THEN 1 ELSE 0 END) as month_resolved
+                FROM TEST_DB.PUBLIC.CLOSED_TICKETS
+                WHERE TECHNICIAN_ID = %s
+                """,
+                (week_ago, month_ago, technician_id)
+            )
 
-        # Calculate average resolution time (simplified)
-        avg_resolution_hours = max(2, total_tickets * 2)  # Estimate based on ticket count
-        avg_resolution_time = f"{avg_resolution_hours} hours"
+        def query_priority():
+            return snowflake_conn.execute_query(
+                """
+                SELECT priority, SUM(cnt) as count FROM (
+                    SELECT COALESCE(NULLIF(TRIM(PRIORITY), ''), 'Unknown') as priority, COUNT(*) as cnt
+                    FROM TEST_DB.PUBLIC.TICKETS
+                    WHERE TECHNICIAN_ID = %s
+                    GROUP BY 1
+                    UNION ALL
+                    SELECT COALESCE(NULLIF(TRIM(PRIORITY), ''), 'Unknown') as priority, COUNT(*) as cnt
+                    FROM TEST_DB.PUBLIC.CLOSED_TICKETS
+                    WHERE TECHNICIAN_ID = %s
+                    GROUP BY 1
+                )
+                GROUP BY priority
+                ORDER BY count DESC
+                """,
+                (technician_id, technician_id)
+            )
 
-        # Calculate customer satisfaction (simplified)
+        def query_status():
+            return snowflake_conn.execute_query(
+                """
+                SELECT status, SUM(cnt) as count FROM (
+                    SELECT COALESCE(NULLIF(TRIM(STATUS), ''), 'Unknown') as status, COUNT(*) as cnt
+                    FROM TEST_DB.PUBLIC.TICKETS
+                    WHERE TECHNICIAN_ID = %s
+                    GROUP BY 1
+                    UNION ALL
+                    SELECT COALESCE(NULLIF(TRIM(STATUS), ''), 'Unknown') as status, COUNT(*) as cnt
+                    FROM TEST_DB.PUBLIC.CLOSED_TICKETS
+                    WHERE TECHNICIAN_ID = %s
+                    GROUP BY 1
+                )
+                GROUP BY status
+                ORDER BY count DESC
+                """,
+                (technician_id, technician_id)
+            )
+
+        def query_category():
+            return snowflake_conn.execute_query(
+                """
+                SELECT category, SUM(cnt) as count FROM (
+                    SELECT COALESCE(NULLIF(TRIM(TICKETCATEGORY), ''), 'Uncategorized') as category, COUNT(*) as cnt
+                    FROM TEST_DB.PUBLIC.TICKETS
+                    WHERE TECHNICIAN_ID = %s
+                    GROUP BY 1
+                    UNION ALL
+                    SELECT COALESCE(NULLIF(TRIM(TICKETCATEGORY), ''), 'Uncategorized') as category, COUNT(*) as cnt
+                    FROM TEST_DB.PUBLIC.CLOSED_TICKETS
+                    WHERE TECHNICIAN_ID = %s
+                    GROUP BY 1
+                )
+                GROUP BY category
+                ORDER BY count DESC
+                """,
+                (technician_id, technician_id)
+            )
+
+        def query_weekly_created():
+            return snowflake_conn.execute_query(
+                """
+                SELECT TO_CHAR(created_date, 'Dy') as day, created_date, COUNT(*) as count FROM (
+                    SELECT CREATED_AT::DATE as created_date FROM TEST_DB.PUBLIC.TICKETS
+                    WHERE TECHNICIAN_ID = %s AND CREATED_AT >= %s
+                    UNION ALL
+                    SELECT ORIGINAL_CREATED_AT::DATE as created_date FROM TEST_DB.PUBLIC.CLOSED_TICKETS
+                    WHERE TECHNICIAN_ID = %s AND ORIGINAL_CREATED_AT >= %s
+                )
+                GROUP BY 1, 2
+                """,
+                (technician_id, week_ago, technician_id, week_ago)
+            )
+
+        def query_weekly_resolved():
+            return snowflake_conn.execute_query(
+                """
+                SELECT TO_CHAR(CLOSED_AT::DATE, 'Dy') as day, CLOSED_AT::DATE as closed_date, COUNT(*) as count
+                FROM TEST_DB.PUBLIC.CLOSED_TICKETS
+                WHERE TECHNICIAN_ID = %s AND CLOSED_AT >= %s
+                GROUP BY 1, 2
+                """,
+                (technician_id, week_ago)
+            )
+
+        with ThreadPoolExecutor(max_workers=7) as executor:
+            fut_all = executor.submit(query_all_in_tickets)
+            fut_resolved = executor.submit(query_resolved_summary)
+            fut_priority = executor.submit(query_priority)
+            fut_status = executor.submit(query_status)
+            fut_category = executor.submit(query_category)
+            fut_weekly_c = executor.submit(query_weekly_created)
+            fut_weekly_r = executor.submit(query_weekly_resolved)
+            
+            all_in_tickets_result = fut_all.result()
+            resolved_summary_result = fut_resolved.result()
+            priority_result = fut_priority.result()
+            status_result = fut_status.result()
+            category_result = fut_category.result()
+            weekly_created_result = fut_weekly_c.result()
+            weekly_resolved_result = fut_weekly_r.result()
+
+        all_in_tickets = all_in_tickets_result[0] if all_in_tickets_result else {}
+        open_tickets = all_in_tickets.get("OPEN_COUNT") or 0
+        pending_tickets = all_in_tickets.get("PENDING_COUNT") or 0
+        in_progress_tickets = all_in_tickets.get("IN_PROGRESS_COUNT") or 0
+        still_resolved_in_tickets = all_in_tickets.get("STILL_RESOLVED_COUNT") or 0
+        total_in_tickets = all_in_tickets.get("TOTAL_COUNT") or 0
+
+        resolved_summary = resolved_summary_result[0] if resolved_summary_result else {}
+
+        resolved_tickets = (resolved_summary.get("RESOLVED_COUNT") or 0) + still_resolved_in_tickets
+        total_tickets = total_in_tickets + (resolved_summary.get("RESOLVED_COUNT") or 0)
+
+        logger.info(f"Analytics for {technician_id}: {open_tickets} open ({pending_tickets} pending, {in_progress_tickets} in progress), {resolved_tickets} resolved (CLOSED_TICKETS: {resolved_summary.get('RESOLVED_COUNT') or 0}, still in TICKETS: {still_resolved_in_tickets}), total: {total_tickets}")
+
+        if total_tickets == 0:
+            return {
+                "personal_metrics": {
+                    "tickets_resolved": 0,
+                    "tickets_open": 0,
+                    "tickets_pending": 0,
+                    "tickets_in_progress": 0,
+                    "avg_resolution_time": "0 hours",
+                    "customer_satisfaction": 0.0,
+                    "sla_compliance": 0,
+                    "this_week_resolved": 0,
+                    "this_month_resolved": 0,
+                    "total_tickets": 0
+                },
+                "weekly_data": [],
+                "category_data": [],
+                "priority_data": [],
+                "status_data": [],
+                "priority_trends": [],
+                "team_comparison": []
+            }
+
+        avg_resolution_hours = resolved_summary.get("AVG_RESOLUTION_HOURS")
+        avg_resolution_time = f"{round(avg_resolution_hours, 1)} hours" if avg_resolution_hours is not None else "N/A"
+
+        this_week_resolved = resolved_summary.get("WEEK_RESOLVED") or 0
+        this_month_resolved = resolved_summary.get("MONTH_RESOLVED") or 0
+
+        sla_trackable = resolved_summary.get("SLA_TRACKABLE_COUNT") or 0
+        sla_met = resolved_summary.get("SLA_MET_COUNT") or 0
+        sla_compliance = round((sla_met / sla_trackable) * 100) if sla_trackable > 0 else 0
+
+        # Customer satisfaction has no underlying data source today (no rating
+        # column/table exists yet), so this stays an estimate until one is added.
         customer_satisfaction = min(5.0, 3.5 + (resolved_tickets * 0.1))
 
-        # Calculate SLA compliance (simplified)
-        sla_compliance = min(100, 85 + (resolved_tickets * 2))
-
-        # Create sample category data based on ticket count
-        category_data = []
-        if total_tickets > 0:
-            # Distribute tickets across common categories
-            categories = [
-                ("Hardware", max(1, total_tickets // 3)),
-                ("Software", max(1, total_tickets // 3)),
-                ("Network", max(0, total_tickets // 4)),
-                ("Email", max(0, total_tickets // 5))
-            ]
-
-            category_data = [
-                {"category": cat, "count": count, "color": ["#3b82f6", "#10b981", "#f59e0b", "#ef4444"][i]}
-                for i, (cat, count) in enumerate(categories) if count > 0
-            ]
-
-        # Weekly data (simplified)
-        weekly_data = [
-            {"day": "Mon", "resolved": this_week_resolved // 7, "created": total_tickets // 30},
-            {"day": "Tue", "resolved": this_week_resolved // 7, "created": total_tickets // 30},
-            {"day": "Wed", "resolved": this_week_resolved // 7, "created": total_tickets // 30},
-            {"day": "Thu", "resolved": this_week_resolved // 7, "created": total_tickets // 30},
-            {"day": "Fri", "resolved": this_week_resolved // 7, "created": total_tickets // 30},
-            {"day": "Sat", "resolved": 0, "created": 0},
-            {"day": "Sun", "resolved": 0, "created": 0}
+        priority_colors = {"Critical": "#ef4444", "High": "#f97316", "Medium": "#f59e0b", "Low": "#10b981", "Unknown": "#6b7280"}
+        priority_data = [
+            {"priority": row["PRIORITY"], "count": row["COUNT"], "color": priority_colors.get(row["PRIORITY"], "#6b7280")}
+            for row in priority_result or []
         ]
+
+        status_colors = {"Open": "#f59e0b", "New": "#f59e0b", "In Progress": "#3b82f6", "In progress": "#3b82f6", "Resolved": "#10b981", "Closed": "#6b7280", "Escalated": "#ef4444", "Unknown": "#6b7280"}
+        status_data = [
+            {"status": row["STATUS"], "count": row["COUNT"], "color": status_colors.get(row["STATUS"], "#6b7280")}
+            for row in status_result or []
+        ]
+
+        palette = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899"]
+        category_data = [
+            {"category": row["CATEGORY"], "count": row["COUNT"], "color": palette[i % len(palette)]}
+            for i, row in enumerate(category_result or [])
+        ]
+
+        created_by_date = {row["CREATED_DATE"]: row["COUNT"] for row in weekly_created_result or []}
+        resolved_by_date = {row["CLOSED_DATE"]: row["COUNT"] for row in weekly_resolved_result or []}
+
+        today = now.date()
+        weekly_data = []
+        for i in range(6, -1, -1):
+            day_date = (now - timedelta(days=i)).date()
+            weekly_data.append({
+                "day": day_date.strftime("%a"),           # "Mon"
+                "date": int(day_date.strftime("%d")),      # 18
+                "month": day_date.strftime("%b"),          # "Aug"
+                "full_date": day_date.strftime("%d %b"),   # "18 Aug"
+                "is_today": day_date == today,
+                "resolved": resolved_by_date.get(day_date, 0),
+                "created": created_by_date.get(day_date, 0)
+            })
+
 
         return {
             "personal_metrics": {
                 "tickets_resolved": resolved_tickets,
+                "tickets_open": open_tickets,
+                "tickets_pending": pending_tickets,
+                "tickets_in_progress": in_progress_tickets,
                 "avg_resolution_time": avg_resolution_time,
                 "customer_satisfaction": customer_satisfaction,
                 "sla_compliance": sla_compliance,
@@ -1954,16 +2221,13 @@ def get_technician_analytics(technician_id: str):
             },
             "weekly_data": weekly_data,
             "category_data": category_data,
-            "priority_trends": [
-                {"month": "Oct", "critical": 1, "high": 2, "medium": max(1, total_tickets//2), "low": 1},
-                {"month": "Nov", "critical": 0, "high": 1, "medium": max(1, total_tickets//3), "low": 2},
-                {"month": "Dec", "critical": 1, "high": 3, "medium": max(1, total_tickets//2), "low": 1},
-                {"month": "Jan", "critical": 0, "high": 2, "medium": max(1, total_tickets//2), "low": 1}
-            ],
+            "priority_data": priority_data,
+            "status_data": status_data,
+            "priority_trends": [],
             "team_comparison": [
                 {
                     "name": "You",
-                    "tickets_resolved": total_tickets,
+                    "tickets_resolved": resolved_tickets,
                     "satisfaction": customer_satisfaction,
                     "sla_compliance": sla_compliance,
                     "rank": 1
