@@ -20,13 +20,13 @@ class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
     
     # Snowflake Database Configuration (using standardized variable names)
-    snowflake_account: str = Field(default="FXJQRBY-GF76563", env="SNOWFLAKE_ACCOUNT")
-    snowflake_user: str = Field(default="RUCHIR", env="SNOWFLAKE_USER")
-    snowflake_password: str = Field(default="", env="SNOWFLAKE_PASSWORD")
-    snowflake_authenticator: str = Field(default="externalbrowser", env="SNOWFLAKE_AUTHENTICATOR")
+    snowflake_account: str = Field(default="foqukcw-az16310", env="SNOWFLAKE_ACCOUNT")
+    snowflake_user: str = Field(default="AUTOTASK_SVC", env="SNOWFLAKE_USER")
+    snowflake_password: str = Field(default="AutoTask@2026StrongPass!", env="SNOWFLAKE_PASSWORD")
+    snowflake_authenticator: str = Field(default="snowflake", env="SNOWFLAKE_AUTHENTICATOR")
     snowflake_database: str = Field(default="TEST_DB", env="SNOWFLAKE_DATABASE")
     snowflake_schema: str = Field(default="PUBLIC", env="SNOWFLAKE_SCHEMA")
-    snowflake_warehouse: str = Field(default="S_WHH", env="SNOWFLAKE_WAREHOUSE")
+    snowflake_warehouse: str = Field(default="COMPUTE_WH", env="SNOWFLAKE_WAREHOUSE")
     snowflake_role: str = Field(default="ACCOUNTADMIN", env="SNOWFLAKE_ROLE")
     
     # JWT Authentication (using standardized variable names)

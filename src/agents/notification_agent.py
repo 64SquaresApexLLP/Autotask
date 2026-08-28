@@ -61,7 +61,7 @@ class NotificationAgent:
         # LLM Configuration
         self.db_connection = db_connection
         self.llm_enabled = bool(db_connection and hasattr(db_connection, 'is_connected') and db_connection.is_connected())
-        self.llm_model = 'llama3-70b'
+        self.llm_model = 'llama3.1-70b'
 
         # Email Configuration
         self.enabled = bool(self.smtp_password)

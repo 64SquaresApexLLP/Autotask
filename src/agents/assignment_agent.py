@@ -1481,7 +1481,7 @@ class AssignmentAgentIntegration:
         self.fallback_email = os.getenv('FALLBACK_TECHNICIAN_EMAIL', 'support@company.com')
 
         # Cortex LLM model configuration
-        self.cortex_model = os.getenv('CORTEX_LLM_MODEL', 'llama3-70b')
+        self.cortex_model = os.getenv('CORTEX_LLM_MODEL', 'llama3.1-70b')
 
         # Priority tier definitions for assignment hierarchy (Tiers 4-5 commented out)
         self.priority_tiers = {

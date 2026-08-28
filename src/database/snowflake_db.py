@@ -4,6 +4,7 @@ Handles Snowflake connections and basic database operations only.
 Business logic has been moved to appropriate agent files.
 """
 
+import os
 import snowflake.connector
 import re
 import json
@@ -59,35 +60,48 @@ class SnowflakeConnection:
         self._connect_to_snowflake()
 
     def _connect_to_snowflake(self):
-        """Establishes a connection to Snowflake using SSO or username/password authentication."""
+        """Establishes a connection to Snowflake supporting MFA (TOTP, Duo Push, Cached MFA token, or SSO)."""
         try:
+            # Determine authenticator
+            auth = self.sf_authenticator or os.getenv('SF_AUTHENTICATOR', 'snowflake')
+            if auth not in ['snowflake', 'username_password_mfa', 'externalbrowser']:
+                auth = 'snowflake'
+
             connection_params = {
                 'user': self.sf_user,
                 'account': self.sf_account,
-                'authenticator': self.sf_authenticator,
+                'authenticator': auth,
                 'warehouse': self.sf_warehouse,
                 'database': self.sf_database,
                 'schema': self.sf_schema,
-                'role': self.sf_role
+                'role': self.sf_role,
+                'client_request_mfa_token': True,
+                'client_store_temporary_credential': True
             }
-            if self.sf_authenticator != 'externalbrowser':
+
+            if auth != 'externalbrowser':
                 connection_params['password'] = self.sf_password
-            if self.sf_passcode:
-                connection_params['passcode'] = self.sf_passcode
+
+            # Passcode for TOTP / MFA
+            passcode = self.sf_passcode or os.getenv('SF_PASSCODE') or os.getenv('SNOWFLAKE_PASSCODE')
+            if passcode:
+                connection_params['passcode'] = str(passcode).strip()
+            else:
+                # Allows passcode appended to password or cached token
+                connection_params['passcode_in_password'] = False
 
             self.conn = snowflake.connector.connect(**connection_params)
-            print(f"Successfully connected to Snowflake using {self.sf_authenticator}.")
+            print(f"[SUCCESS] Connected to Snowflake (authenticator: {auth}).")
         except Exception as e:
             error_msg = str(e)
-            print(f"Error connecting to Snowflake: {e}")
+            print(f"[ERROR] Connecting to Snowflake: {e}")
 
-            # Provide specific guidance for common SSO errors
-            if "Failed to connect to DB" in error_msg:
-                print("Connection Error: Check your network connection and Snowflake account details.")
+            if "MFA with TOTP is required" in error_msg:
+                print("[MFA] Snowflake MFA required: Enter your 6-digit TOTP code in SF_PASSCODE.")
+            elif "Failed to connect to DB" in error_msg:
+                print("[ERROR] Connection: Check your network connection and Snowflake account details.")
             elif "Authentication failed" in error_msg:
-                print("SSO Authentication Error: Please ensure you have proper SSO access configured.")
-            elif "Browser" in error_msg:
-                print("Browser Error: Please ensure your browser can open for SSO authentication.")
+                print("[ERROR] Authentication: Please check your credentials.")
 
             self.conn = None
 
@@ -134,7 +148,7 @@ class SnowflakeConnection:
             print(f"Error executing Snowflake query: {e}")
             return []
 
-    def call_cortex_llm(self, prompt_text: str, model: str = 'llama3-70b', expect_json: bool = True):
+    def call_cortex_llm(self, prompt_text: str, model: str = 'llama3.1-70b', expect_json: bool = True):
         """
         Calls the Snowflake Cortex LLM (CORTEX_COMPLETE) with the given prompt.
 

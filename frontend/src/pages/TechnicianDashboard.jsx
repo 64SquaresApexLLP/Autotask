@@ -47,13 +47,20 @@ const TechnicianDashboard = () => {
       ]);
 
       // Filter tickets assigned to current technician using real IDs
-      const myTickets = allTickets.filter(ticket => {
-        const assignedTech = ticket.assigned_technician;
-        const technicianId = ticket.technician_id;
-        const currentUserId = user?.username; // This will be T001, T103, T104, T106
+      const currentUserId = (user?.username || '').trim().toLowerCase();
+      const currentUserEmail = (user?.email || '').trim().toLowerCase();
+      const currentFullName = (user?.full_name || '').trim().toLowerCase();
 
-        return assignedTech === currentUserId ||
-               technicianId === currentUserId;
+      const myTickets = allTickets.filter(ticket => {
+        const assignedTech = (ticket.assigned_technician || '').trim().toLowerCase();
+        const technicianId = (ticket.technician_id || '').trim().toLowerCase();
+        const technicianEmail = (ticket.technician_email || '').trim().toLowerCase();
+
+        return (
+          (currentUserId && (assignedTech === currentUserId || technicianId === currentUserId)) ||
+          (currentUserEmail && (technicianEmail === currentUserEmail || assignedTech === currentUserEmail)) ||
+          (currentFullName && (assignedTech === currentFullName || assignedTech.includes(currentFullName)))
+        );
       });
 
       setDashboardData({

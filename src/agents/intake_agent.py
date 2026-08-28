@@ -99,16 +99,16 @@ class IntakeClassificationAgent:
                 
                 # Start email monitoring in background
                 if self.email_listener.start_monitoring():
-                    print("✅ Email monitoring started successfully")
+                    print("[EMAIL] Email monitoring started successfully")
                 else:
-                    print("⚠️ Email monitoring failed to start - continuing without email integration")
+                    print("[WARN] Email monitoring failed to start - continuing without email integration")
                     self.email_listener = None
             except Exception as e:
-                print(f"❌ Failed to initialize email monitoring: {e}")
+                print(f"[ERROR] Failed to initialize email monitoring: {e}")
                 print("Continuing without email integration")
                 self.email_listener = None
         else:
-            print("📧 Email monitoring disabled")
+            print("[INFO] Email monitoring disabled")
         
         print("IntakeClassificationAgent initialized successfully")
 
@@ -323,7 +323,7 @@ class IntakeClassificationAgent:
         except Exception as e:
             return self._is_ticket_unique_locally(ticket_number)
 
-    def extract_metadata(self, title: str, description: str, model: str = 'llama3-70b') -> Optional[Dict]:
+    def extract_metadata(self, title: str, description: str, model: str = 'llama3.1-70b') -> Optional[Dict]:
         """
         Extracts structured metadata from the ticket title and description using LLM.
         """
@@ -491,7 +491,7 @@ class IntakeClassificationAgent:
             return []
 
     def classify_ticket(self, new_ticket_data: Dict, extracted_metadata: Dict,
-                       similar_tickets: List[Dict], model: str = 'llama3-70b') -> Optional[Dict]:
+                       similar_tickets: List[Dict], model: str = 'llama3.1-70b') -> Optional[Dict]:
         """
         Classifies the new ticket based on extracted metadata and similar tickets using LLM.
         """
@@ -510,7 +510,7 @@ class IntakeClassificationAgent:
     def process_new_ticket(self, ticket_name: str, ticket_description: str, ticket_title: str,
                           due_date: str, priority_initial: str, user_email: Optional[str] = None,
                           user_id: Optional[str] = None, phone_number: Optional[str] = None,
-                          extract_model: str = 'llama3-70b', classify_model: str = 'llama3-70b') -> Optional[Dict]:
+                          extract_model: str = 'llama3.1-70b', classify_model: str = 'llama3.1-70b') -> Optional[Dict]:
         """
         Orchestrates the entire process for a new incoming ticket.
 

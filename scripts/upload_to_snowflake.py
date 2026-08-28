@@ -88,7 +88,7 @@ def run_setup(sql_file="data/dummy_data.sql"):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Upload dummy data & schema to Snowflake")
-    parser.add_argument("--sql-file", default="data/dummy_data.sql", help="Path to SQL seed file")
+    parser.add_argument("--sql-file", default="data/snowflake_setup.sql", help="Path to SQL seed file")
     args = parser.parse_args()
 
     run_setup(sql_file=args.sql_file)
