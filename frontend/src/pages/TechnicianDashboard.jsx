@@ -93,6 +93,10 @@ const TechnicianDashboard = () => {
 
   const stats = getStatistics();
 
+  const handleClick=()=>{
+    window.location.href="https://console.neo4j.io/projects/94f8ebd5-c05b-4276-b2b5-bc691e076bc3/studio/queryNeo4j Aura"
+  }
+
   return (
     <div className="flex min-h-screen bg-gray-50">
       <Sidebar />
@@ -109,13 +113,6 @@ const TechnicianDashboard = () => {
 
             {/* Welcome Section */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between bg-white rounded-xl shadow-sm border border-gray-200 p-4 lg:p-6">
-              <div className="flex items-center space-x-3 mb-4 sm:mb-0">
-                <div className="text-2xl">🔧</div>
-                <div>
-                  <h1 className="text-xl lg:text-2xl font-bold text-gray-800">Welcome back, {user?.full_name || user?.username}!</h1>
-                  <p className="text-gray-600 text-sm lg:text-base">Here's your current workload and team status</p>
-                </div>
-              </div>
               <div className="flex items-center space-x-4">
                 <button
                   onClick={loadDashboardData}
@@ -134,6 +131,22 @@ const TechnicianDashboard = () => {
                   )}
                 </div>
               </div>
+              <div className="flex items-center space-x-3 mb-4 sm:mb-0">
+                <div className="text-2xl">🔧</div>
+                <div>
+                  <h1 className="text-xl lg:text-2xl font-bold text-gray-800">Welcome back, {user?.full_name || user?.username}!</h1>
+                  <p className="text-gray-600 text-sm lg:text-base">Here's your current workload and team status</p>
+                </div>
+              </div>
+             
+            <button
+              className="relative px-2  py-2 text-sm lg:text-sm font-bold text-white bg-gradient-to-r from-violet-600 to-indigo-600 rounded-xl shadow-lg hover:shadow-violet-500/50 hover:scale-105 active:scale-95 transition-all duration-200 overflow-hidden group"
+              onClick={handleClick}
+            >
+              <span className="relative z-10">View Ontology</span>
+              <span className="absolute inset-0 bg-gradient-to-r from-indigo-600 to-violet-600 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+            </button>
+
             </div>
 
             {/* Stats Cards */}
