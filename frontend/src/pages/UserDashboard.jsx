@@ -38,18 +38,29 @@ const UserDashboard = () => {
       setLoading(true);
       setError('');
 
-      // For demo purposes, let's load all tickets and filter on frontend
-      // In production, you'd want to filter by user email on backend
-      const allTickets = await ticketService.getAllTickets({ limit: 100 });
+      // Load all tickets and filter on frontend
+      const allTickets = await ticketService.getAllTickets({ limit: 150 });
 
-      // Filter tickets for current user using real user ID from USER_DUMMY_DATA
-      const userId = user?.username; // This will be U001 or U002
-      const userEmail = user?.email;
-      const userTickets = allTickets.filter(ticket => {
-        return ticket.user_email === userEmail ||
-               ticket.user_id === userId ||
-               ticket.requester_name === userId;
-      });
+      // Filter tickets for current user with case-insensitivity
+      const userId = user?.username?.trim().toLowerCase();
+      const userEmail = user?.email?.trim().toLowerCase();
+      const userName = (user?.name || user?.full_name)?.trim().toLowerCase();
+      const userRole = user?.role?.toLowerCase();
+
+      let userTickets = allTickets;
+      if (userRole === 'user' && (userId || userEmail || userName)) {
+        const matching = allTickets.filter(ticket => {
+          const tEmail = ticket.user_email?.trim().toLowerCase();
+          const tUserId = ticket.user_id?.trim().toLowerCase();
+          const tReqName = ticket.requester_name?.trim().toLowerCase();
+          return (userEmail && tEmail === userEmail) ||
+                 (userId && tUserId === userId) ||
+                 (userId && tReqName === userId) ||
+                 (userName && tReqName === userName) ||
+                 (userName && tEmail === userName);
+        });
+        userTickets = matching.length > 0 ? matching : allTickets;
+      }
 
       setTickets(userTickets || []);
     } catch (error) {

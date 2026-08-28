@@ -102,15 +102,16 @@ function ViewTicket() {
       return;
     }
 
+    const targetId = ticket?.id || tId;
     setSaving(true);
     setSaveMessage(null);
     try {
       if (newStatus) {
-        await ticketService.updateTicketStatus(tId, newStatus);
+        await ticketService.updateTicketStatus(targetId, newStatus);
       }
       if (newWorkNote) {
         const note = timeSpent ? `(${timeSpent}) ${newWorkNote}` : newWorkNote;
-        await ticketService.addWorkNote(tId, note);
+        await ticketService.addWorkNote(targetId, note);
       }
 
       setSaveMessage({ type: 'success', text: 'Ticket updated successfully.' });

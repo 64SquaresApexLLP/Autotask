@@ -9,17 +9,19 @@ from pydantic_settings import BaseSettings
 # Load environment variables from .env file
 from dotenv import load_dotenv
 
-# Find the .env file in the project root (two levels up from backend/)
-env_path = Path(__file__).parent.parent.parent / ".env"
-load_dotenv(dotenv_path=env_path)
+# Find the .env and .env.local file in the project root
+_project_root = Path(__file__).parent.parent.parent
+load_dotenv(dotenv_path=_project_root / ".env.local")
+load_dotenv(dotenv_path=_project_root / ".env")
+load_dotenv()
 
 
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
     
     # Snowflake Database Configuration (using standardized variable names)
-    snowflake_account: str = Field(env="SNOWFLAKE_ACCOUNT")
-    snowflake_user: str = Field(env="SNOWFLAKE_USER")
+    snowflake_account: str = Field(default="FXJQRBY-GF76563", env="SNOWFLAKE_ACCOUNT")
+    snowflake_user: str = Field(default="RUCHIR", env="SNOWFLAKE_USER")
     snowflake_password: str = Field(default="", env="SNOWFLAKE_PASSWORD")
     snowflake_authenticator: str = Field(default="externalbrowser", env="SNOWFLAKE_AUTHENTICATOR")
     snowflake_database: str = Field(default="TEST_DB", env="SNOWFLAKE_DATABASE")
@@ -28,7 +30,7 @@ class Settings(BaseSettings):
     snowflake_role: str = Field(default="ACCOUNTADMIN", env="SNOWFLAKE_ROLE")
     
     # JWT Authentication (using standardized variable names)
-    jwt_secret_key: str = Field(env="JWT_SECRET_KEY")
+    jwt_secret_key: str = Field(default="your-secret-key-change-in-production", env="JWT_SECRET_KEY")
     jwt_algorithm: str = Field(default="HS256", env="JWT_ALGORITHM")
     jwt_access_token_expire_minutes: int = Field(default=30, env="JWT_ACCESS_TOKEN_EXPIRE_MINUTES")
     

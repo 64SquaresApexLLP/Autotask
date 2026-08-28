@@ -13,7 +13,10 @@ const Login = () => {
   const navigate = useNavigate();
 
   const handleLogin = async () => {
-    if (!username || !password || !role) {
+    const trimmedUsername = username.trim();
+    const trimmedPassword = password.trim();
+
+    if (!trimmedUsername || !trimmedPassword || !role) {
       setError('All fields are required');
       return;
     }
@@ -22,7 +25,7 @@ const Login = () => {
     clearError();
 
     try {
-      await login({ username, password, role });
+      await login({ username: trimmedUsername, password: trimmedPassword, role });
 
       // Navigate based on role
       if (role === 'user') {

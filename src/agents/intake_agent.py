@@ -273,16 +273,34 @@ class IntakeClassificationAgent:
         print(f"All fallback attempts failed, using timestamp-based sequence: {fallback_sequence}")
         return fallback_sequence
 
+    def _is_ticket_unique_locally(self, ticket_number: str) -> bool:
+        """Check ticket uniqueness in local files."""
+        try:
+            if os.path.exists("data/knowledgebase.json"):
+                with open("data/knowledgebase.json", "r", encoding="utf-8") as f:
+                    kb_data = json.load(f)
+                    for item in kb_data:
+                        if item.get("new_ticket", {}).get("ticket_number") == ticket_number:
+                            return False
+
+            if os.path.exists("data/TICKETS.csv"):
+                import csv
+                with open("data/TICKETS.csv", "r", encoding="utf-8") as f:
+                    reader = csv.DictReader(f)
+                    for row in reader:
+                        if row.get("TICKETNUMBER") == ticket_number:
+                            return False
+            return True
+        except Exception:
+            return True
+
     def _is_ticket_number_unique(self, ticket_number: str) -> bool:
         """
         Check if a ticket number is unique across both TICKETS and CLOSED_TICKETS tables.
-
-        Args:
-            ticket_number (str): Ticket number to check
-
-        Returns:
-            bool: True if unique, False if already exists
         """
+        if not self.db_connection or not self.db_connection.is_connected():
+            return self._is_ticket_unique_locally(ticket_number)
+
         try:
             # Check both TICKETS and CLOSED_TICKETS tables
             query = """
@@ -296,36 +314,14 @@ class IntakeClassificationAgent:
 
             result = self.db_connection.execute_query(query, (ticket_number, ticket_number))
 
-            if result and len(result) > 0:
+            if result and len(result) > 0 and 'COUNT' in result[0]:
                 count = result[0]['COUNT']
                 return count == 0
             else:
-                print(f"No result returned for uniqueness check of {ticket_number}, assuming not unique for safety")
-                return False
+                return self._is_ticket_unique_locally(ticket_number)
 
         except Exception as e:
-            print(f"Error checking ticket number uniqueness: {e}")
-            
-            # Fallback: check only TICKETS table if CLOSED_TICKETS doesn't exist
-            try:
-                fallback_query = """
-                SELECT COUNT(*) as count
-                FROM TEST_DB.PUBLIC.TICKETS
-                WHERE TICKETNUMBER = %s
-                """
-                result = self.db_connection.execute_query(fallback_query, (ticket_number,))
-                if result and len(result) > 0:
-                    count = result[0]['COUNT']
-                    is_unique = count == 0
-                    if not is_unique:
-                        print(f"Fallback check: ticket {ticket_number} exists in TICKETS table")
-                    return is_unique
-            except Exception as e2:
-                print(f"Fallback uniqueness check also failed: {e2}")
-
-            # If all queries fail, assume NOT unique for safety to prevent duplicates
-            print(f"All uniqueness checks failed for {ticket_number}, assuming NOT unique for safety")
-            return False
+            return self._is_ticket_unique_locally(ticket_number)
 
     def extract_metadata(self, title: str, description: str, model: str = 'llama3-70b') -> Optional[Dict]:
         """
@@ -619,29 +615,23 @@ class IntakeClassificationAgent:
                 "technician_email": "itmanager@company.com"
             }
 
-        # Send comprehensive notifications
-        print(f"\n--- Sending Notifications ---")
+        # Send comprehensive notifications asynchronously in background
+        def _send_notifications_async():
+            try:
+                if user_email and user_email.strip() and self.notification_agent:
+                    self.notification_agent.send_ticket_confirmation(
+                        user_email=user_email,
+                        ticket_data=final_ticket_data,
+                        ticket_number=ticket_number
+                    )
+                if self.notification_agent:
+                    self.notification_agent.send_assignment_notifications(final_ticket_data)
+            except Exception as e_notif:
+                print(f"Background notification error: {e_notif}")
 
-        # Send customer confirmation email
-        if user_email and user_email.strip():
-            print(f"Sending confirmation email to customer: {user_email}")
-            confirmation_sent = self.notification_agent.send_ticket_confirmation(
-                user_email=user_email,
-                ticket_data=final_ticket_data,
-                ticket_number=ticket_number
-            )
-            if confirmation_sent:
-                print("✅ Customer confirmation email sent successfully")
-            else:
-                print("❌ Failed to send customer confirmation email")
-
-        # Send assignment notifications (technician, customer update, manager if needed)
-        assignment_notifications = self.notification_agent.send_assignment_notifications(final_ticket_data)
-
-        # Log notification results
-        for notification_type, success in assignment_notifications.items():
-            status = "✅ Success" if success else "❌ Failed"
-            print(f"{status}: {notification_type.replace('_', ' ').title()}")
+        import threading
+        threading.Thread(target=_send_notifications_async, daemon=True).start()
+        print(f"📧 Notification dispatch launched in background for #{ticket_number}")
 
         print(f"\n--- Ticket Processing Complete (#{ticket_number}) ---")
         return final_ticket_data

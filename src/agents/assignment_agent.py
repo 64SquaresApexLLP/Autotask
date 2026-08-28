@@ -1548,14 +1548,13 @@ class AssignmentAgentIntegration:
         """
         cursor = None
         try:
-            if not self.db_connection.conn:
-                logger.error("No active Snowflake connection available")
-                return []
+            if not self.db_connection or not self.db_connection.conn or not self.db_connection.is_connected():
+                logger.info("Snowflake DB not connected, loading technicians from local CSV fallback")
+                return self._get_fallback_technicians_from_csv()
 
             cursor = self.db_connection.conn.cursor()
 
-            # Query with all required fields (max_workload and availability_status columns removed)
-            # Availability is now checked dynamically via Google Calendar API
+            # Query with all required fields
             query = """
             SELECT
                 TECHNICIAN_ID,
@@ -1585,7 +1584,7 @@ class AssignmentAgentIntegration:
                     else:
                         skills = [s.strip() for s in skills_raw.split(',') if s.strip()]
 
-                    # Parse specializations (now at index 6 since availability_status and max_workload removed)
+                    # Parse specializations
                     specializations_raw = str(row[6]) if row[6] else ""
                     if specializations_raw.startswith('[') and specializations_raw.endswith(']'):
                         try:
@@ -1601,7 +1600,7 @@ class AssignmentAgentIntegration:
                         'email': str(row[2]) if row[2] else '',
                         'role': str(row[3]) if row[3] else '',
                         'skills': skills,
-                        'current_workload': int(float(row[5])) if row[5] is not None else 0,  # Convert float to int
+                        'current_workload': int(float(row[5])) if row[5] is not None else 0,
                         'specializations': specializations
                     }
                     technicians.append(technician_dict)
@@ -1610,15 +1609,62 @@ class AssignmentAgentIntegration:
                     logger.warning(f"Error parsing technician data for row {row}: {str(e)}")
                     continue
 
-            logger.info(f"Retrieved {len(technicians)} technicians from TEST_DB.PUBLIC.TECHNICIAN_DUMMY_DATA")
-            return technicians
+            if technicians:
+                logger.info(f"Retrieved {len(technicians)} technicians from TEST_DB.PUBLIC.TECHNICIAN_DUMMY_DATA")
+                return technicians
+            else:
+                return self._get_fallback_technicians_from_csv()
 
         except Exception as e:
-            logger.error(f"Error retrieving technician data: {str(e)}")
-            return []
+            logger.warning(f"Error querying technician table: {str(e)}, falling back to local CSV")
+            return self._get_fallback_technicians_from_csv()
         finally:
             if cursor:
                 cursor.close()
+
+    def _get_fallback_technicians_from_csv(self) -> List[Dict]:
+        """Load technicians from local CSV files when Snowflake is offline."""
+        import csv
+        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        csv_candidates = [
+            os.path.join(base_dir, 'data', 'TECHNICIAN_DUMMY_DATA.csv'),
+            os.path.join(base_dir, 'data', 'snowflake_export', 'TECHNICIAN_DUMMY_DATA.csv'),
+            os.path.join(base_dir, 'data', 'technician_dummy_data.csv')
+        ]
+        technicians = []
+        for p in csv_candidates:
+            if os.path.exists(p):
+                try:
+                    with open(p, 'r', encoding='utf-8') as f:
+                        reader = csv.DictReader(f)
+                        for row in reader:
+                            s_raw = row.get('SKILLS') or '[]'
+                            try:
+                                skills = json.loads(s_raw) if s_raw.startswith('[') else [s.strip() for s in s_raw.split(',') if s.strip()]
+                            except Exception:
+                                skills = [s.strip() for s in s_raw.strip('[]').replace('"', '').split(',')]
+
+                            spec_raw = row.get('SPECIALIZATIONS') or '[]'
+                            try:
+                                specs = json.loads(spec_raw) if spec_raw.startswith('[') else [s.strip() for s in spec_raw.split(',') if s.strip()]
+                            except Exception:
+                                specs = [s.strip() for s in spec_raw.strip('[]').replace('"', '').split(',')]
+
+                            technicians.append({
+                                'technician_id': row.get('TECHNICIAN_ID', ''),
+                                'name': row.get('NAME', ''),
+                                'email': row.get('EMAIL', ''),
+                                'role': row.get('ROLE', 'Technician'),
+                                'skills': skills,
+                                'current_workload': int(row.get('CURRENT_WORKLOAD', 0) or 0),
+                                'specializations': specs
+                            })
+                    if technicians:
+                        logger.info(f"Loaded {len(technicians)} technicians from {os.path.basename(p)}")
+                        return technicians
+                except Exception as e_csv:
+                    logger.warning(f"Error loading {p}: {e_csv}")
+        return []
 
     def calculate_skill_match(self, required_skills: List[str], technician_skills: List[str]) -> SkillMatchResult:
         """

@@ -28,7 +28,8 @@ class SnowflakeConnection:
 
     def __init__(self, sf_account: str, sf_user: str, sf_warehouse: str,
                  sf_database: str, sf_schema: str, sf_role: str,
-                 sf_password: str = None, sf_authenticator: str = 'externalbrowser'):
+                 sf_password: str = None, sf_authenticator: str = None,
+                 sf_passcode: str = None):
         """
         Initialize Snowflake connection parameters.
 
@@ -41,7 +42,9 @@ class SnowflakeConnection:
             sf_role (str): Snowflake role to use
             sf_password (str, optional): Password, used when sf_authenticator is not 'externalbrowser'
             sf_authenticator (str): 'externalbrowser' for SSO, or 'snowflake' for username/password
+            sf_passcode (str, optional): MFA passcode if required
         """
+        import os
         self.sf_account = sf_account
         self.sf_user = sf_user
         self.sf_warehouse = sf_warehouse
@@ -49,7 +52,8 @@ class SnowflakeConnection:
         self.sf_schema = sf_schema
         self.sf_role = sf_role
         self.sf_password = sf_password
-        self.sf_authenticator = sf_authenticator or 'externalbrowser'
+        self.sf_authenticator = sf_authenticator or os.getenv('SF_AUTHENTICATOR', os.getenv('SNOWFLAKE_AUTHENTICATOR', 'externalbrowser'))
+        self.sf_passcode = sf_passcode
         self.conn = None
 
         self._connect_to_snowflake()
@@ -68,6 +72,8 @@ class SnowflakeConnection:
             }
             if self.sf_authenticator != 'externalbrowser':
                 connection_params['password'] = self.sf_password
+            if self.sf_passcode:
+                connection_params['passcode'] = self.sf_passcode
 
             self.conn = snowflake.connector.connect(**connection_params)
             print(f"Successfully connected to Snowflake using {self.sf_authenticator}.")

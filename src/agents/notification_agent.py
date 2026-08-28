@@ -60,7 +60,7 @@ class NotificationAgent:
 
         # LLM Configuration
         self.db_connection = db_connection
-        self.llm_enabled = db_connection is not None
+        self.llm_enabled = bool(db_connection and hasattr(db_connection, 'is_connected') and db_connection.is_connected())
         self.llm_model = 'llama3-70b'
 
         # Email Configuration
@@ -566,8 +566,8 @@ TeamLogicIT Support System
             msg.attach(text_part)
             msg.attach(html_part)
 
-            # Send email
-            with smtplib.SMTP(self.smtp_server, self.smtp_port) as server:
+            # Send email with a strict 3-second timeout to prevent request blocking
+            with smtplib.SMTP(self.smtp_server, self.smtp_port, timeout=3) as server:
                 server.starttls()
                 server.login(self.smtp_username, self.smtp_password)
                 server.send_message(msg)

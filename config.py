@@ -6,27 +6,41 @@ Contains database and service configuration settings
 import os
 from dotenv import load_dotenv
 
-# Load environment variables from .env file
+# Load environment variables from .env and .env.local files
+_base_dir = os.path.dirname(os.path.abspath(__file__))
+load_dotenv(os.path.join(_base_dir, '.env.local'))
+load_dotenv(os.path.join(_base_dir, '.env'))
 load_dotenv()
 
-# Snowflake Database Configuration (loaded from .env)
-SF_ACCOUNT = os.getenv('SNOWFLAKE_ACCOUNT', 'FOQUKCW-AITEAM_64SQUARES')
-SF_USER = os.getenv('SNOWFLAKE_USER', 'anant.lad@64-squares.com')
-SF_PASSWORD = os.getenv('SNOWFLAKE_PASSWORD', '')  # Using SSO authentication
-SF_AUTHENTICATOR = os.getenv('SNOWFLAKE_AUTHENTICATOR', 'externalbrowser')  # SSO authentication
-SF_DATABASE = os.getenv('SNOWFLAKE_DATABASE', 'TEST_DB')
-SF_SCHEMA = os.getenv('SNOWFLAKE_SCHEMA', 'PUBLIC')
-SF_WAREHOUSE = os.getenv('SNOWFLAKE_WAREHOUSE', 'S_WHH')
-SF_ROLE = os.getenv('SNOWFLAKE_ROLE', 'ACCOUNTADMIN')
+# Snowflake Database Configuration (loaded from .env or .env.local)
+SF_ACCOUNT = os.getenv('SF_ACCOUNT', os.getenv('SNOWFLAKE_ACCOUNT', 'FXJQRBY-GF76563'))
+SF_USER = os.getenv('SF_USER', os.getenv('SNOWFLAKE_USER', 'RUCHIR'))
+SF_PASSWORD = os.getenv('SF_PASSWORD', os.getenv('SNOWFLAKE_PASSWORD', ''))
+SF_AUTHENTICATOR = os.getenv('SF_AUTHENTICATOR', os.getenv('SNOWFLAKE_AUTHENTICATOR', 'externalbrowser'))
+SF_DATABASE = os.getenv('SF_DATABASE', os.getenv('SNOWFLAKE_DATABASE', 'TEST_DB'))
+SF_SCHEMA = os.getenv('SF_SCHEMA', os.getenv('SNOWFLAKE_SCHEMA', 'PUBLIC'))
+SF_WAREHOUSE = os.getenv('SF_WAREHOUSE', os.getenv('SNOWFLAKE_WAREHOUSE', 'S_WHH'))
+SF_ROLE = os.getenv('SF_ROLE', os.getenv('SNOWFLAKE_ROLE', 'ACCOUNTADMIN'))
+SF_PASSCODE = os.getenv('SF_PASSCODE', os.getenv('SNOWFLAKE_PASSCODE', ''))
 
 # Email Configuration (loaded from .env)
-SUPPORT_EMAIL = os.getenv('SUPPORT_EMAIL', 'venkatehp12@gmail.com')
-SUPPORT_EMAIL_PASSWORD = os.getenv('SUPPORT_EMAIL_PASSWORD', '')
+GMAIL_USER = os.getenv('GMAIL_USER', 'venkatehp12@gmail.com')
+GMAIL_APP_PASSWORD = os.getenv('GMAIL_APP_PASSWORD', os.getenv('SUPPORT_EMAIL_PASSWORD', 'xuzzbgdwqwzrklrj'))
+SUPPORT_EMAIL = os.getenv('SUPPORT_EMAIL', GMAIL_USER)
+SUPPORT_EMAIL_PASSWORD = os.getenv('SUPPORT_EMAIL_PASSWORD', GMAIL_APP_PASSWORD)
+if not SUPPORT_EMAIL_PASSWORD:
+    _pwd_path = os.path.join(_base_dir, '.gmail_app_password')
+    if os.path.exists(_pwd_path):
+        try:
+            with open(_pwd_path, 'r') as _f:
+                SUPPORT_EMAIL_PASSWORD = _f.read().strip()
+        except Exception:
+            pass
 
 # Manager and escalation email configuration
 MANAGER_EMAIL = os.getenv('MANAGER_EMAIL', 'anantlad66@gmail.com')
 FALLBACK_TECHNICIAN_EMAIL = os.getenv('FALLBACK_TECHNICIAN_EMAIL', 'support@company.com')
-SUPPORT_PHONE = os.getenv('SUPPORT_PHONE', '1-800-SUPPORT')
+SUPPORT_PHONE = os.getenv('SUPPORT_PHONE', '9723100860')
 
 # Priority and escalation configuration
 HIGH_PRIORITY_NOTIFICATIONS = ['Critical', 'High', 'Desktop/User Down']

@@ -14,7 +14,8 @@ class TicketDB:
                 sf_warehouse=SF_WAREHOUSE,
                 sf_database=SF_DATABASE,
                 sf_schema=SF_SCHEMA,
-                sf_role=SF_ROLE
+                sf_role=SF_ROLE,
+                sf_authenticator=SF_AUTHENTICATOR
             )
 
     def insert_ticket(self, ticket_data: dict):

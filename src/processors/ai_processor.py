@@ -422,10 +422,63 @@ class AIProcessor:
         }}
         """
         print("Extracting metadata with LLM...")
-        extracted_data = self.db_connection.call_cortex_llm(prompt, model=model)
+        extracted_data = None
+        if self.db_connection and self.db_connection.is_connected():
+            try:
+                extracted_data = self.db_connection.call_cortex_llm(prompt, model=model)
+            except Exception as e:
+                print(f"⚠️ Cortex LLM call failed: {e}")
+                extracted_data = None
+
         if extracted_data:
             extracted_data["STATUS"] = "Open"
-        return extracted_data
+            return extracted_data
+
+        # Robust Heuristic Fallback when LLM is offline or Snowflake SSO is disconnected
+        print("ℹ️ Using intelligent rule-based metadata extraction fallback...")
+        text_combined = f"{title} {description}".lower()
+
+        # Determine affected system
+        affected_system = "Workstation / OS"
+        if any(w in text_combined for w in ['vpn', 'wifi', 'wi-fi', 'network', 'internet', 'dns', 'gateway', 'dhcp', 'ip']):
+            affected_system = "Network / VPN"
+        elif any(w in text_combined for w in ['outlook', 'email', 'mail', 'exchange', 'inbox', 'spam', 'phishing']):
+            affected_system = "Email / Outlook"
+        elif any(w in text_combined for w in ['printer', 'print', 'spooler', 'paper', 'jam', 'toner']):
+            affected_system = "Printer"
+        elif any(w in text_combined for w in ['active directory', 'password', 'lockout', 'login', 'account', 'credential', 'access denied', 'permission']):
+            affected_system = "Active Directory / Identity"
+        elif any(w in text_combined for w in ['excel', 'teams', 'slack', 'chrome', 'browser', 'salesforce', 'adobe', 'app', 'crash', 'freeze']):
+            affected_system = "Software / SaaS"
+        elif any(w in text_combined for w in ['mac', 'macbook', 'apple', 'macos', 'jamf', 'ios']):
+            affected_system = "macOS / Apple"
+        elif any(w in text_combined for w in ['server', 'backup', 'datto', 'veeam', 'hyper-v', 'virtual']):
+            affected_system = "Server / Backup"
+        elif any(w in text_combined for w in ['screen', 'monitor', 'keyboard', 'mouse', 'battery', 'overheating', 'laptop', 'hardware', 'dock']):
+            affected_system = "Hardware"
+
+        # Determine urgency
+        urgency = "Medium"
+        if any(w in text_combined for w in ['urgent', 'critical', 'immediately', 'outage', 'down', 'locked out', 'blocked', 'emergency']):
+            urgency = "High"
+        elif any(w in text_combined for w in ['low', 'minor', 'cosmetic', 'question']):
+            urgency = "Low"
+
+        # Extract keywords
+        raw_words = re.findall(r'\b[a-zA-Z0-9_\-\.]{3,}\b', text_combined)
+        stop_words = {'the', 'and', 'for', 'with', 'this', 'that', 'from', 'user', 'have', 'been', 'cannot', 'unable', 'please', 'help', 'not', 'issue', 'problem', 'reported'}
+        keywords = [w for w in raw_words if w not in stop_words][:8]
+
+        return {
+            "main_issue": title.strip() or "Reported IT Issue",
+            "affected_system": affected_system,
+            "urgency_level": urgency,
+            "error_messages": "See description for error signatures and symptoms",
+            "technical_keywords": keywords if keywords else ["IT Support", "Workstation"],
+            "user_actions": "Standard workplace operations",
+            "resolution_indicators": "Systematic diagnostic troubleshooting and standard IT procedure",
+            "STATUS": "Open"
+        }
 
     def classify_ticket(self, new_ticket_data: Dict, extracted_metadata: Dict,
                        similar_tickets: List[Dict], model: str = 'llama3-70b') -> Optional[Dict]:
