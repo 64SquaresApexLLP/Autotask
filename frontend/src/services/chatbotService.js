@@ -15,9 +15,12 @@ export const chatbotService = {
     const url = `${API_BASE_URL}${endpoint}`;
     console.log('Making request to:', url, 'with options:', options);
 
+    const authToken = localStorage.getItem('authToken');
+
     const response = await fetch(url, {
       headers: {
         'Content-Type': 'application/json',
+        ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
         ...options.headers
       },
       ...options

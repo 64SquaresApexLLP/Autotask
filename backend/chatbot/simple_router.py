@@ -1,12 +1,18 @@
 """Chatbot API Router for Autotask integration without authentication requirement."""
 
 import logging
+import os
 import jwt
 from datetime import datetime, timedelta
 from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, HTTPException, status, Query, Depends, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
+
+# Same secret/algorithm the main app uses to sign tokens (backend/main.py) so that
+# a real logged-in technician can be identified here instead of always defaulting.
+JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-secret-key-change-in-production")
+JWT_ALGORITHM = "HS256"
 
 # Global variables to store connections (will be set by main app)
 snowflake_conn = None
@@ -54,21 +60,28 @@ class TicketResponse(BaseModel):
 
 # Helper function to get current technician from main app's authentication
 async def get_current_technician_from_main_app(request: Request) -> str:
-    """Get the current technician ID from the main application's authentication."""
+    """Get the current technician ID from the main application's authentication.
+
+    Decodes the same JWT the main app issues on login and returns the real
+    technician ID (the token's "sub" claim). Falls back to a default technician
+    when no token is present or it fails to validate, since this router
+    intentionally also supports unauthenticated/demo access.
+    """
     try:
         # Get the Authorization header
-        auth_header = request.headers.get("Authorization")
+        auth_header = request.headers.get("Authorization") if request else None
         if not auth_header or not auth_header.startswith("Bearer "):
-            # If no auth header, try to get from query params or default to a test user
+            # If no auth header, default to a test user
             return "T001"  # Default technician for testing
-        
-        # Extract token
-        token = auth_header.split(" ")[1]
-        
-        # For now, we'll use a simple approach - in production, this should validate against the main app's JWT
-        # Since we're removing authentication, we'll return a default technician
+
+        # Extract and validate the token
+        token = auth_header.split(" ", 1)[1]
+        payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
+        return payload.get("sub") or "T001"
+
+    except jwt.PyJWTError as e:
+        logger.warning(f"Invalid chatbot auth token, using default technician: {e}")
         return "T001"
-        
     except Exception as e:
         logger.warning(f"Could not extract technician from auth: {e}")
         return "T001"  # Default technician
@@ -125,15 +138,15 @@ async def search_tickets(
 
         # Search real tickets from database
         search_term = f"%{q}%"
-        query = f"""
+        query = """
             SELECT TICKETNUMBER, TITLE, DESCRIPTION, STATUS, PRIORITY, TECHNICIANEMAIL
             FROM TEST_DB.PUBLIC.TICKETS
-            WHERE UPPER(TITLE) LIKE UPPER('{search_term}')
-               OR UPPER(DESCRIPTION) LIKE UPPER('{search_term}')
+            WHERE UPPER(TITLE) LIKE UPPER(%s)
+               OR UPPER(DESCRIPTION) LIKE UPPER(%s)
             ORDER BY TICKETNUMBER DESC
             LIMIT 20
         """
-        results = snowflake_conn.execute_query(query)
+        results = snowflake_conn.execute_query(query, (search_term, search_term))
 
         tickets = []
         for row in results:
@@ -163,12 +176,12 @@ async def get_ticket(ticket_id: str, request: Request = None):
             raise HTTPException(status_code=503, detail="Database connection not available. Please ensure Snowflake connection is properly configured.")
 
         # Query specific ticket from database
-        query = f"""
+        query = """
             SELECT TICKETNUMBER, TITLE, DESCRIPTION, STATUS, PRIORITY, TECHNICIANEMAIL
             FROM TEST_DB.PUBLIC.TICKETS
-            WHERE TICKETNUMBER = '{ticket_id}'
+            WHERE TICKETNUMBER = %s
         """
-        results = snowflake_conn.execute_query(query)
+        results = snowflake_conn.execute_query(query, (ticket_id,))
 
         if not results:
             raise HTTPException(status_code=404, detail="Ticket not found")
@@ -200,12 +213,12 @@ async def find_similar_tickets(ticket_number: str, request: Request = None):
             raise HTTPException(status_code=503, detail="Database connection not available. Please ensure Snowflake connection is properly configured.")
 
         # First, get the original ticket to find similar ones
-        original_query = f"""
+        original_query = """
             SELECT TITLE, DESCRIPTION, STATUS, PRIORITY, ISSUETYPE, SUBISSUETYPE
             FROM TEST_DB.PUBLIC.TICKETS
-            WHERE TICKETNUMBER = '{ticket_number}'
+            WHERE TICKETNUMBER = %s
         """
-        original_results = snowflake_conn.execute_query(original_query)
+        original_results = snowflake_conn.execute_query(original_query, (ticket_number,))
 
         if not original_results:
             raise HTTPException(status_code=404, detail="Original ticket not found")
@@ -222,8 +235,8 @@ async def find_similar_tickets(ticket_number: str, request: Request = None):
             raise HTTPException(status_code=400, detail="Original ticket has no content to search for similar tickets")
 
         # Use Snowflake Cortex AI for semantic similarity search in TICKETS table
-        tickets_similarity_query = f"""
-            SELECT 
+        tickets_similarity_query = """
+            SELECT
                 TICKETNUMBER,
                 TITLE,
                 DESCRIPTION,
@@ -235,10 +248,10 @@ async def find_similar_tickets(ticket_number: str, request: Request = None):
                 RESOLUTION,
                 SNOWFLAKE.CORTEX.AI_SIMILARITY(
                     COALESCE(TITLE, '') || ' ' || COALESCE(DESCRIPTION, ''),
-                    '{search_text.replace("'", "''")}'
+                    %s
                 ) AS SIMILARITY_SCORE
             FROM TEST_DB.PUBLIC.TICKETS
-            WHERE TICKETNUMBER != '{ticket_number}'
+            WHERE TICKETNUMBER != %s
             AND TITLE IS NOT NULL
             AND DESCRIPTION IS NOT NULL
             AND TRIM(TITLE) != ''
@@ -247,12 +260,12 @@ async def find_similar_tickets(ticket_number: str, request: Request = None):
             ORDER BY SIMILARITY_SCORE DESC
             LIMIT 5
         """
-        
-        tickets_results = snowflake_conn.execute_query(tickets_similarity_query)
-        
+
+        tickets_results = snowflake_conn.execute_query(tickets_similarity_query, (search_text, ticket_number))
+
         # Use Snowflake Cortex AI for semantic similarity search in COMPANY_4130_DATA table
-        company_similarity_query = f"""
-            SELECT 
+        company_similarity_query = """
+            SELECT
                 TICKETNUMBER,
                 TITLE,
                 DESCRIPTION,
@@ -263,7 +276,7 @@ async def find_similar_tickets(ticket_number: str, request: Request = None):
                 RESOLUTION,
                 SNOWFLAKE.CORTEX.AI_SIMILARITY(
                     COALESCE(TITLE, '') || ' ' || COALESCE(DESCRIPTION, ''),
-                    '{search_text.replace("'", "''")}'
+                    %s
                 ) AS SIMILARITY_SCORE
             FROM TEST_DB.PUBLIC.COMPANY_4130_DATA
             WHERE TITLE IS NOT NULL
@@ -274,8 +287,8 @@ async def find_similar_tickets(ticket_number: str, request: Request = None):
             ORDER BY SIMILARITY_SCORE DESC
             LIMIT 5
         """
-        
-        company_results = snowflake_conn.execute_query(company_similarity_query)
+
+        company_results = snowflake_conn.execute_query(company_similarity_query, (search_text,))
         
         # Combine and sort results by similarity score
         all_results = []
