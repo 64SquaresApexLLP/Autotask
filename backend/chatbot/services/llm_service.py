@@ -2,6 +2,7 @@
 
 import logging
 import os
+import json
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 import snowflake.connector
@@ -225,8 +226,20 @@ Response:"""
             logger.error(f"Error generating interactive AI resolution: {e}")
             raise
 
-    def generate_conversational_response(self, context_type: str, user_message: str, conversation_history: List[str] = None) -> str:
-        """Generate conversational follow-up responses."""
+    def generate_conversational_response(
+        self,
+        context_type: str,
+        user_message: str,
+        conversation_history: List[str] = None,
+        extra_context: Dict[str, Any] = None,
+        system_instructions: str = None,
+    ) -> str:
+        """Generate conversational follow-up responses, optionally enriched with ticket/DB context.
+
+        `extra_context` may contain structured info (e.g. my tickets, similar tickets,
+        knowledge-base articles) that the model should reference in its answer.
+        `system_instructions` overrides the default assistant behaviour prompt.
+        """
         try:
             if not self.cortex_available:
                 raise Exception("Snowflake Cortex is not available. Please check your Snowflake connection.")
@@ -234,16 +247,35 @@ Response:"""
             # Build conversation context
             history_context = ""
             if conversation_history:
-                history_context = "\n\nConversation History:\n" + "\n".join(conversation_history[-4:])
+                history_context = "\n\nConversation History:\n" + "\n".join(conversation_history[-6:])
+
+            # Build structured extra context (tickets, similar tickets, FAQ, etc.)
+            context_block = ""
+            if extra_context:
+                try:
+                    context_block = "\n\nAdditional context (use it when relevant):\n" + json.dumps(
+                        extra_context, ensure_ascii=False, default=str
+                    )[:7000]
+                except Exception:
+                    context_block = "\n\nAdditional context: (unavailable)"
+
+            default_instructions = (
+                "You are a helpful IT support assistant having a friendly conversation with a technician. "
+                "Respond in a conversational, helpful manner. Be supportive and offer specific assistance. "
+                "Keep responses concise but informative. If they're asking for help, provide actionable guidance. "
+                "If they're giving feedback, acknowledge it appropriately and offer next steps."
+            )
+            instructions = system_instructions or default_instructions
 
             # Create conversational prompt
-            prompt = f"""You are a helpful IT support assistant having a friendly conversation with a technician.
+            prompt = f"""You are a helpful IT support assistant.
 
-Context: {context_type}
+Conversation Type: {context_type}
 User Message: {user_message}
 {history_context}
+{context_block}
 
-Respond in a conversational, helpful manner. Be supportive and offer specific assistance. Keep responses concise but informative. If they're asking for help, provide actionable guidance. If they're giving feedback, acknowledge it appropriately and offer next steps.
+{instructions}
 
 Response:"""
 
