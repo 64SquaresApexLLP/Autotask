@@ -414,21 +414,29 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
 @app.on_event("startup")
 async def startup_event():
     """Set database connection and LLM service for chatbot on startup."""
-    if snowflake_conn:
-        try:
-            from chatbot.simple_router import set_database_connection, set_llm_service
+    # 1) Share the main app's Snowflake connection with the chatbot router (optional)
+    try:
+        from chatbot.simple_router import set_database_connection
+        if snowflake_conn:
             set_database_connection(snowflake_conn)
+            print("✅ Chatbot database connection set")
+    except Exception as e:
+        print(f"⚠️ Warning: Could not set chatbot database connection: {e}")
 
-            # Initialize LLM service
-            try:
-                from chatbot.services.llm_service import LLMService
-                llm_service = LLMService()
-                set_llm_service(llm_service)
-                print("✅ LLM service initialized for chatbot")
-            except Exception as e:
-                print(f"⚠️ Warning: Could not initialize LLM service: {e}")
-        except Exception as e:
-            print(f"⚠️ Warning: Could not initialize chatbot services: {e}")
+    # 2) ALWAYS initialize the LLM (Snowflake Cortex) service for the chatbot.
+    #    LLMService owns its own Snowflake connection, so this works even when the
+    #    main database connection above is unavailable.
+    try:
+        from chatbot.simple_router import set_llm_service
+        from chatbot.services.llm_service import LLMService
+        _llm = LLMService()
+        set_llm_service(_llm)
+        if _llm.cortex_available:
+            print("✅ LLM service initialized for chatbot (Snowflake Cortex available)")
+        else:
+            print("⚠️ LLM service initialized but Snowflake Cortex is NOT available — using rule-based fallbacks.")
+    except Exception as e:
+        print(f"⚠️ Warning: Could not initialize LLM service: {e}")
 
 # --- CONFIGURATION ---
 import config

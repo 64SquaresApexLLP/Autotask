@@ -488,8 +488,10 @@ class CompanyData(Base):
 def create_snowflake_engine():
     """Create Snowflake database engine."""
     try:
-        # Build connection parameters
-        connect_args = {
+        # Build URL parameters (values that are valid inside the connection URL).
+        # NOTE: secrets such as private_key_file MUST go in connect_args, not the
+        # URL - snowflake-sqlalchemy >= 1.11 rejects them in the URL.
+        url_params = {
             'account': settings.snowflake_account,
             'user': settings.snowflake_user,
             'database': settings.snowflake_database,
@@ -497,6 +499,9 @@ def create_snowflake_engine():
             'warehouse': settings.snowflake_warehouse,
             'role': settings.snowflake_role,
         }
+
+        # Sensitive / dialect-specific options passed via connect_args=create_engine(...)
+        engine_connect_args = {}
 
         # Add authentication method
         auth = (settings.snowflake_authenticator or 'keypair').strip().lower()
@@ -512,17 +517,18 @@ def create_snowflake_engine():
         )
 
         if auth == "externalbrowser":
-            connect_args['authenticator'] = 'externalbrowser'
+            url_params['authenticator'] = 'externalbrowser'
         elif use_keypair:
-            # Key-pair (RSA/JWT) auth via private_key_file — no password / no MFA prompts.
-            connect_args['private_key_file'] = private_key_file
+            # Key-pair (RSA/JWT) auth — no password / no MFA prompts.
+            engine_connect_args['private_key_file'] = private_key_file
             if getattr(settings, 'snowflake_private_key_pwd', ''):
-                connect_args['private_key_file_pwd'] = settings.snowflake_private_key_pwd
+                engine_connect_args['private_key_file_pwd'] = settings.snowflake_private_key_pwd
         elif settings.snowflake_password:
-            connect_args['password'] = settings.snowflake_password
+            url_params['password'] = settings.snowflake_password
 
         engine = create_engine(
-            URL(**connect_args),
+            URL(**url_params),
+            connect_args=engine_connect_args or None,
             echo=settings.debug,
             # Connection pooling settings to reuse connections
             pool_size=10,
@@ -537,14 +543,24 @@ def create_snowflake_engine():
         raise
 
 # Global engine and session factory
-engine = create_snowflake_engine()
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+# Failure here must NOT block the rest of the chatbot (e.g. the LLM/Cortex service),
+# so we degrade gracefully instead of letting the module import crash.
+try:
+    engine = create_snowflake_engine()
+    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+except Exception as e:
+    logger.error(f"Chatbot database engine unavailable: {e}")
+    logger.warning("Database-backed chatbot features disabled; LLM/AI features still work.")
+    engine = None
+    SessionLocal = None
 
 
 
 
 def get_db() -> Session:
     """Get database session."""
+    if SessionLocal is None:
+        raise RuntimeError("Chatbot database is unavailable (Snowflake engine failed to initialize).")
     db = SessionLocal()
     try:
         yield db

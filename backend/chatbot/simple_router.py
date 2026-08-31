@@ -1,16 +1,32 @@
 """Chatbot API Router for Autotask integration without authentication requirement."""
 
 import logging
+import os
+import json
 import jwt
 from datetime import datetime, timedelta
 from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, HTTPException, status, Query, Depends, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+# Same secret/algorithm the main app uses to sign tokens (backend/main.py) so that
+# a real logged-in technician can be identified here instead of always defaulting.
+JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-secret-key-change-in-production")
+JWT_ALGORITHM = "HS256"
 
 # Global variables to store connections (will be set by main app)
 snowflake_conn = None
 llm_service = None
+
+# In-memory conversation history keyed by session_id.
+# Each entry is a single string in the form "USER: ..." / "BOT: ...".
+conversation_store: Dict[str, List[str]] = {}
+MAX_HISTORY_ENTRIES = 20
+
+# Diagnostics: last LLM error so a /debug endpoint can reveal why the LLM path fails.
+last_llm_error: Optional[str] = None
+last_llm_error_at: Optional[str] = None
 
 def set_database_connection(conn):
     """Set the database connection from the main app."""
@@ -42,7 +58,7 @@ class ChatMessage(BaseModel):
 
 class ChatResponse(BaseModel):
     response: str
-    timestamp: datetime = datetime.now()
+    timestamp: datetime = Field(default_factory=datetime.now)
 
 class TicketResponse(BaseModel):
     ticket_id: str
@@ -54,24 +70,227 @@ class TicketResponse(BaseModel):
 
 # Helper function to get current technician from main app's authentication
 async def get_current_technician_from_main_app(request: Request) -> str:
-    """Get the current technician ID from the main application's authentication."""
+    """Get the current technician ID from the main application's authentication.
+
+    Decodes the same JWT the main app issues on login and returns the real
+    technician ID (the token's "sub" claim). Falls back to a default technician
+    when no token is present or it fails to validate, since this router
+    intentionally also supports unauthenticated/demo access.
+    """
     try:
         # Get the Authorization header
-        auth_header = request.headers.get("Authorization")
+        auth_header = request.headers.get("Authorization") if request else None
         if not auth_header or not auth_header.startswith("Bearer "):
-            # If no auth header, try to get from query params or default to a test user
+            # If no auth header, default to a test user
             return "T001"  # Default technician for testing
-        
-        # Extract token
-        token = auth_header.split(" ")[1]
-        
-        # For now, we'll use a simple approach - in production, this should validate against the main app's JWT
-        # Since we're removing authentication, we'll return a default technician
+
+        # Extract and validate the token
+        token = auth_header.split(" ", 1)[1]
+        payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
+        return payload.get("sub") or "T001"
+
+    except jwt.PyJWTError as e:
+        # Expected when the caller's token is missing/expired — we intentionally
+        # fall back to the default technician for anonymous/demo access.
+        logger.debug(f"Invalid chatbot auth token, using default technician: {e}")
         return "T001"
-        
     except Exception as e:
-        logger.warning(f"Could not extract technician from auth: {e}")
+        logger.debug(f"Could not extract technician from auth: {e}")
         return "T001"  # Default technician
+
+# ---------------------------------------------------------------------------
+# Conversation helpers (LLM-first routing)
+# ---------------------------------------------------------------------------
+
+def _get_conversation_history(session_id: str) -> List[str]:
+    """Return the recent conversational turns for a session."""
+    if not session_id:
+        return []
+    return conversation_store.get(session_id, [])[-10:]
+
+
+def _append_to_history(session_id: str, user_message: str, bot_message: str):
+    """Record one user/bot exchange for a session."""
+    if not session_id:
+        return
+    history = conversation_store.setdefault(session_id, [])
+    history.append(f"USER: {user_message}")
+    history.append(f"BOT: {bot_message}")
+    # Keep the store bounded
+    if len(history) > MAX_HISTORY_ENTRIES:
+        conversation_store[session_id] = history[-MAX_HISTORY_ENTRIES:]
+
+
+def _detect_intent(message: str) -> str:
+    """Classify what kind of support request the user is making.
+
+    This is only a *hint* for building context / instructions — the LLM itself
+    always makes the final decision about scope and how to respond.
+    """
+    m = message.lower()
+
+    if any(w in m for w in [
+        'ai resolution', 'ai help', 'ai support', 'ai_resolution',
+        'resolve', 'resolution', 'how to fix'
+    ]):
+        return "ai_resolution"
+    if any(w in m for w in ['similar ticket', 'tickets similar', 'similar to', 'find tickets related']):
+        return "similar_tickets"
+    if any(w in m for w in ['faq', 'frequently asked', 'help topics', 'what can you help', 'knowledge base']):
+        return "faq"
+    if any(w in m for w in ['my ticket', 'my_tickets', 'my recent tickets', 'show my', 'show me my', 'assigned to me']):
+        return "my_tickets"
+    if any(w in m for w in ['hello', 'hi ', 'hey', 'good morning', 'good afternoon', 'good evening', ' how are you']):
+        return "greeting"
+    if any(w in m for w in ['thank you', 'thanks', 'appreciate it', 'thankyou']):
+        return "thanks"
+    if _is_technical_question(message):
+        return "technical_issue"
+    return "general"
+
+
+def _fetch_my_tickets(current_user: str, limit: int = 5) -> List[Dict[str, Any]]:
+    """Fetch tickets assigned to the current user (raw DB rows)."""
+    if not snowflake_conn:
+        return []
+    try:
+        query = f"""
+            SELECT TICKETNUMBER, TITLE, DESCRIPTION, STATUS, PRIORITY
+            FROM TEST_DB.PUBLIC.TICKETS
+            WHERE TECHNICIAN_ID = %s
+            ORDER BY TICKETNUMBER DESC
+            LIMIT {int(limit)}
+        """
+        results = snowflake_conn.execute_query(query, (current_user,))
+        return [dict(row) for row in results]
+    except Exception as e:
+        logger.warning(f"Could not fetch my tickets for {current_user}: {e}")
+        return []
+
+
+# Semantic search over tickets.
+# NOTE: SNOWFLAKE.CORTEX.AI_SIMILARITY is NOT available on this account (it throws
+# "Unknown user-defined function"), so we use Cortex embeddings + VECTOR_COSINE_SIMILARITY
+# instead (verified working). If vector search fails anywhere, we fall back to a keyword
+# (ILIKE) search so the similar-tickets feature always returns something useful.
+_SEMANTIC_SCORE_EXPR = (
+    "VECTOR_COSINE_SIMILARITY(\n"
+    "    SNOWFLAKE.CORTEX.EMBED_TEXT_768('e5-base-v2', "
+    "COALESCE(TITLE, '') || ' ' || COALESCE(DESCRIPTION, '')),\n"
+    "    SNOWFLAKE.CORTEX.EMBED_TEXT_768('e5-base-v2', %s)\n"
+    ") AS SIMILARITY_SCORE"
+)
+
+
+def _semantic_search(
+    table: str,
+    search_text: str,
+    exclude_ticket: Optional[str] = None,
+    limit: int = 5,
+    select_columns: str = "TICKETNUMBER, TITLE, DESCRIPTION, STATUS, PRIORITY, RESOLUTION",
+) -> List[Dict[str, Any]]:
+    """Similar-ticket search using Cortex embeddings (vector cosine similarity).
+
+    Falls back to a keyword (ILIKE) search if the vector functions are unavailable.
+    Returns a list of dict-like rows. Rows from the vector search include a
+    SIMILARITY_SCORE key; keyword-fallback rows don't (use default 0.3 downstream).
+    """
+    if not snowflake_conn:
+        return []
+
+    exclude_clause = ""
+    if exclude_ticket:
+        safe_ticket = exclude_ticket.replace("'", "''")
+        exclude_clause = f"AND TICKETNUMBER != '{safe_ticket}'"
+
+    base_where = f"""
+    WHERE TITLE IS NOT NULL AND DESCRIPTION IS NOT NULL
+      AND TRIM(TITLE) != '' AND TRIM(DESCRIPTION) != ''
+      AND LENGTH(TRIM(TITLE || ' ' || DESCRIPTION)) > 10
+      {exclude_clause}
+    """
+
+    # 1) Try Cortex vector similarity (EMBED_TEXT_768 + VECTOR_COSINE_SIMILARITY)
+    try:
+        query = f"""
+            SELECT {select_columns},
+                   {_SEMANTIC_SCORE_EXPR}
+            FROM {table}
+            {base_where}
+            ORDER BY SIMILARITY_SCORE DESC
+            LIMIT {int(limit)}
+        """
+        results = snowflake_conn.execute_query(query, (search_text,))
+        rows = [dict(row) for row in results]
+        if rows:
+            return rows
+    except Exception as e:
+        logger.warning(f"Cortex vector similarity failed on {table}; using keyword fallback: {e}")
+
+    # 2) Keyword fallback (works even without Cortex vector functions)
+    try:
+        terms = [w for w in search_text.lower().split() if len(w) > 2][:5]
+        if not terms:
+            return []
+        safe_terms = [t.replace("'", "''") for t in terms]
+        like_clauses = " OR ".join(
+            f"UPPER(COALESCE(TITLE,'')) LIKE UPPER('%{t}%') "
+            f"OR UPPER(COALESCE(DESCRIPTION,'')) LIKE UPPER('%{t}%')"
+            for t in safe_terms
+        )
+        query = f"""
+            SELECT {select_columns}
+            FROM {table}
+            {base_where}
+              AND ({like_clauses})
+            ORDER BY TICKETNUMBER DESC
+            LIMIT {int(limit)}
+        """
+        results = snowflake_conn.execute_query(query)
+        return [dict(row) for row in results]
+    except Exception as e:
+        logger.warning(f"Keyword fallback failed on {table}: {e}")
+        return []
+
+
+def _fetch_similar_tickets(search_text: str, limit: int = 3) -> List[Dict[str, Any]]:
+    """Fetch tickets similar to `search_text` (vector similarity + keyword fallback)."""
+    return _semantic_search("TEST_DB.PUBLIC.TICKETS", search_text, limit=limit)
+
+
+def _gather_ticket_context(user_message: str, current_user: str) -> Dict[str, Any]:
+    """Gather relevant ticket/DB context so the LLM can answer with real data.
+
+    For ticket/issue-related intents we pull the user's assigned tickets and —
+    when the user is looking for similar/resolved issues — semantically similar
+    tickets via Cortex.
+    """
+    intent = _detect_intent(user_message)
+    context: Dict[str, Any] = {}
+
+    my_tickets = _fetch_my_tickets(current_user, limit=5)
+    context["my_tickets"] = my_tickets
+    if my_tickets:
+        context["my_ticket_count"] = len(my_tickets)
+
+    if intent in ("similar_tickets", "ai_resolution", "technical_issue"):
+        search_text = user_message
+        # If the user references their latest ticket, search using its content.
+        if my_tickets and any(w in user_message.lower() for w in ["latest ticket", "my ticket"]):
+            latest = my_tickets[0]
+            search_text = f"{latest.get('TITLE', '')} {latest.get('DESCRIPTION', '')}".strip()
+        if search_text:
+            similar = _fetch_similar_tickets(search_text, limit=3)
+            context["similar_tickets"] = similar
+
+    if not my_tickets:
+        context["note"] = (
+            "The database returned NO tickets for this user. Do not invent ticket numbers, "
+            "titles, or statuses. If the user asks about their tickets, state plainly that "
+            "none were found and suggest how to proceed."
+        )
+    return context
+
 
 # 1. GET /chatbot/tickets/my – Retrieves tickets assigned to the logged-in user
 @router.get("/tickets/my", response_model=List[TicketResponse])
@@ -125,15 +344,15 @@ async def search_tickets(
 
         # Search real tickets from database
         search_term = f"%{q}%"
-        query = f"""
+        query = """
             SELECT TICKETNUMBER, TITLE, DESCRIPTION, STATUS, PRIORITY, TECHNICIANEMAIL
             FROM TEST_DB.PUBLIC.TICKETS
-            WHERE UPPER(TITLE) LIKE UPPER('{search_term}')
-               OR UPPER(DESCRIPTION) LIKE UPPER('{search_term}')
+            WHERE UPPER(TITLE) LIKE UPPER(%s)
+               OR UPPER(DESCRIPTION) LIKE UPPER(%s)
             ORDER BY TICKETNUMBER DESC
             LIMIT 20
         """
-        results = snowflake_conn.execute_query(query)
+        results = snowflake_conn.execute_query(query, (search_term, search_term))
 
         tickets = []
         for row in results:
@@ -163,12 +382,12 @@ async def get_ticket(ticket_id: str, request: Request = None):
             raise HTTPException(status_code=503, detail="Database connection not available. Please ensure Snowflake connection is properly configured.")
 
         # Query specific ticket from database
-        query = f"""
+        query = """
             SELECT TICKETNUMBER, TITLE, DESCRIPTION, STATUS, PRIORITY, TECHNICIANEMAIL
             FROM TEST_DB.PUBLIC.TICKETS
-            WHERE TICKETNUMBER = '{ticket_id}'
+            WHERE TICKETNUMBER = %s
         """
-        results = snowflake_conn.execute_query(query)
+        results = snowflake_conn.execute_query(query, (ticket_id,))
 
         if not results:
             raise HTTPException(status_code=404, detail="Ticket not found")
@@ -200,12 +419,12 @@ async def find_similar_tickets(ticket_number: str, request: Request = None):
             raise HTTPException(status_code=503, detail="Database connection not available. Please ensure Snowflake connection is properly configured.")
 
         # First, get the original ticket to find similar ones
-        original_query = f"""
+        original_query = """
             SELECT TITLE, DESCRIPTION, STATUS, PRIORITY, ISSUETYPE, SUBISSUETYPE
             FROM TEST_DB.PUBLIC.TICKETS
-            WHERE TICKETNUMBER = '{ticket_number}'
+            WHERE TICKETNUMBER = %s
         """
-        original_results = snowflake_conn.execute_query(original_query)
+        original_results = snowflake_conn.execute_query(original_query, (ticket_number,))
 
         if not original_results:
             raise HTTPException(status_code=404, detail="Original ticket not found")
@@ -221,84 +440,54 @@ async def find_similar_tickets(ticket_number: str, request: Request = None):
         if not search_text:
             raise HTTPException(status_code=400, detail="Original ticket has no content to search for similar tickets")
 
-        # Use Snowflake Cortex AI for semantic similarity search in TICKETS table
-        tickets_similarity_query = f"""
-            SELECT 
-                TICKETNUMBER,
-                TITLE,
-                DESCRIPTION,
-                STATUS,
-                PRIORITY,
-                TECHNICIANEMAIL,
-                ISSUETYPE,
-                SUBISSUETYPE,
-                RESOLUTION,
-                SNOWFLAKE.CORTEX.AI_SIMILARITY(
-                    COALESCE(TITLE, '') || ' ' || COALESCE(DESCRIPTION, ''),
-                    '{search_text.replace("'", "''")}'
-                ) AS SIMILARITY_SCORE
-            FROM TEST_DB.PUBLIC.TICKETS
-            WHERE TICKETNUMBER != '{ticket_number}'
-            AND TITLE IS NOT NULL
-            AND DESCRIPTION IS NOT NULL
-            AND TRIM(TITLE) != ''
-            AND TRIM(DESCRIPTION) != ''
-            AND LENGTH(TRIM(TITLE || ' ' || DESCRIPTION)) > 10
-            ORDER BY SIMILARITY_SCORE DESC
-            LIMIT 5
-        """
-        
-        tickets_results = snowflake_conn.execute_query(tickets_similarity_query)
-        
-        # Use Snowflake Cortex AI for semantic similarity search in COMPANY_4130_DATA table
-        company_similarity_query = f"""
-            SELECT 
-                TICKETNUMBER,
-                TITLE,
-                DESCRIPTION,
-                STATUS,
-                PRIORITY,
-                ISSUETYPE,
-                SUBISSUETYPE,
-                RESOLUTION,
-                SNOWFLAKE.CORTEX.AI_SIMILARITY(
-                    COALESCE(TITLE, '') || ' ' || COALESCE(DESCRIPTION, ''),
-                    '{search_text.replace("'", "''")}'
-                ) AS SIMILARITY_SCORE
-            FROM TEST_DB.PUBLIC.COMPANY_4130_DATA
-            WHERE TITLE IS NOT NULL
-            AND DESCRIPTION IS NOT NULL
-            AND TRIM(TITLE) != ''
-            AND TRIM(DESCRIPTION) != ''
-            AND LENGTH(TRIM(TITLE || ' ' || DESCRIPTION)) > 10
-            ORDER BY SIMILARITY_SCORE DESC
-            LIMIT 5
-        """
-        
-        company_results = snowflake_conn.execute_query(company_similarity_query)
+        # Semantic similarity search in TICKETS table (Cortex embeddings + keyword fallback)
+        tickets_results = _semantic_search(
+            "TEST_DB.PUBLIC.TICKETS",
+            search_text,
+            exclude_ticket=ticket_number,
+            limit=5,
+            select_columns=(
+                "TICKETNUMBER, TITLE, DESCRIPTION, STATUS, PRIORITY, "
+                "TECHNICIANEMAIL, ISSUETYPE, SUBISSUETYPE, RESOLUTION"
+            ),
+        )
+
+        # Semantic similarity search in COMPANY_4130_DATA table
+        company_results = _semantic_search(
+            "TEST_DB.PUBLIC.COMPANY_4130_DATA",
+            search_text,
+            limit=5,
+            select_columns=(
+                "TICKETNUMBER, TITLE, DESCRIPTION, STATUS, PRIORITY, "
+                "ISSUETYPE, SUBISSUETYPE, RESOLUTION"
+            ),
+        )
         
         # Combine and sort results by similarity score
         all_results = []
         
         # Add TICKETS results
         for row in tickets_results:
-            score = row.get('SIMILARITY_SCORE', 0)
-            if isinstance(score, (int, float)) and score >= 0.1:  # Minimum similarity threshold
-                all_results.append({
-                    'source': 'TICKETS',
-                    'data': row,
-                    'score': score
-                })
+            # Keyword fallback rows have no SIMILARITY_SCORE — give them a modest default.
+            score = row.get('SIMILARITY_SCORE', 0.3)
+            if not isinstance(score, (int, float)) or score < 0:
+                score = 0.3
+            all_results.append({
+                'source': 'TICKETS',
+                'data': row,
+                'score': score
+            })
         
         # Add COMPANY_4130_DATA results
         for row in company_results:
-            score = row.get('SIMILARITY_SCORE', 0)
-            if isinstance(score, (int, float)) and score >= 0.1:  # Minimum similarity threshold
-                all_results.append({
-                    'source': 'COMPANY_4130_DATA',
-                    'data': row,
-                    'score': score
-                })
+            score = row.get('SIMILARITY_SCORE', 0.3)
+            if not isinstance(score, (int, float)) or score < 0:
+                score = 0.3
+            all_results.append({
+                'source': 'COMPANY_4130_DATA',
+                'data': row,
+                'score': score
+            })
         
         # Sort by similarity score (highest first)
         all_results.sort(key=lambda x: x['score'], reverse=True)
@@ -334,50 +523,156 @@ async def find_similar_tickets(ticket_number: str, request: Request = None):
         logger.error(f"Error finding similar tickets for {ticket_number}: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to find similar tickets: {str(e)}")
 
+# Scope + per-intent instructions for the LLM (Snowflake Cortex).
+# Every user prompt is sent to the LLM; the LLM itself decides whether the
+# request is in scope for this IT-support assistant and how to respond.
+_SCOPE_INSTRUCTIONS = (
+    "SCOPE RULE: First decide whether the user's request is within the scope of an "
+    "IT support assistant for our service desk (computers, laptops, servers, networking, "
+    "Wi-Fi, printers, software, email, passwords, accounts, tickets, technical "
+    "troubleshooting, and similar). If it IS in scope, respond helpfully and completely. "
+    "If it is NOT in scope (e.g. unrelated topics, non-IT questions), do not answer the "
+    "question itself — politely explain that you are the IT support assistant and can only "
+    "help with technical/IT support topics, then briefly suggest what you CAN help with."
+)
+
+_INTENT_INSTRUCTIONS = {
+    "ai_resolution": (
+        "You are an expert IT support technician with 15+ years of experience. "
+        "Provide a COMPREHENSIVE, step-by-step solution for the user's technical problem. "
+        "Structure your answer with clear numbered steps, exact menu paths or commands, "
+        "verification steps, and alternative approaches. If useful, reference the "
+        "similar_tickets/context data to show how similar resolved issues were handled."
+    ),
+    "technical_issue": (
+        "You are a friendly but expert IT support technician. Diagnose the user's technical "
+        "issue and give a clear, actionable step-by-step fix. If the context includes "
+        "similar resolved tickets, use them as the best-known resolution. Ask one focused "
+        "clarifying question only if the problem is genuinely ambiguous."
+    ),
+    "similar_tickets": (
+        "The user is looking for tickets similar to their issue. Use ONLY the similar_tickets "
+        "and my_tickets context provided below — never invent ticket numbers, resolutions, or "
+        "statuses. Summarize the most relevant tickets (with their actual ticket numbers), "
+        "explain how they relate to the user's issue, and share the resolution that was applied "
+        "so the user can try it. If the context contains no similar tickets, say so honestly "
+        "and offer next steps."
+    ),
+    "my_tickets": (
+        "Summarize the user's assigned tickets using ONLY the my_tickets context provided below "
+        "(ticket number, title, status, priority). NEVER invent ticket numbers, titles, statuses, "
+        "or priorities. If the context shows there are no tickets ('my_tickets' is empty or a "
+        "'note' says none were found), tell the user plainly that they have no assigned tickets "
+        "and offer to help create or search for one."
+    ),
+    "faq": (
+        "The user wants help topics / frequently asked questions. Produce a concise, friendly "
+        "FAQ-style overview of common IT issues and how the assistant can help, based on the "
+        "context. Keep it structured with a small number of categories."
+    ),
+    "greeting": (
+        "Acknowledge the greeting warmly and briefly, then offer what you can help with "
+        "(troubleshooting, tickets, FAQs). Keep it short."
+    ),
+    "thanks": (
+        "Respond briefly and warmly to the thanks and offer further help if needed. "
+        "Keep it short."
+    ),
+    "general": (
+        "You are a helpful, knowledgeable IT support assistant. Also apply the SCOPE RULE "
+        "above: if the question is general but IT-related, answer clearly and concisely; "
+        "if it is unrelated to IT support, politely decline and redirect to IT topics."
+    ),
+}
+
 # 5. POST /chatbot/chat – Sends a chat message to the chatbot for the resolution and general message
 @router.post("/chat", response_model=ChatResponse)
 async def chat_message(message: ChatMessage, request: Request = None):
-    """Sends a chat message to the chatbot for the resolution and general message."""
+    """Sends a chat message to the chatbot.
+
+    EVERY prompt is routed to the LLM (Snowflake Cortex). The LLM internally decides
+    whether the request is in scope for the IT support assistant and answers accordingly
+    (help if in-scope, politely redirect if out-of-scope). The rule-based engine is only
+    used as a last-resort fallback if the LLM is genuinely unavailable.
+    """
+    global last_llm_error, last_llm_error_at
     try:
         current_user = await get_current_technician_from_main_app(request) if request else "T001"
         user_message = message.message.strip()
+        session_id = message.session_id or f"anon_{datetime.now().timestamp():.0f}"
+        intent = _detect_intent(user_message)
 
-        # ALWAYS try to use LLM service first for ALL questions
+        # ---- ALWAYS try the LLM first, for every single prompt ----
         if llm_service:
             try:
-                # Try conversational response first for all questions
+                # Gather ticket / similar-ticket context (via Snowflake Cortex AI_SIMILARITY)
+                ticket_context = _gather_ticket_context(user_message, current_user)
+                history = _get_conversation_history(session_id)
+
+                instructions = (
+                    _SCOPE_INSTRUCTIONS + "\n\n"
+                    + _INTENT_INSTRUCTIONS.get(intent, _INTENT_INSTRUCTIONS["general"])
+                )
+
                 ai_response = llm_service.generate_conversational_response(
-                    context_type="general_technical_support",
+                    context_type=f"intent={intent}",
                     user_message=user_message,
-                    conversation_history=[]
+                    conversation_history=history,
+                    extra_context=ticket_context,
+                    system_instructions=instructions,
                 )
                 if ai_response and len(ai_response.strip()) > 10:  # Valid response
+                    _append_to_history(session_id, user_message, ai_response)
                     return ChatResponse(response=ai_response)
 
             except Exception as e:
-                logger.error(f"Error calling Cortex AI conversational: {e}")
+                logger.error(f"LLM failed for intent '{intent}': {e}")
+                last_llm_error = str(e)
+                last_llm_error_at = datetime.now().isoformat()
 
-            # If conversational fails, try interactive AI resolution
+            # Second chance: interactive AI resolution (more guided format)
             try:
                 ai_response = llm_service.generate_interactive_ai_resolution(
                     user_problem=user_message,
-                    conversation_history=[],
+                    conversation_history=_get_conversation_history(session_id),
                     similar_tickets=[],
                     metadata={"user": current_user}
                 )
-                if ai_response and len(ai_response.strip()) > 10:  # Valid response
+                if ai_response and len(ai_response.strip()) > 10:
+                    _append_to_history(session_id, user_message, ai_response)
                     return ChatResponse(response=ai_response)
-
             except Exception as e:
-                logger.error(f"Error calling Cortex AI interactive: {e}")
+                logger.error(f"Interactive AI resolution failed: {e}")
+                if not last_llm_error:
+                    last_llm_error = str(e)
+                    last_llm_error_at = datetime.now().isoformat()
 
-        # Enhanced fallback with intelligent responses for ANY question
+        # ---- Last-resort fallback: rule-based engine (LLM unavailable/error) ----
+        if not llm_service and not last_llm_error_at:
+            last_llm_error = "llm_service is None (LLM was never initialized)."
+            last_llm_error_at = datetime.now().isoformat()
+
         response_text = _generate_intelligent_response(user_message, current_user)
+        _append_to_history(session_id, user_message, response_text)
         return ChatResponse(response=response_text)
 
     except Exception as e:
         logger.error(f"Chat endpoint error: {e}")
         raise HTTPException(status_code=500, detail="Error processing chat message")
+
+
+@router.get("/debug")
+async def debug_status():
+    """Diagnostic endpoint showing whether the LLM is wired in and any last error."""
+    return {
+        "llm_service_initialized": llm_service is not None,
+        "cortex_available": bool(llm_service and llm_service.cortex_available),
+        "db_connected": bool(snowflake_conn and snowflake_conn.is_connected()) if snowflake_conn else False,
+        "conversation_sessions": len(conversation_store),
+        "last_llm_error": last_llm_error,
+        "last_llm_error_at": last_llm_error_at,
+        "server_time": datetime.now().isoformat(),
+    }
 
 def _is_technical_question(message: str) -> bool:
     """Determine if the message is asking for technical help."""
@@ -947,6 +1242,7 @@ async def read_root():
             "GET /chatbot/tickets/similar/{ticket_number}",
             "POST /chatbot/chat",
             "GET /chatbot/health",
+            "GET /chatbot/debug",
             "GET /chatbot/"
         ]
     }

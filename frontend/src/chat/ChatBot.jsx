@@ -14,6 +14,9 @@ const ChatBot = ({ onClose }) => {
   ]);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  // Tracks when the bot is waiting for follow-up input from a quick action
+  // (e.g. the topic for AI Resolution, or the ticket number for Similar Ticket)
+  const [pendingAction, setPendingAction] = useState(null);
   const messagesEndRef = useRef(null);
 
   // Scroll to bottom when new messages arrive
@@ -43,20 +46,24 @@ const ChatBot = ({ onClose }) => {
       
       switch (action) {
         case 'getMyTickets':
-          addMessage('📋 Get my recent tickets', 'user');
+          setPendingAction(null);
+          addMessage('📋 Get My Ticket', 'user');
           response = await handleGetMyTickets();
           break;
         case 'aiResolution':
           addMessage('🤖 AI Resolution', 'user');
-          response = await handleAIResolution();
+          response = "Sure! Please describe the issue or topic you'd like an AI-generated resolution for.";
+          setPendingAction('ai_resolution');
           break;
         case 'getSimilarTickets':
-          addMessage('🧾 Similar tickets', 'user');
-          response = await handleSimilarTickets();
+          addMessage('🧾 Similar Ticket', 'user');
+          response = 'Please enter the ticket number you\'d like to find similar tickets for.';
+          setPendingAction('similar_ticket');
           break;
         case 'getFAQ':
+          setPendingAction(null);
           addMessage('❓ Get FAQ', 'user');
-          response = await handleGetFAQ();
+          response = handleGetFAQ();
           break;
         default:
           response = 'Unknown action requested.';
@@ -71,97 +78,64 @@ const ChatBot = ({ onClose }) => {
     }
   };
 
-  // Get my tickets
+  // Get the most recent ticket assigned to / added for the current user
   const handleGetMyTickets = async () => {
     try {
       const tickets = await chatbotService.getMyTickets();
-      
+
       if (tickets && tickets.length > 0) {
-        const ticketList = tickets.map(ticket => 
-          `• **${ticket.ticket_id}**: ${ticket.title} (${ticket.status})`
-        ).join('\n');
-        
-        return `Here are your recent tickets:\n\n${ticketList}\n\n💡 Would you like details about any specific ticket? Just ask!`;
+        const ticket = tickets[0];
+
+        return `Here is your most recent ticket:\n\n• **${ticket.ticket_id}**: ${ticket.title}\n  Status: ${ticket.status}\n  Priority: ${ticket.priority}${ticket.description ? `\n\n${ticket.description}` : ''}`;
       } else {
         return `You don't have any assigned tickets at the moment.\n\n📝 **You can:**\n• Create a new ticket for an issue\n• Ask me about common problems\n• Browse our FAQ for solutions\n\n💬 **What technical issue are you experiencing?**`;
       }
     } catch (error) {
       console.error('Get my tickets error:', error);
-      return `I couldn't fetch your tickets right now.\n\n🔧 **Alternative options:**\n• Describe your issue and I'll help directly\n• Ask me about common solutions\n• Use the AI Resolution feature\n\n💬 **What problem can I help you solve?**`;
+      return `I couldn't fetch your ticket right now.\n\n🔧 **Alternative options:**\n• Describe your issue and I'll help directly\n• Ask me about common solutions\n• Use the AI Resolution feature\n\n💬 **What problem can I help you solve?**`;
     }
   };
 
-  // AI Resolution assistance
-  const handleAIResolution = async () => {
+  // AI Resolution assistance — called once the user has provided the topic/issue
+  const handleAIResolution = async (topic) => {
     try {
-      // Use the enhanced AI resolution endpoint
       const response = await chatbotService.sendChatMessage(
-        'AI resolution: I need help with technical troubleshooting',
+        `AI resolution: ${topic}`,
         { type: 'ai_resolution' }
       );
 
-      return response.response || response.message || `🤖 **AI Resolution Ready!**\n\nI'm here to help solve your technical issues.\n\n📝 **Please tell me:**\n• What problem are you experiencing?\n• Any error messages you see?\n• When did it start?\n• What have you tried so far?\n\nThe more details you provide, the better I can assist you!`;
+      return response.response || response.message || `I couldn't generate a resolution for "${topic}" right now. Please try rephrasing your issue.`;
     } catch (error) {
       console.error('AI Resolution error:', error);
-      return `🤖 **AI Troubleshooting Available**\n\nI can help with technical issues!\n\n🔧 **Hardware Issues:**\n• Computer won't start\n• Slow performance\n• Connectivity problems\n\n💻 **Software Issues:**\n• Application crashes\n• Login problems\n• File access issues\n\n🌐 **Network Issues:**\n• Internet connectivity\n• Email problems\n• VPN issues\n\n💬 **What technical issue can I help you resolve?**`;
+      return `Sorry, I couldn't generate an AI resolution for "${topic}" right now. Please try again in a moment.`;
     }
   };
 
-  // Find similar tickets
-  const handleSimilarTickets = async () => {
+  // Find tickets similar to the ticket number the user has provided
+  const handleSimilarTickets = async (ticketNumber) => {
+    const cleanTicketNumber = ticketNumber.trim();
     try {
-      // Use the enhanced similar tickets functionality
-      const response = await chatbotService.sendChatMessage(
-        'Similar tickets: Find tickets similar to my latest ticket',
-        { type: 'similar_tickets' }
-      );
+      const similarTickets = await chatbotService.getSimilarTickets(cleanTicketNumber);
 
-      if (response.response || response.message) {
-        return response.response || response.message;
+      if (similarTickets && similarTickets.length > 0) {
+        const similarList = similarTickets.map(ticket =>
+          `• **${ticket.ticket_id}**: ${ticket.title} (${ticket.status})`
+        ).join('\n');
+
+        return `Here are tickets similar to **${cleanTicketNumber}**:\n\n${similarList}\n\n💡 These might help you find solutions or see how similar issues were resolved!`;
       }
 
-      // Fallback to the old method if the enhanced one doesn't work
-      const myTickets = await chatbotService.getMyTickets();
-      
-      if (myTickets && myTickets.length > 0) {
-        const latestTicket = myTickets[0];
-        const ticketNumber = latestTicket.ticket_id;
-        
-        if (ticketNumber) {
-          const similarTickets = await chatbotService.getSimilarTickets(ticketNumber);
-          
-          if (similarTickets && similarTickets.length > 0) {
-            const similarList = similarTickets.map(ticket => 
-              `• **${ticket.ticket_id}**: ${ticket.title} (${ticket.status})`
-            ).join('\n');
-            
-            return `Here are tickets similar to your latest ticket (**${ticketNumber}**):\n\n${similarList}\n\n💡 These might help you find solutions or see how similar issues were resolved!`;
-          } else {
-            return `No similar tickets found for your latest ticket (**${ticketNumber}**).\n\n✨ **This could mean:**\n• Your issue is unique\n• It's a new type of problem\n• You're the first to report it\n\n💬 Feel free to describe your issue and I'll help you directly!`;
-          }
-        }
-      }
-      
-      return `To find similar tickets, I need you to have at least one ticket.\n\n📝 **You can:**\n• Create a new ticket for your issue\n• Ask me about common problems\n• Browse our FAQ for solutions\n\n💬 **What technical issue are you experiencing?**`;
+      return `No similar tickets found for **${cleanTicketNumber}**.\n\n✨ **This could mean:**\n• Your issue is unique\n• It's a new type of problem\n• You're the first to report it`;
     } catch (error) {
       console.error('Similar tickets error:', error);
-      return `I couldn't find similar tickets right now.\n\n🔧 **Alternative options:**\n• Describe your issue and I'll help directly\n• Check the main dashboard for ticket history\n• Ask me about common solutions\n\n💬 **What problem can I help you solve?**`;
+      return `I couldn't find ticket **${cleanTicketNumber}**. Please check the ticket number and try again.`;
     }
   };
 
-  // Get FAQ information
-  const handleGetFAQ = async () => {
-    try {
-      const response = await chatbotService.getFAQ();
-      if (response.response || response.message) {
-        return response.response || response.message;
-      }
-      
-      return `❓ **Frequently Asked Questions**\n\n🔧 **Technical Issues:**\n• How do I reset my password?\n• Why is my application running slowly?\n• How do I report a bug or error?\n• What should I do if I can't log in?\n\n📋 **Ticket Management:**\n• How do I create a new support ticket?\n• How can I check my ticket status?\n• How do I escalate an urgent issue?\n• Can I update my ticket information?\n\n💬 **Support Information:**\n• What are your support hours?\n• How do I contact a technician directly?\n• How long does ticket resolution take?\n• What information should I include in tickets?\n\n🤖 **AI Assistant:**\n• How does AI troubleshooting work?\n• Can you help with hardware issues?\n• Do you provide step-by-step solutions?\n\n💡 **Type any question for specific help, or describe your technical issue for personalized assistance!**`;
-    } catch (error) {
-      console.error('FAQ error:', error);
-      return `❓ **Help Topics Available**\n\nI can assist you with:\n\n• **Technical troubleshooting**\n• **Account and login issues**\n• **Software problems**\n• **Hardware diagnostics**\n• **Network connectivity**\n• **Performance optimization**\n\n💬 **What would you like help with today?**`;
-    }
+  // Get FAQ information — a fixed, deterministic message (not routed through the AI)
+  const handleGetFAQ = () => {
+    const technicianId = user?.technician_id || 'T001';
+    return `Hello ${technicianId}! I'm your IT support chatbot assistant! 🤖\n\nI can help you with a wide range of topics:\n\n**Technical Support:**\n• Troubleshooting computer issues\n• Network connectivity problems\n• Software installation and configuration\n• Hardware diagnostics\n\n**General IT Knowledge:**\n• Operating systems (Windows, Linux, macOS)\n• Security best practices\n• Email and communication tools\n• System administration\n\n**Ticket Management:**\n• Search our ticket database\n• Find similar resolved issues\n• Look up your assigned tickets\n\nWhat would you like to know or what issue can I help you resolve today?`;
   };
 
   // Handle regular chat messages
@@ -195,16 +169,25 @@ const ChatBot = ({ onClose }) => {
   // Handle sending messages
   const handleSendMessage = async (text) => {
     if (!text.trim()) return;
-    
+
     addMessage(text, 'user');
     setInputValue('');
     setIsLoading(true);
 
     try {
-      const response = await handleChatMessage(text);
+      let response;
+      if (pendingAction === 'ai_resolution') {
+        response = await handleAIResolution(text);
+      } else if (pendingAction === 'similar_ticket') {
+        response = await handleSimilarTickets(text);
+      } else {
+        response = await handleChatMessage(text);
+      }
+      setPendingAction(null);
       addMessage(response, 'bot');
     } catch (error) {
       console.error('Send message error:', error);
+      setPendingAction(null);
       addMessage('I apologize, but I encountered an error. Please try again or use the quick action buttons.', 'bot');
     } finally {
       setIsLoading(false);
@@ -247,7 +230,7 @@ const ChatBot = ({ onClose }) => {
             className="bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 text-xs font-medium px-3 py-2 rounded-lg text-left disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-1"
           >
             <span>📋</span>
-            <span>Get my recent tickets</span>
+            <span>Get My Ticket</span>
           </button>
           
           <button
@@ -265,7 +248,7 @@ const ChatBot = ({ onClose }) => {
             className="bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-700 text-xs font-medium px-3 py-2 rounded-lg text-left disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-1"
           >
             <span>🧾</span>
-            <span>Similar tickets</span>
+            <span>Similar Ticket</span>
           </button>
           
           <button
@@ -316,7 +299,13 @@ const ChatBot = ({ onClose }) => {
         <div className="flex items-center space-x-2">
           <input
             type="text"
-            placeholder="Type your message..."
+            placeholder={
+              pendingAction === 'ai_resolution'
+                ? 'Describe the issue or topic...'
+                : pendingAction === 'similar_ticket'
+                ? 'Enter the ticket number...'
+                : 'Type your message...'
+            }
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && !isLoading && handleInputSubmit()}

@@ -355,9 +355,14 @@ class IntakeClassificationAgent:
         """
         Finds similar tickets using Snowflake Cortex AI semantic similarity matching.
 
-        This method leverages Snowflake's native AI_SIMILARITY() function to find
-        semantically similar tickets based on the combined title and description text,
-        rather than using traditional keyword-based pattern matching.
+        This method leverages Snowflake Cortex semantic similarity (EMBED_TEXT_768
+        embeddings + VECTOR_COSINE_SIMILARITY) to find semantically similar tickets
+        based on the combined title and description text, rather than using
+        traditional keyword-based pattern matching.
+
+        NOTE: SNOWFLAKE.CORTEX.AI_SIMILARITY() is NOT available on this Snowflake
+        account (it raises "Unknown user-defined function"), so we use Cortex
+        embeddings + vector cosine similarity instead (verified working).
 
         Args:
             title (str): New ticket title
@@ -392,11 +397,14 @@ class IntakeClassificationAgent:
             SUBISSUETYPE,
             PRIORITY,
             STATUS,
-            AI_SIMILARITY(
-                COALESCE(TITLE, '') || ' ' || COALESCE(DESCRIPTION, ''),
-                '{escaped_ticket_text}'
+            VECTOR_COSINE_SIMILARITY(
+                SNOWFLAKE.CORTEX.EMBED_TEXT_768(
+                    'e5-base-v2',
+                    COALESCE(TITLE, '') || ' ' || COALESCE(DESCRIPTION, '')
+                ),
+                SNOWFLAKE.CORTEX.EMBED_TEXT_768('e5-base-v2', '{escaped_ticket_text}')
             ) AS SIMILARITY_SCORE
-        FROM TEST_DB.PUBLIC.COMPANY_4130_DATA
+        FROM TEST_DB.PUBLIC.TICKETS
         WHERE TITLE IS NOT NULL
         AND DESCRIPTION IS NOT NULL
         AND TRIM(TITLE) != ''
@@ -475,7 +483,7 @@ class IntakeClassificationAgent:
         )
         query = f"""
         SELECT TICKETNUMBER, TITLE, DESCRIPTION, ISSUETYPE, SUBISSUETYPE, PRIORITY, STATUS, RESOLUTION
-        FROM TEST_DB.PUBLIC.COMPANY_4130_DATA
+        FROM TEST_DB.PUBLIC.TICKETS
         WHERE TITLE IS NOT NULL AND DESCRIPTION IS NOT NULL
         AND ({conditions})
         LIMIT {min(top_n, 10)}
