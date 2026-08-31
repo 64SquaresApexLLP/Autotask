@@ -2,7 +2,7 @@
 """
 Snowflake Database Setup & Data Uploader for TeamLogic AutoTask System.
 Executes DDL to create tables and loads the generated dummy data into Snowflake.
-Supports 'externalbrowser' SSO authentication.
+Supports key-pair (RSA, no MFA), 'externalbrowser' SSO, and password authentication.
 """
 
 import os
@@ -14,7 +14,9 @@ from dotenv import load_dotenv
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from src.database.snowflake_db import SnowflakeConnection
-from config import SF_ACCOUNT, SF_USER, SF_WAREHOUSE, SF_DATABASE, SF_SCHEMA, SF_ROLE, SF_AUTHENTICATOR
+from config import (SF_ACCOUNT, SF_USER, SF_WAREHOUSE, SF_DATABASE, SF_SCHEMA, SF_ROLE,
+                    SF_AUTHENTICATOR, SF_PASSWORD, SF_PASSCODE,
+                    SF_PRIVATE_KEY_PATH, SF_PRIVATE_KEY_PWD)
 
 def run_setup(sql_file="data/dummy_data.sql"):
     """Execute SQL script against Snowflake database."""
@@ -38,7 +40,11 @@ def run_setup(sql_file="data/dummy_data.sql"):
         sf_database=SF_DATABASE,
         sf_schema=SF_SCHEMA,
         sf_role=SF_ROLE,
-        sf_authenticator=SF_AUTHENTICATOR
+        sf_authenticator=SF_AUTHENTICATOR,
+        sf_password=SF_PASSWORD,
+        sf_passcode=SF_PASSCODE,
+        sf_private_key_file=SF_PRIVATE_KEY_PATH,
+        sf_private_key_pwd=SF_PRIVATE_KEY_PWD
     )
 
     if not conn.is_connected():

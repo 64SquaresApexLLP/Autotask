@@ -1,6 +1,7 @@
 """LLM service using Snowflake Cortex Complete for AI-powered resolutions."""
 
 import logging
+import os
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 import snowflake.connector
@@ -31,22 +32,47 @@ class LLMService:
             if not self._should_try_cortex():
                 logger.warning("Cortex configuration incomplete - skipping initialization")
                 return
-            
+
             logger.info("Initializing Snowflake Cortex connection...")
-            
+
             connection_params = {
                 'account': settings.snowflake_account,
                 'user': settings.snowflake_user,
                 'database': settings.snowflake_database,
                 'schema': settings.snowflake_schema,
                 'warehouse': settings.snowflake_warehouse,
-                'authenticator': settings.snowflake_authenticator or 'snowflake'
             }
-            
-            # Add password if available
-            if settings.snowflake_password:
-                connection_params['password'] = settings.snowflake_password
-            
+
+            # Resolve authenticator and RSA private key (key-pair auth = no password / no MFA)
+            auth = (settings.snowflake_authenticator or 'keypair').strip().lower()
+            if auth in ('keypair', 'key_pair', 'snowflake_jwt', 'jwt', 'rsa'):
+                auth = 'keypair'
+
+            private_key_file = (
+                getattr(settings, 'snowflake_private_key_path', '') or ''
+            ).strip()
+            if private_key_file:
+                private_key_file = os.path.expanduser(private_key_file)
+
+            use_keypair = (auth == 'keypair') or (
+                private_key_file and os.path.exists(private_key_file) and not settings.snowflake_password
+            )
+
+            if use_keypair:
+                # Key-pair (RSA/JWT) auth via private_key_file — no MFA/TOTP prompts.
+                connection_params['authenticator'] = 'snowflake'
+                connection_params['private_key_file'] = private_key_file
+                if getattr(settings, 'snowflake_private_key_pwd', ''):
+                    connection_params['private_key_file_pwd'] = settings.snowflake_private_key_pwd
+                logger.info("Using key-pair (RSA) authentication for Snowflake Cortex connection")
+            elif auth == 'externalbrowser':
+                connection_params['authenticator'] = 'externalbrowser'
+            else:
+                # Password-based auth (MFA passcode may be required here)
+                connection_params['authenticator'] = 'snowflake'
+                if settings.snowflake_password:
+                    connection_params['password'] = settings.snowflake_password
+
             # Create connection with timeout
             self.snowflake_connection = snowflake.connector.connect(
                 **connection_params,

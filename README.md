@@ -67,13 +67,12 @@ teamlogic-autotask/
 3. **Configure environment variables**
    Create a `.env` file with:
    ```env
-   # Snowflake Configuration for SSO Authentication
+   # Snowflake Configuration for Key-Pair (RSA) Authentication — no password / no MFA/TOTP
    SF_ACCOUNT=your_account
    SF_USER=your_username
-   SF_WAREHOUSE=your_warehouse
-   SF_DATABASE=your_database
-   SF_SCHEMA=your_schema
-   SF_ROLE=your_role
+   SF_AUTHENTICATOR=keypair
+   SF_PRIVATE_KEY_PATH=/absolute/path/to/rsa_key.p8
+   SF_PRIVATE_KEY_PWD=
 
    # Email Configuration
    EMAIL_ACCOUNT=your_email_account
@@ -85,6 +84,30 @@ teamlogic-autotask/
    SUPPORT_PHONE=your_phone
    SUPPORT_EMAIL=your_email
    ```
+
+### 🔑 Snowflake Key-Pair (RSA) Authentication (recommended)
+The app authenticates to Snowflake with an RSA key pair instead of a password/TOTP, so the
+service account never triggers an MFA prompt. One-time setup (as the account owner):
+
+```bash
+# 1. Generate the key pair (or run the bundled helper)
+openssl genrsa 2048 2>/dev/null | openssl pkcs8 -topk8 -inform PEM -out rsa_key.p8 -nocrypt
+openssl rsa -in rsa_key.p8 -pubout -out rsa_key.pub
+
+# 2. Register the public key on the Snowflake user (AccountAdmin)
+#    ALTER USER ATISHC SET RSA_PUBLIC_KEY='<contents of rsa_key.pub, base64 body only>';
+
+# 3. Or let the helper generate + print + optionally register + verify everything:
+python scripts/setup_keypair_auth.py            # generate keys + print ALTER USER
+python scripts/setup_keypair_auth.py --register # also run the ALTER USER (needs password in .env, one-time)
+python scripts/setup_keypair_auth.py --test     # verify key-pair connection only
+```
+
+Connect points already wired for key-pair auth: `src/database/snowflake_db.py`
+(`SnowflakeConnection`, used by the backend/site uploader), the chatbot Cortex
+`llm_service`, and the chatbot SQLAlchemy engine. Set `SF_AUTHENTICATOR=keypair`
+(and the `SNOWFLAKE_*` aliases in `.env`) and ensure `SF_PASSWORD`/`SF_PASSCODE`
+are blank — then no password and no TOTP is ever used for this account.
 
 
 

@@ -444,7 +444,9 @@ try:
         sf_role=config.SF_ROLE,
         sf_password=config.SF_PASSWORD,
         sf_authenticator=config.SF_AUTHENTICATOR,
-        sf_passcode=getattr(config, 'SF_PASSCODE', None)
+        sf_passcode=getattr(config, 'SF_PASSCODE', None),
+        sf_private_key_file=getattr(config, 'SF_PRIVATE_KEY_PATH', None),
+        sf_private_key_pwd=getattr(config, 'SF_PRIVATE_KEY_PWD', None)
     )
 except Exception as e:
     print(f"Warning: Snowflake connection failed: {e}")
