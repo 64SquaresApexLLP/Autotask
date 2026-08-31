@@ -271,6 +271,7 @@
 """Database connection and models for Snowflake integration."""
 
 import logging
+import os
 from typing import Optional
 from sqlalchemy import create_engine, Column, String, Integer, DateTime, Text, Boolean, Float
 from sqlalchemy.ext.declarative import declarative_base
@@ -498,8 +499,25 @@ def create_snowflake_engine():
         }
 
         # Add authentication method
-        if settings.snowflake_authenticator == "externalbrowser":
+        auth = (settings.snowflake_authenticator or 'keypair').strip().lower()
+        if auth in ('keypair', 'key_pair', 'snowflake_jwt', 'jwt', 'rsa'):
+            auth = 'keypair'
+
+        private_key_file = (getattr(settings, 'snowflake_private_key_path', '') or '').strip()
+        if private_key_file:
+            private_key_file = os.path.expanduser(private_key_file)
+
+        use_keypair = (auth == 'keypair') or (
+            private_key_file and os.path.exists(private_key_file) and not settings.snowflake_password
+        )
+
+        if auth == "externalbrowser":
             connect_args['authenticator'] = 'externalbrowser'
+        elif use_keypair:
+            # Key-pair (RSA/JWT) auth via private_key_file — no password / no MFA prompts.
+            connect_args['private_key_file'] = private_key_file
+            if getattr(settings, 'snowflake_private_key_pwd', ''):
+                connect_args['private_key_file_pwd'] = settings.snowflake_private_key_pwd
         elif settings.snowflake_password:
             connect_args['password'] = settings.snowflake_password
 

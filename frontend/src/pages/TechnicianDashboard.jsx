@@ -10,8 +10,8 @@ import { ApiError } from '../services/api.js';
 
 const ProgressBar = ({ percentage, color = "bg-blue-500" }) => (
   <div className="w-full bg-gray-200 rounded-full h-3">
-    <div 
-      className={`${color} h-3 rounded-full transition-all duration-300`} 
+    <div
+      className={`${color} h-3 rounded-full transition-all duration-300`}
       style={{ width: `${percentage}%` }}
     ></div>
   </div>
@@ -104,7 +104,7 @@ const TechnicianDashboard = () => {
         <Header />
         <main className="p-6 md:p-8 flex-1 overflow-y-auto ">
           <div className="max-w-7xl mx-auto space-y-6">
-            
+
             {error && (
               <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg">
                 {error}
@@ -212,7 +212,7 @@ const TechnicianDashboard = () => {
                   <h2 className="text-xl font-semibold text-gray-800">Performance Metrics</h2>
                 </div>
                 <p className="text-gray-600 mb-6">Your current performance indicators</p>
-                
+
                 <div className="space-y-6">
                   <div>
                     <div className="flex justify-between items-center mb-2">
@@ -273,7 +273,7 @@ const TechnicianDashboard = () => {
                         { bg: 'bg-indigo-50', dot: 'bg-indigo-500', tag: 'bg-blue-100 text-blue-800' }
                       ];
                       const colorScheme = colors[index % colors.length];
-                      
+
                       return (
                         <div key={tech.id} className={`flex items-center justify-between p-3 ${colorScheme.bg} rounded-lg`}>
                           <div className="flex items-center space-x-3">
@@ -291,7 +291,7 @@ const TechnicianDashboard = () => {
                         </div>
                       );
                     })}
-                  
+
                   {dashboardData.technicians.filter(tech => tech.current_workload > 0).length === 0 && (
                     <div className="text-center py-4 text-gray-500">
                       No technicians with assigned tickets
@@ -324,18 +324,18 @@ const TechnicianDashboard = () => {
                 <div className="space-y-4">
                   {dashboardData.myTickets.slice(0, 3).map((ticket) => {
                     const priorityColor = ticket.priority?.toLowerCase() === 'critical' ? 'red' :
-                                        ticket.priority?.toLowerCase() === 'high' ? 'orange' :
-                                        ticket.priority?.toLowerCase() === 'medium' ? 'yellow' : 'green';
+                      ticket.priority?.toLowerCase() === 'high' ? 'orange' :
+                        ticket.priority?.toLowerCase() === 'medium' ? 'yellow' : 'green';
 
                     const borderClass = priorityColor === 'red' ? 'border-red-200 bg-red-50' :
-                                       priorityColor === 'orange' ? 'border-orange-200 bg-orange-50' :
-                                       priorityColor === 'yellow' ? 'border-yellow-200 bg-yellow-50' : 'border-green-200 bg-green-50';
+                      priorityColor === 'orange' ? 'border-orange-200 bg-orange-50' :
+                        priorityColor === 'yellow' ? 'border-yellow-200 bg-yellow-50' : 'border-green-200 bg-green-50';
                     const dotClass = priorityColor === 'red' ? 'bg-red-500' :
-                                   priorityColor === 'orange' ? 'bg-orange-500' :
-                                   priorityColor === 'yellow' ? 'bg-yellow-500' : 'bg-green-500';
+                      priorityColor === 'orange' ? 'bg-orange-500' :
+                        priorityColor === 'yellow' ? 'bg-yellow-500' : 'bg-green-500';
                     const textClass = priorityColor === 'red' ? 'text-red-600' :
-                                     priorityColor === 'orange' ? 'text-orange-600' :
-                                     priorityColor === 'yellow' ? 'text-yellow-600' : 'text-green-600';
+                      priorityColor === 'orange' ? 'text-orange-600' :
+                        priorityColor === 'yellow' ? 'text-yellow-600' : 'text-green-600';
 
                     return (
                       <div key={ticket.id} className={`flex flex-col sm:flex-row sm:items-center sm:justify-between p-4 border rounded-lg ${borderClass}`}>
@@ -397,23 +397,23 @@ const TechnicianDashboard = () => {
                     .filter(ticket => ticket.status === 'In Progress' || ticket.status === 'Assigned')
                     .slice(0, 3)
                     .map((ticket, index) => (
-                    <div key={ticket.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-4 border border-orange-200 bg-orange-50 rounded-lg">
-                      <div>
-                        <div className="font-semibold text-gray-800 mb-1">{ticket.title}</div>
-                        <div className="text-sm text-gray-600 mb-2">{ticket.id} • {ticket.requester_name}</div>
-                        <div className="flex items-center space-x-1 text-sm text-orange-600">
-                          <AlertTriangle className="w-4 h-4" />
-                          <span>Status: {ticket.status}</span>
+                      <div key={ticket.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-4 border border-orange-200 bg-orange-50 rounded-lg">
+                        <div>
+                          <div className="font-semibold text-gray-800 mb-1">{ticket.title}</div>
+                          <div className="text-sm text-gray-600 mb-2">{ticket.id} • {ticket.requester_name}</div>
+                          <div className="flex items-center space-x-1 text-sm text-orange-600">
+                            <AlertTriangle className="w-4 h-4" />
+                            <span>Status: {ticket.status}</span>
+                          </div>
                         </div>
+                        <button
+                          onClick={() => setSelectedTicket(ticket)}
+                          className="mt-3 sm:mt-0 bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg font-medium text-sm"
+                        >
+                          Take Action
+                        </button>
                       </div>
-                      <button
-                        onClick={() => setSelectedTicket(ticket)}
-                        className="mt-3 sm:mt-0 bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg font-medium text-sm"
-                      >
-                        Take Action
-                      </button>
-                    </div>
-                  ))}
+                    ))}
 
                   {/* Show message if no pending actions */}
                   {dashboardData.myTickets.filter(ticket => ticket.status === 'In Progress' || ticket.status === 'Assigned').length === 0 && (
@@ -505,23 +505,21 @@ const TechnicianDashboard = () => {
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                        selectedTicket.status === 'resolved' ? 'bg-green-100 text-green-800' :
-                        selectedTicket.status === 'Assigned' ? 'bg-blue-100 text-blue-800' :
-                        selectedTicket.status === 'In Progress' ? 'bg-yellow-100 text-yellow-800' :
-                        'bg-gray-100 text-gray-800'
-                      }`}>
+                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${selectedTicket.status === 'resolved' ? 'bg-green-100 text-green-800' :
+                          selectedTicket.status === 'Assigned' ? 'bg-blue-100 text-blue-800' :
+                            selectedTicket.status === 'In Progress' ? 'bg-yellow-100 text-yellow-800' :
+                              'bg-gray-100 text-gray-800'
+                        }`}>
                         {selectedTicket.status || 'Unknown'}
                       </span>
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Priority</label>
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                        selectedTicket.priority === 'Critical' ? 'bg-red-100 text-red-800' :
-                        selectedTicket.priority === 'High' ? 'bg-orange-100 text-orange-800' :
-                        selectedTicket.priority === 'Medium' ? 'bg-yellow-100 text-yellow-800' :
-                        'bg-green-100 text-green-800'
-                      }`}>
+                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${selectedTicket.priority === 'Critical' ? 'bg-red-100 text-red-800' :
+                          selectedTicket.priority === 'High' ? 'bg-orange-100 text-orange-800' :
+                            selectedTicket.priority === 'Medium' ? 'bg-yellow-100 text-yellow-800' :
+                              'bg-green-100 text-green-800'
+                        }`}>
                         {selectedTicket.priority || 'Medium'}
                       </span>
                     </div>
