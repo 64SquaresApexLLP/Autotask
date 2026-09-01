@@ -5,7 +5,22 @@ import Sidebar from '../../components/Sidebar';
 import Header from '../../components/Header';
 import ChatButton from '../../components/ChatButton';
 import { ticketService } from '../../services/ticketService';
-import { Loader2, Sparkles, Tag, Layers, Link2, CheckCircle2, Pencil, PlayCircle, CheckCircle, XCircle } from 'lucide-react';
+import useAuth from '../../hooks/useAuth';
+import { 
+  Loader2, 
+  Sparkles, 
+  Tag, 
+  Layers, 
+  Link2, 
+  CheckCircle2, 
+  Pencil, 
+  PlayCircle, 
+  CheckCircle, 
+  XCircle, 
+  Lock, 
+  ShieldAlert,
+  Clock
+} from 'lucide-react';
 
 const statusColors = {
   open: 'bg-yellow-100 text-yellow-800',
@@ -27,6 +42,7 @@ function ViewTicket() {
   const { ticketId } = useParams();
   const tId = ticketId.replace('-', '.');
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   const [ticket, setTicket] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -52,6 +68,21 @@ function ViewTicket() {
 
   const [quickAction, setQuickAction] = useState(null); // which lifecycle action is in flight
   const [quickActionMessage, setQuickActionMessage] = useState(null);
+
+  const currentUserId = (user?.username || '').trim().toLowerCase();
+  const currentUserEmail = (user?.email || '').trim().toLowerCase();
+  const currentFullName = (user?.full_name || user?.name || '').trim().toLowerCase();
+
+  const assignedTech = (ticket?.assigned_technician || '').trim().toLowerCase();
+  const techId = (ticket?.technician_id || '').trim().toLowerCase();
+  const techEmail = (ticket?.technician_email || '').trim().toLowerCase();
+
+  const isAssignedToMe = Boolean(
+    !user || user.role === 'admin' ||
+    (currentUserId && (assignedTech === currentUserId || techId === currentUserId)) ||
+    (currentUserEmail && (techEmail === currentUserEmail || assignedTech === currentUserEmail)) ||
+    (currentFullName && (assignedTech === currentFullName || assignedTech.includes(currentFullName)))
+  );
 
   const fetchTicket = async () => {
     try {
@@ -97,8 +128,8 @@ function ViewTicket() {
   }, [ticket?.id, ticket?.issue_type, ticket?.ticket_category]);
 
   const handleUpdateTicket = async () => {
-    if (!newStatus && !newWorkNote) {
-      setSaveMessage({ type: 'error', text: 'Select a new status or add a work note before saving.' });
+    if (!newStatus && !newWorkNote && !timeSpent) {
+      setSaveMessage({ type: 'error', text: 'Select a new status, enter time spent, or add a work note before saving.' });
       return;
     }
 
@@ -106,15 +137,13 @@ function ViewTicket() {
     setSaving(true);
     setSaveMessage(null);
     try {
-      if (newStatus) {
-        await ticketService.updateTicketStatus(targetId, newStatus);
-      }
-      if (newWorkNote) {
-        const note = timeSpent ? `(${timeSpent}) ${newWorkNote}` : newWorkNote;
-        await ticketService.addWorkNote(targetId, note);
-      }
+      await ticketService.updateTicket(targetId, {
+        status: newStatus || undefined,
+        work_note: newWorkNote || undefined,
+        time_spent: timeSpent || undefined
+      });
 
-      setSaveMessage({ type: 'success', text: 'Ticket updated successfully.' });
+      setSaveMessage({ type: 'success', text: 'Ticket updated and time spent saved successfully in Snowflake.' });
       setNewStatus('');
       setTimeSpent('');
       setNewWorkNote('');
@@ -259,29 +288,38 @@ function ViewTicket() {
                 </div>
               </div>
 
+              {!isAssignedToMe && (
+                <div className="bg-amber-50 border border-amber-200 text-amber-900 px-4 py-3 rounded-lg flex items-center gap-3 text-sm font-medium">
+                  <Lock className="w-5 h-5 text-amber-600 flex-shrink-0" />
+                  <div>
+                    <strong className="font-semibold text-amber-950">Read-Only Access:</strong> You are not the assigned technician for this ticket ({ticket.assigned_technician || 'Unassigned'}). Modifying status, notes, and resolving is disabled.
+                  </div>
+                </div>
+              )}
+
               {/* Lifecycle Quick Actions */}
               <div className="flex flex-wrap items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg p-3">
                 <span className="text-xs font-medium text-gray-500 mr-1">Lifecycle:</span>
                 <button
                   onClick={() => handleQuickStatus('In Progress')}
-                  disabled={quickAction !== null}
-                  className="flex items-center gap-1 text-sm px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 disabled:opacity-50"
+                  disabled={!isAssignedToMe || quickAction !== null}
+                  className="flex items-center gap-1 text-sm px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   {quickAction === 'In Progress' ? <Loader2 className="w-4 h-4 animate-spin" /> : <PlayCircle className="w-4 h-4" />}
                   Mark In Progress
                 </button>
                 <button
                   onClick={() => handleQuickStatus('Resolved')}
-                  disabled={quickAction !== null}
-                  className="flex items-center gap-1 text-sm px-3 py-1.5 rounded-lg bg-green-50 text-green-700 hover:bg-green-100 disabled:opacity-50"
+                  disabled={!isAssignedToMe || quickAction !== null}
+                  className="flex items-center gap-1 text-sm px-3 py-1.5 rounded-lg bg-green-50 text-green-700 hover:bg-green-100 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   {quickAction === 'Resolved' ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
                   Resolve
                 </button>
                 <button
                   onClick={() => handleQuickStatus('Closed')}
-                  disabled={quickAction !== null}
-                  className="flex items-center gap-1 text-sm px-3 py-1.5 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 disabled:opacity-50"
+                  disabled={!isAssignedToMe || quickAction !== null}
+                  className="flex items-center gap-1 text-sm px-3 py-1.5 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   {quickAction === 'Closed' ? <Loader2 className="w-4 h-4 animate-spin" /> : <XCircle className="w-4 h-4" />}
                   Close
@@ -479,7 +517,8 @@ function ViewTicket() {
                     <select
                       value={newStatus}
                       onChange={(e) => setNewStatus(e.target.value)}
-                      className="w-full border border-gray-300 rounded-lg p-2"
+                      disabled={!isAssignedToMe}
+                      className="w-full border border-gray-300 rounded-lg p-2 disabled:bg-gray-100 disabled:cursor-not-allowed"
                     >
                       <option value="">Select new status</option>
                       <option value="Open">Open</option>
@@ -496,7 +535,8 @@ function ViewTicket() {
                       placeholder="e.g. 30 mins"
                       value={timeSpent}
                       onChange={(e) => setTimeSpent(e.target.value)}
-                      className="w-full border border-gray-300 rounded-lg p-2"
+                      disabled={!isAssignedToMe}
+                      className="w-full border border-gray-300 rounded-lg p-2 disabled:bg-gray-100 disabled:cursor-not-allowed"
                     />
                   </div>
 
@@ -506,7 +546,9 @@ function ViewTicket() {
                       rows={4}
                       value={newWorkNote}
                       onChange={(e) => setNewWorkNote(e.target.value)}
-                      className="w-full border border-gray-300 rounded-lg p-2"
+                      disabled={!isAssignedToMe}
+                      placeholder={!isAssignedToMe ? "Only assigned technician can add work notes." : "Add internal or customer update notes..."}
+                      className="w-full border border-gray-300 rounded-lg p-2 disabled:bg-gray-100 disabled:cursor-not-allowed"
                     />
                   </div>
 
@@ -524,16 +566,16 @@ function ViewTicket() {
                   <div className="flex gap-2">
                     <button
                       onClick={handleUpdateTicket}
-                      disabled={saving}
-                      className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-lg disabled:opacity-50 flex items-center justify-center gap-2"
+                      disabled={!isAssignedToMe || saving}
+                      className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                     >
                       {saving && <Loader2 className="w-4 h-4 animate-spin" />}
                       Save Update
                     </button>
                     <button
                       onClick={handleSendEmail}
-                      disabled={emailing}
-                      className="flex-1 border border-gray-300 py-2 px-4 rounded-lg disabled:opacity-50 flex items-center justify-center gap-2"
+                      disabled={!isAssignedToMe || emailing}
+                      className="flex-1 border border-gray-300 py-2 px-4 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                     >
                       {emailing && <Loader2 className="w-4 h-4 animate-spin" />}
                       Email Customer

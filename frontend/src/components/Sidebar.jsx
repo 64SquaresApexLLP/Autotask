@@ -1,5 +1,5 @@
 import React from 'react';
-import { Settings, Wrench, FileText, Users, BarChart3, CheckSquare, AlertCircle, List } from 'lucide-react';
+import { Settings, Wrench, FileText, Users, BarChart3, CheckSquare, AlertCircle, List, Timer } from 'lucide-react';
 import useAuth from '../hooks/useAuth';
 import { NavLink } from 'react-router-dom';
 
@@ -9,6 +9,7 @@ const Sidebar = () => {
   const userMenuItems = [
     { icon: FileText, label: 'Submit Request', active: true, path: '/user' },
     { icon: BarChart3, label: 'Track Status', active: false, path: '/user/track-status' },
+    { icon: Timer, label: 'MTTR Report', active: false, path: '/user/mttr-report' },
     { icon: Settings, label: 'My Profile', active: false, path: '/user/profile' }
   ];
 
@@ -16,7 +17,8 @@ const Sidebar = () => {
     { icon: Wrench, label: 'Dashboard', path: '/technician/dashboard' },
     { icon: List, label: 'My Tickets', path: '/technician/my-tickets' },
     { icon: AlertCircle, label: 'Urgent Tickets', path: '/technician/urgent-tickets' },
-    { icon: BarChart3, label: 'Analytics', path: '/technician/analytics' },
+    { icon: Timer, label: 'MTTR & SLA Report', path: '/technician/mttr-report' },
+    { icon: BarChart3, label: 'Workload Analytics', path: '/technician/analytics' },
     { icon: CheckSquare, label: 'All Tickets', path: '/technician/all-tickets' }
   ];
 

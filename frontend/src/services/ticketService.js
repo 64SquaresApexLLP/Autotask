@@ -25,24 +25,48 @@ const transformTicketData = (ticket) => {
 
   // Use real technician ID from Snowflake
   const technicianId = ticket.TECHNICIAN_ID || ticket.technician_id;
-  const assignedTechnician = technicianId || ticket.assigned_technician || null;
+  const assignedTechnician = technicianId || ticket.ASSIGNED_TECHNICIAN || ticket.assigned_technician || null;
   const technicianDisplayName = assignedTechnician ? (TECHNICIAN_DISPLAY_MAP[assignedTechnician] || assignedTechnician) : null;
+
+    // Parse creation timestamp from Snowflake or ticket number
+  let createdAt = ticket.CREATED_AT || ticket.created_at || ticket.DATE || ticket.date;
+  if (!createdAt) {
+    const tNum = String(ticket.TICKETNUMBER || ticket.ticket_number || ticket.id || '');
+    if (tNum.startsWith('T20') && tNum.length >= 15) {
+      const yr = tNum.substring(1, 5);
+      const mo = tNum.substring(5, 7);
+      const dy = tNum.substring(7, 9);
+      const hr = tNum.substring(9, 11);
+      const mn = tNum.substring(11, 13);
+      createdAt = `${yr}-${mo}-${dy}T${hr}:${mn}:00Z`;
+    }
+  }
+
+  // Extract time spent
+  let timeSpent = ticket.TIME_SPENT || ticket.time_spent || null;
+  const resolutionText = ticket.RESOLUTION || ticket.resolution || '';
+  if (!timeSpent && resolutionText) {
+    const match = String(resolutionText).match(/(?:\(|Time Spent:\s*|Logged Time Spent:\s*)(\d+(?:\.\d+)?\s*(?:mins?|minutes?|hrs?|hours?))\)?/i);
+    if (match) timeSpent = match[1];
+  }
 
   return {
     id: ticket.TICKETNUMBER || ticket.ticket_number || ticket.id,
-    title: ticket.TITLE || ticket.title,
-    description: ticket.DESCRIPTION || ticket.description,
-    status: ticket.STATUS || ticket.status,
-    priority: ticket.PRIORITY || ticket.priority,
+    title: ticket.TITLE || ticket.title || 'Untitled Ticket',
+    description: ticket.DESCRIPTION || ticket.description || '',
+    status: ticket.STATUS || ticket.status || 'Open',
+    priority: ticket.PRIORITY || ticket.priority || 'Medium',
     ticket_type: ticket.TICKETTYPE || ticket.ticket_type,
-    ticket_category: ticket.TICKETCATEGORY || ticket.ticket_category,
+    ticket_category: ticket.TICKETCATEGORY || ticket.ticket_category || ticket.ISSUETYPE || ticket.issue_type,
+    category: ticket.TICKETCATEGORY || ticket.ticket_category || ticket.ISSUETYPE || ticket.issue_type || ticket.TICKETTYPE || 'General',
     issue_type: ticket.ISSUETYPE || ticket.issue_type,
     sub_issue_type: ticket.SUBISSUETYPE || ticket.sub_issue_type,
     due_date: ticket.DUEDATETIME || ticket.due_date,
-    resolution: ticket.RESOLUTION || ticket.resolution,
+    resolution: resolutionText,
+    time_spent: timeSpent,
     user_id: ticket.USERID || ticket.user_id,
     user_email: ticket.USEREMAIL || ticket.user_email,
-    requester_name: ticket.USERID || ticket.requester_name,
+    requester_name: ticket.USERID || ticket.requester_name || ticket.USEREMAIL || ticket.user_email || 'User',
     phone_number: ticket.PHONENUMBER || ticket.phone_number,
     technician_id: technicianId,
     technician_email: ticket.TECHNICIANEMAIL || ticket.technician_email,
@@ -51,8 +75,9 @@ const transformTicketData = (ticket) => {
     // AI pipeline output - only present on the ticket-creation response
     extracted_metadata: ticket.extracted_metadata || null,
     similar_tickets: ticket.similar_tickets || null,
-    created_at: ticket.created_at || new Date().toISOString(),
-    updated_at: ticket.updated_at || new Date().toISOString()
+    created_at: createdAt || new Date().toISOString(),
+    resolved_at: ticket.RESOLVED_AT || ticket.resolved_at || ticket.COMPLETED_AT || ticket.completed_at || null,
+    updated_at: ticket.UPDATED_AT || ticket.updated_at || new Date().toISOString()
   };
 };
 
@@ -203,13 +228,40 @@ export const ticketService = {
   },
 
   /**
-   * Update ticket status
+   * Update ticket fields (status, priority, work note, time spent)
    */
-  async updateTicketStatus(ticketId, status) {
+  async updateTicket(ticketId, updateData = {}) {
     try {
-      return await apiService.patch(API_ENDPOINTS.TICKETS.UPDATE_STATUS(ticketId), {
-        status: status
-      });
+      const cleanId = String(ticketId).replace('.', '-');
+      return await apiService.patch(`/tickets/${cleanId}`, updateData);
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  /**
+   * Update ticket status (with optional time spent)
+   */
+  async updateTicketStatus(ticketId, status, timeSpent = null) {
+    try {
+      const cleanId = String(ticketId).replace('.', '-');
+      const payload = { status };
+      if (timeSpent) payload.time_spent = timeSpent;
+      return await apiService.patch(`/tickets/${cleanId}`, payload);
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  /**
+   * Add work note (with optional time spent)
+   */
+  async addWorkNote(ticketId, workNote, timeSpent = null) {
+    try {
+      const cleanId = String(ticketId).replace('.', '-');
+      const payload = { work_note: workNote };
+      if (timeSpent) payload.time_spent = timeSpent;
+      return await apiService.patch(`/tickets/${cleanId}`, payload);
     } catch (error) {
       throw error;
     }

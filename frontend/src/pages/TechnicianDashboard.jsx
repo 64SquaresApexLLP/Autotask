@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Header from '../components/Header';
 import Sidebar from '../components/Sidebar';
 import ChatButton from '../components/ChatButton';
-import { Wrench, Bell, Clock, AlertTriangle, Settings, Users, FileText, Calendar, TrendingUp, Loader2, CheckCircle } from 'lucide-react';
+import { Wrench, Bell, Clock, AlertTriangle, Settings, Users, FileText, Calendar, TrendingUp, Loader2, CheckCircle, ArrowRight } from 'lucide-react';
 import useAuth from '../hooks/useAuth';
 import { ticketService } from '../services/ticketService.js';
 import { technicianService } from '../services/technicianService.js';
 import { ApiError } from '../services/api.js';
-import MttrCard, { calculateTicketSla } from '../components/MttrCard';
+import { calculateTicketSla } from '../components/MttrCard';
 
 const ProgressBar = ({ percentage, color = "bg-blue-500" }) => (
   <div className="w-full bg-gray-200 rounded-full h-3">
@@ -20,12 +21,12 @@ const ProgressBar = ({ percentage, color = "bg-blue-500" }) => (
 
 const TechnicianDashboard = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [dashboardData, setDashboardData] = useState({
     myTickets: [],
     allTickets: [],
     statistics: null,
-    technicians: [],
-    mttrAnalytics: null
+    technicians: []
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -44,14 +45,11 @@ const TechnicianDashboard = () => {
       const currentUserId = (user?.username || '').trim().toLowerCase();
       const currentUserEmail = (user?.email || '').trim().toLowerCase();
 
-      // Load all tickets, statistics, technicians, and MTTR analytics
-      const [allTickets, statistics, technicians, mttrAnalytics] = await Promise.all([
+      // Load all tickets, statistics, and technicians
+      const [allTickets, statistics, technicians] = await Promise.all([
         ticketService.getAllTickets(),
         ticketService.getTicketStatistics().catch(() => null),
-        technicianService.getAllTechnicians().catch(() => []),
-        ticketService.getMttrAnalytics({
-          technician_id: currentUserId || currentUserEmail
-        }).catch(() => null)
+        technicianService.getAllTechnicians().catch(() => [])
       ]);
 
       // Filter tickets assigned to current technician using real IDs
@@ -73,8 +71,7 @@ const TechnicianDashboard = () => {
         myTickets,
         allTickets,
         statistics,
-        technicians,
-        mttrAnalytics
+        technicians
       });
     } catch (error) {
       console.error('Failed to load dashboard data:', error);
@@ -100,8 +97,27 @@ const TechnicianDashboard = () => {
 
   const stats = getStatistics();
 
-  const handleClick=()=>{
-    window.location.href="https://console.neo4j.io/projects/94f8ebd5-c05b-4276-b2b5-bc691e076bc3/studio/queryNeo4j Aura"
+  const [updatingTicketId, setUpdatingTicketId] = useState(null);
+
+  const handleQuickStatusUpdate = async (e, ticketId, newStatus) => {
+    e.stopPropagation();
+    try {
+      setUpdatingTicketId(ticketId);
+      await ticketService.updateTicketStatus(ticketId, newStatus);
+      setDashboardData(prev => ({
+        ...prev,
+        myTickets: prev.myTickets.map(t => t.id === ticketId ? { ...t, status: newStatus } : t),
+        allTickets: prev.allTickets.map(t => t.id === ticketId ? { ...t, status: newStatus } : t)
+      }));
+    } catch (err) {
+      console.error('Quick update error:', err);
+    } finally {
+      setUpdatingTicketId(null);
+    }
+  };
+
+  const handleClick = () => {
+    window.location.href = "https://console.neo4j.io/projects/94f8ebd5-c05b-4276-b2b5-bc691e076bc3/studio/queryNeo4j Aura"
   }
 
   return (
@@ -111,6 +127,49 @@ const TechnicianDashboard = () => {
         <Header />
         <main className="p-6 md:p-8 flex-1 overflow-y-auto ">
           <div className="max-w-7xl mx-auto space-y-6">
+
+            {/* Operational Cockpit & Priority Pulse Banner */}
+            <div className="bg-gradient-to-r from-slate-900 via-blue-950 to-indigo-950 rounded-2xl p-5 lg:p-6 text-white shadow-lg border border-blue-900/40">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                <div className="flex items-center space-x-3.5">
+                  <div className="w-12 h-12 rounded-xl bg-blue-500/20 border border-blue-400/30 flex items-center justify-center text-blue-400 flex-shrink-0 shadow-inner">
+                    <Wrench className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <div className="flex items-center flex-wrap gap-2">
+                      <h1 className="text-xl lg:text-2xl font-extrabold tracking-tight text-white">
+                        Technician Operations Cockpit
+                      </h1>
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                        Live Dispatch Active
+                      </span>
+                    </div>
+                    <p className="text-blue-200/80 text-sm mt-0.5">
+                      Real-time ticket triage, 1-click status progression, and active workload queue.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => window.location.href = '/technician/mttr-report'}
+                    className="inline-flex items-center gap-2 bg-blue-600/30 hover:bg-blue-600/50 text-blue-200 border border-blue-400/30 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all shadow-sm"
+                  >
+                    <Clock className="w-4 h-4 text-blue-300" />
+                    <span>View SLA Speedometer &rarr;</span>
+                  </button>
+                  <button
+                    onClick={loadDashboardData}
+                    disabled={loading}
+                    className="inline-flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white border border-white/15 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all shadow-sm disabled:opacity-50"
+                  >
+                    <Loader2 className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+                    <span>Refresh</span>
+                  </button>
+                </div>
+              </div>
+            </div>
 
             {error && (
               <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg">
@@ -145,91 +204,123 @@ const TechnicianDashboard = () => {
                   <p className="text-gray-600 text-sm lg:text-base">Here's your current workload and team status</p>
                 </div>
               </div>
-             
-            <button
-              className="relative px-2  py-2 text-sm lg:text-sm font-bold text-white bg-gradient-to-r from-violet-600 to-indigo-600 rounded-xl shadow-lg hover:shadow-violet-500/50 hover:scale-105 active:scale-95 transition-all duration-200 overflow-hidden group"
-              onClick={handleClick}
-            >
-              <span className="relative z-10">View Ontology</span>
-              <span className="absolute inset-0 bg-gradient-to-r from-indigo-600 to-violet-600 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-            </button>
+
+              <button
+                className="relative px-2  py-2 text-sm lg:text-sm font-bold text-white bg-gradient-to-r from-violet-600 to-indigo-600 rounded-xl shadow-lg hover:shadow-violet-500/50 hover:scale-105 active:scale-95 transition-all duration-200 overflow-hidden group"
+                onClick={handleClick}
+              >
+                <span className="relative z-10">View Ontology</span>
+                <span className="absolute inset-0 bg-gradient-to-r from-indigo-600 to-violet-600 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+              </button>
 
             </div>
 
             {/* Stats Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
-              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 lg:p-6">
+              {/* My Active Tickets */}
+              <div
+                onClick={() => navigate('/technician/my-tickets')}
+                className="bg-white rounded-xl shadow-sm border border-gray-200 hover:border-blue-300 hover:shadow-md p-4 lg:p-6 transition-all cursor-pointer group"
+                title="Click to view your active assigned tickets"
+              >
                 <div className="flex items-center justify-between mb-3">
                   <div className="text-2xl">📋</div>
+                  <ArrowRight className="w-4 h-4 text-blue-400 opacity-0 group-hover:opacity-100 transition-all -translate-x-1 group-hover:translate-x-0" />
                 </div>
-                <h3 className="text-lg font-semibold text-gray-800 mb-1">My Active Tickets</h3>
+                <h3 className="text-lg font-semibold text-gray-800 mb-1 group-hover:text-blue-600 transition-colors">My Active Tickets</h3>
                 <div className="text-3xl font-bold text-gray-900 mb-2">
                   {loading ? <Loader2 className="w-8 h-8 animate-spin" /> : stats.myOpen}
                 </div>
-                <p className="text-sm text-gray-600">Total assigned: {stats.myTotal}</p>
+                <p className="text-sm text-gray-600">Total assigned: {stats.myTotal} &rarr;</p>
               </div>
 
-              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 lg:p-6">
+              {/* Urgent Tickets */}
+              <div
+                onClick={() => navigate('/technician/urgent-tickets')}
+                className="bg-white rounded-xl shadow-sm border border-gray-200 hover:border-red-300 hover:shadow-md p-4 lg:p-6 transition-all cursor-pointer group"
+                title="Click to view critical & high priority tickets"
+              >
                 <div className="flex items-center justify-between mb-3">
                   <div className="text-2xl">🚨</div>
-                  {stats.myUrgent > 0 && (
-                    <span className="bg-red-100 text-red-800 px-2 py-1 rounded-full text-xs font-medium">
-                      {stats.myUrgent}
-                    </span>
-                  )}
+                  <div className="flex items-center gap-1.5">
+                    {stats.myUrgent > 0 && (
+                      <span className="bg-red-100 text-red-800 px-2 py-1 rounded-full text-xs font-medium">
+                        {stats.myUrgent}
+                      </span>
+                    )}
+                    <ArrowRight className="w-4 h-4 text-red-400 opacity-0 group-hover:opacity-100 transition-all -translate-x-1 group-hover:translate-x-0" />
+                  </div>
                 </div>
-                <h3 className="text-lg font-semibold text-gray-800 mb-1">Urgent Tickets</h3>
+                <h3 className="text-lg font-semibold text-gray-800 mb-1 group-hover:text-red-600 transition-colors">Urgent Tickets</h3>
                 <div className="text-3xl font-bold text-red-600 mb-2">
                   {loading ? <Loader2 className="w-8 h-8 animate-spin" /> : stats.myUrgent}
                 </div>
                 <p className="text-sm text-red-600">
-                  {stats.myUrgent > 0 ? 'Requires immediate attention' : 'No urgent tickets'}
+                  {stats.myUrgent > 0 ? 'Requires immediate attention →' : 'No urgent tickets →'}
                 </p>
               </div>
 
-              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 lg:p-6">
+              {/* Completed Today */}
+              <div
+                onClick={() => navigate('/technician/all-tickets')}
+                className="bg-white rounded-xl shadow-sm border border-gray-200 hover:border-green-300 hover:shadow-md p-4 lg:p-6 transition-all cursor-pointer group"
+                title="Click to view all resolved tickets"
+              >
                 <div className="flex items-center justify-between mb-3">
                   <div className="text-2xl">✅</div>
+                  <ArrowRight className="w-4 h-4 text-green-400 opacity-0 group-hover:opacity-100 transition-all -translate-x-1 group-hover:translate-x-0" />
                 </div>
-                <h3 className="text-lg font-semibold text-gray-800 mb-1">Completed Today</h3>
+                <h3 className="text-lg font-semibold text-gray-800 mb-1 group-hover:text-green-600 transition-colors">Completed Today</h3>
                 <div className="text-3xl font-bold text-green-600 mb-2">
                   {loading ? <Loader2 className="w-8 h-8 animate-spin" /> : stats.myCompleted}
                 </div>
-                <p className="text-sm text-green-600">Great work!</p>
+                <p className="text-sm text-green-600">View resolution queue &rarr;</p>
               </div>
 
-              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 lg:p-6">
+              {/* Unassigned Tickets */}
+              <div
+                onClick={() => navigate('/technician/all-tickets')}
+                className="bg-white rounded-xl shadow-sm border border-gray-200 hover:border-orange-300 hover:shadow-md p-4 lg:p-6 transition-all cursor-pointer group"
+                title="Click to claim unassigned tickets"
+              >
                 <div className="flex items-center justify-between mb-3">
                   <div className="text-2xl">📅</div>
+                  <ArrowRight className="w-4 h-4 text-orange-400 opacity-0 group-hover:opacity-100 transition-all -translate-x-1 group-hover:translate-x-0" />
                 </div>
-                <h3 className="text-lg font-semibold text-gray-800 mb-1">Unassigned Tickets</h3>
+                <h3 className="text-lg font-semibold text-gray-800 mb-1 group-hover:text-orange-600 transition-colors">Unassigned Tickets</h3>
                 <div className="text-3xl font-bold text-orange-600 mb-2">
                   {loading ? <Loader2 className="w-8 h-8 animate-spin" /> : stats.totalUnassigned}
                 </div>
-                <p className="text-sm text-gray-600">Available for assignment</p>
+                <p className="text-sm text-gray-600">Available for assignment &rarr;</p>
               </div>
             </div>
-
-            {/* MTTR & SLA Performance Card */}
-            <MttrCard
-              mttrData={dashboardData.mttrAnalytics}
-              isTechnician={true}
-            />
 
             {/* Performance Section */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Performance Metrics */}
               <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 lg:p-6">
-                <div className="flex items-center space-x-2 mb-6">
-                  <TrendingUp className="w-5 h-5 text-yellow-500" />
-                  <h2 className="text-xl font-semibold text-gray-800">Performance Metrics</h2>
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center space-x-2">
+                    <TrendingUp className="w-5 h-5 text-yellow-500" />
+                    <h2 className="text-xl font-semibold text-gray-800">Performance Metrics</h2>
+                  </div>
+                  <button
+                    onClick={() => navigate('/technician/analytics')}
+                    className="text-xs font-semibold text-blue-600 hover:underline flex items-center gap-1"
+                  >
+                    Deep Analytics &rarr;
+                  </button>
                 </div>
                 <p className="text-gray-600 mb-6">Your current performance indicators</p>
 
                 <div className="space-y-6">
-                  <div>
+                  <div
+                    onClick={() => navigate('/technician/all-tickets')}
+                    className="p-2.5 rounded-lg hover:bg-slate-50 transition cursor-pointer group"
+                    title="Click to view resolved tickets"
+                  >
                     <div className="flex justify-between items-center mb-2">
-                      <span className="text-gray-700 font-medium">Ticket Completion Rate</span>
+                      <span className="text-gray-700 font-medium group-hover:text-blue-600">Ticket Completion Rate</span>
                       <span className="text-gray-900 font-semibold">
                         {stats.myTotal > 0 ? Math.round((stats.myCompleted / stats.myTotal) * 100) : 0}%
                       </span>
@@ -240,9 +331,13 @@ const TechnicianDashboard = () => {
                     />
                   </div>
 
-                  <div>
+                  <div
+                    onClick={() => navigate('/technician/my-tickets')}
+                    className="p-2.5 rounded-lg hover:bg-slate-50 transition cursor-pointer group"
+                    title="Click to view assigned workload"
+                  >
                     <div className="flex justify-between items-center mb-2">
-                      <span className="text-gray-700 font-medium">Active Workload</span>
+                      <span className="text-gray-700 font-medium group-hover:text-indigo-600">Active Workload</span>
                       <span className="text-gray-900 font-semibold">{stats.myOpen} tickets</span>
                     </div>
                     <ProgressBar
@@ -251,9 +346,13 @@ const TechnicianDashboard = () => {
                     />
                   </div>
 
-                  <div>
+                  <div
+                    onClick={() => navigate('/technician/urgent-tickets')}
+                    className="p-2.5 rounded-lg hover:bg-slate-50 transition cursor-pointer group"
+                    title="Click to view urgent priority tickets"
+                  >
                     <div className="flex justify-between items-center mb-2">
-                      <span className="text-gray-700 font-medium">Priority Distribution</span>
+                      <span className="text-gray-700 font-medium group-hover:text-red-600">Priority Distribution</span>
                       <span className="text-gray-900 font-semibold">{stats.myUrgent} urgent</span>
                     </div>
                     <ProgressBar
@@ -374,21 +473,54 @@ const TechnicianDashboard = () => {
                               #{ticket.id} • {ticket.requester_name || ticket.user_email || 'Unknown'} •
                               {new Date(ticket.created_at || Date.now()).toLocaleDateString()}
                             </div>
-                            <div className="text-xs text-gray-500 mt-1">
-                              Priority: {ticket.priority || 'Medium'} • Status: {ticket.status || 'Open'}
+                            <div className="text-xs text-gray-500 mt-1 flex flex-wrap items-center gap-2">
+                              <span>Priority: {ticket.priority || 'Medium'} • Status: {ticket.status || 'Open'}</span>
+                              {ticket.time_spent && (
+                                <span className="font-semibold text-[#00ABE4] bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">
+                                  ⏱️ Logged: {ticket.time_spent}
+                                </span>
+                              )}
                             </div>
                           </div>
                         </div>
-                        <div className="flex flex-col sm:items-end space-y-2">
-                          <span className={`text-sm font-medium ${textClass}`}>
-                            {ticket.priority || 'Medium'} Priority
-                          </span>
-                          <button
-                            onClick={() => setSelectedTicket(ticket)}
-                            className="text-blue-600 hover:text-blue-800 text-sm font-medium"
-                          >
-                            View Details
-                          </button>
+                        <div className="flex flex-col sm:items-end space-y-2 mt-3 sm:mt-0">
+                          <div className="flex items-center gap-2">
+                            <span className={`text-xs font-bold uppercase tracking-wider ${textClass}`}>
+                              {ticket.priority || 'Medium'} Priority
+                            </span>
+                          </div>
+
+                          {/* Quick Action Button Strip */}
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            {['open', 'assigned'].includes((ticket.status || '').toLowerCase()) && (
+                              <button
+                                onClick={(e) => handleQuickStatusUpdate(e, ticket.id, 'In Progress')}
+                                disabled={updatingTicketId === ticket.id}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow-sm transition-all disabled:opacity-50"
+                                title="Move to In Progress"
+                              >
+                                {updatingTicketId === ticket.id ? <Loader2 className="w-3 h-3 animate-spin" /> : '▶ Start Work'}
+                              </button>
+                            )}
+
+                            {ticket.status?.toLowerCase() === 'in progress' && (
+                              <button
+                                onClick={(e) => handleQuickStatusUpdate(e, ticket.id, 'Resolved')}
+                                disabled={updatingTicketId === ticket.id}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg shadow-sm transition-all disabled:opacity-50"
+                                title="Mark as Resolved"
+                              >
+                                {updatingTicketId === ticket.id ? <Loader2 className="w-3 h-3 animate-spin" /> : '✓ Resolve'}
+                              </button>
+                            )}
+
+                            <button
+                              onClick={() => setSelectedTicket(ticket)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-gray-700 bg-white hover:bg-gray-100 border border-gray-200 rounded-lg shadow-sm transition-colors"
+                            >
+                              Details
+                            </button>
+                          </div>
                         </div>
                       </div>
                     );
@@ -533,9 +665,9 @@ const TechnicianDashboard = () => {
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
                       <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${selectedTicket.status === 'resolved' ? 'bg-green-100 text-green-800' :
-                          selectedTicket.status === 'Assigned' ? 'bg-blue-100 text-blue-800' :
-                            selectedTicket.status === 'In Progress' ? 'bg-yellow-100 text-yellow-800' :
-                              'bg-gray-100 text-gray-800'
+                        selectedTicket.status === 'Assigned' ? 'bg-blue-100 text-blue-800' :
+                          selectedTicket.status === 'In Progress' ? 'bg-yellow-100 text-yellow-800' :
+                            'bg-gray-100 text-gray-800'
                         }`}>
                         {selectedTicket.status || 'Unknown'}
                       </span>
@@ -543,9 +675,9 @@ const TechnicianDashboard = () => {
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Priority</label>
                       <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${selectedTicket.priority === 'Critical' ? 'bg-red-100 text-red-800' :
-                          selectedTicket.priority === 'High' ? 'bg-orange-100 text-orange-800' :
-                            selectedTicket.priority === 'Medium' ? 'bg-yellow-100 text-yellow-800' :
-                              'bg-green-100 text-green-800'
+                        selectedTicket.priority === 'High' ? 'bg-orange-100 text-orange-800' :
+                          selectedTicket.priority === 'Medium' ? 'bg-yellow-100 text-yellow-800' :
+                            'bg-green-100 text-green-800'
                         }`}>
                         {selectedTicket.priority || 'Medium'}
                       </span>

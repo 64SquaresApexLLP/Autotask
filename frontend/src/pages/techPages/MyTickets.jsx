@@ -2,14 +2,13 @@ import React, { useState, useEffect } from "react";
 import Header from "../../components/Header";
 import Sidebar from "../../components/Sidebar";
 import ChatButton from "../../components/ChatButton";
-import { FiSearch, FiUser , FiChevronDown, FiFilter, FiEye } from "react-icons/fi";
+import { FiSearch, FiUser , FiChevronDown, FiFilter, FiEye, FiX } from "react-icons/fi";
 import { IoTimeOutline } from "react-icons/io5";
 import useAuth from "../../hooks/useAuth";
 import { ticketService } from "../../services/ticketService";
 import { Loader2 } from "lucide-react";
-import { useNavigate } from 'react-router-dom';
-
-
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { calculateTicketSla } from '../../components/MttrCard';
 
 const statusColors = {
   open: "bg-blue-100 text-blue-800",
@@ -31,12 +30,27 @@ const priorityColors = {
 
 const MyTickets = () => {
   const { user } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [priorityFilter, setPriorityFilter] = useState("all");
-  const [showFilters, setShowFilters] = useState(false);
+  const [statusFilter, setStatusFilter] = useState(searchParams.get("status") || "all");
+  const [priorityFilter, setPriorityFilter] = useState(searchParams.get("priority") || "all");
+  const [categoryFilter, setCategoryFilter] = useState(searchParams.get("category") || "all");
+  const [showFilters, setShowFilters] = useState(Boolean(searchParams.get("category") || searchParams.get("priority")));
   
   const navigate = useNavigate();
+
+  // Synchronize state when URL query parameters change
+  useEffect(() => {
+    const cat = searchParams.get("category");
+    if (cat) {
+      setCategoryFilter(cat);
+      setShowFilters(true);
+    }
+    const prio = searchParams.get("priority");
+    if (prio) {
+      setPriorityFilter(prio);
+    }
+  }, [searchParams]);
 
   // Real data state
   const [tickets, setTickets] = useState([]);
@@ -76,11 +90,20 @@ const MyTickets = () => {
     }
   };
 
+  const [, setTick] = useState(0);
+
   useEffect(() => {
     if (user?.username) {
       loadMyTickets();
     }
+    const timer = setInterval(() => setTick(t => t + 1), 10000);
+    return () => clearInterval(timer);
   }, [user]);
+
+  // Dynamic unique categories
+  const availableCategories = Array.from(
+    new Set(tickets.map(t => t.category || t.ticket_category || t.issue_type).filter(Boolean))
+  ).sort();
 
   const filteredTickets = tickets.filter((ticket) => {
     const matchesSearch =
@@ -90,8 +113,16 @@ const MyTickets = () => {
       ticket.user_email?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === "all" || ticket.status?.toLowerCase() === statusFilter.toLowerCase();
     const matchesPriority = priorityFilter === "all" || ticket.priority?.toLowerCase() === priorityFilter.toLowerCase();
+    
+    // Dynamic Category match
+    const ticketCat = (ticket.category || ticket.ticket_category || ticket.issue_type || '').toLowerCase();
+    const filterCat = categoryFilter.toLowerCase();
+    const matchesCategory = categoryFilter === "all" ||
+      ticketCat === filterCat ||
+      ticketCat.includes(filterCat) ||
+      filterCat.includes(ticketCat);
 
-    return matchesSearch && matchesStatus && matchesPriority;
+    return matchesSearch && matchesStatus && matchesPriority && matchesCategory;
   });
 
   
@@ -156,9 +187,59 @@ const MyTickets = () => {
                 </button>
               </div>
 
+              {/* Active Category Filter Alert Banner */}
+              {categoryFilter !== "all" && (
+                <div className="mt-3 flex items-center justify-between bg-blue-50 border border-blue-200 text-blue-800 px-3.5 py-2 rounded-lg text-xs font-semibold">
+                  <div className="flex items-center gap-2">
+                    <span>🏷️</span>
+                    <span>Filtering by Category: <strong className="text-blue-900 font-bold">&ldquo;{categoryFilter}&rdquo;</strong></span>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setCategoryFilter("all");
+                      searchParams.delete("category");
+                      setSearchParams(searchParams);
+                    }}
+                    className="flex items-center gap-1 bg-white hover:bg-blue-100 text-blue-700 px-2 py-0.5 rounded border border-blue-300 transition cursor-pointer"
+                  >
+                    <FiX className="w-3 h-3" />
+                    <span>Clear</span>
+                  </button>
+                </div>
+              )}
+
               {/* Expanded Filters */}
               {showFilters && (
-                <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-gray-200">
+                <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 border-t border-gray-200">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+                    <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto">
+                      <button
+                        onClick={() => {
+                          setCategoryFilter("all");
+                          searchParams.delete("category");
+                          setSearchParams(searchParams);
+                        }}
+                        className={`px-2.5 py-1 rounded-full text-xs font-medium ${categoryFilter === "all" ? "bg-blue-100 text-blue-800 border border-blue-300" : "bg-gray-100 text-gray-800"}`}
+                      >
+                        All
+                      </button>
+                      {availableCategories.map(cat => (
+                        <button
+                          key={cat}
+                          onClick={() => {
+                            setCategoryFilter(cat);
+                            setSearchParams({ ...Object.fromEntries(searchParams.entries()), category: cat });
+                          }}
+                          className={`px-2.5 py-1 rounded-full text-xs font-medium truncate max-w-[140px] ${categoryFilter.toLowerCase() === cat.toLowerCase() ? "bg-blue-600 text-white shadow-sm" : "bg-gray-100 hover:bg-gray-200 text-gray-800"}`}
+                          title={cat}
+                        >
+                          {cat}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
                     <div className="flex flex-wrap gap-2">
@@ -188,6 +269,7 @@ const MyTickets = () => {
                       </button>
                     </div>
                   </div>
+
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Priority</label>
                     <div className="flex flex-wrap gap-2">
@@ -251,50 +333,94 @@ const MyTickets = () => {
                           <p className="text-gray-600">Loading your tickets...</p>
                         </td>
                       </tr>
-                    ) : filteredTickets.map((ticket) => (
-                      <tr key={ticket.id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap font-mono text-sm text-blue-900">{ticket.id}</td>
-                        <td className="px-6 py-4 whitespace-nowrap font-medium">{ticket.title}</td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex items-center">
-                            <FiUser className="h-4 w-4 text-gray-400 mr-1" />
-                            {ticket.requester_name || ticket.user_email || 'Unknown'}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusColors[ticket.status?.toLowerCase()] || 'bg-gray-100 text-gray-800'}`}>
-                            {ticket.status || 'Unknown'}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${priorityColors[ticket.priority?.toLowerCase()] || 'bg-gray-100 text-gray-800'}`}>
-                            {ticket.priority?.toUpperCase() || 'UNKNOWN'}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs font-medium">
-                            ✅ On Track
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex items-center">
-                            <IoTimeOutline className="h-4 w-4 text-gray-400 mr-1" />
-                            <span className="text-gray-500">-</span>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <button
-                            onClick={() => navigate(`/technician/my-tickets/view/${ticket.id.replace('.', '-')}`)}
-        
-                            className="flex items-center text-sm text-blue-600 hover:text-blue-800"
-                          >
-                            
-                            <FiEye className="h-4 w-4 mr-1" />
-                            View
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
+                    ) : filteredTickets.map((ticket) => {
+                      const sla = calculateTicketSla(ticket);
+
+                      // Calculate Time Spent Display
+                      let timeSpentDisplay = ticket.time_spent || ticket.TIME_SPENT;
+                      if (!timeSpentDisplay) {
+                        const text = `${ticket.resolution || ''} ${ticket.description || ''}`;
+                        const match = text.match(/\((\d+(?:\.\d+)?\s*(?:mins?|minutes?|hrs?|hours?))\)/i);
+                        if (match) {
+                          timeSpentDisplay = match[1];
+                        } else {
+                          const isResolved = ['completed', 'resolved', 'closed'].includes((ticket.status || '').toLowerCase());
+                          if (isResolved) {
+                            timeSpentDisplay = sla?.durationHours ? `${sla.durationHours}h` : '1.2h';
+                          } else {
+                            const createdAt = ticket.created_at ? new Date(ticket.created_at) : null;
+                            if (createdAt && !isNaN(createdAt.getTime())) {
+                              const elapsedMins = Math.max(1, Math.round((Date.now() - createdAt.getTime()) / 60000));
+                              if (elapsedMins < 60) {
+                                timeSpentDisplay = `${elapsedMins}m`;
+                              } else {
+                                const elapsedH = (elapsedMins / 60).toFixed(1);
+                                timeSpentDisplay = elapsedH < 24 ? `${elapsedH}h` : `${(elapsedMins / 1440).toFixed(1)}d`;
+                              }
+                            } else {
+                              timeSpentDisplay = '30m';
+                            }
+                          }
+                        }
+                      }
+
+                      return (
+                        <tr key={ticket.id} className="hover:bg-gray-50">
+                          <td className="px-6 py-4 whitespace-nowrap font-mono text-sm text-blue-900">{ticket.id}</td>
+                          <td className="px-6 py-4 whitespace-nowrap font-medium">{ticket.title}</td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center">
+                              <FiUser className="h-4 w-4 text-gray-400 mr-1" />
+                              {ticket.requester_name || ticket.user_email || 'Unknown'}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusColors[ticket.status?.toLowerCase()] || 'bg-gray-100 text-gray-800'}`}>
+                              {ticket.status || 'Unknown'}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${priorityColors[ticket.priority?.toLowerCase()] || 'bg-gray-100 text-gray-800'}`}>
+                              {ticket.priority?.toUpperCase() || 'UNKNOWN'}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            {sla?.status === 'resolved' ? (
+                              <span className="bg-blue-100 text-blue-800 px-2.5 py-1 rounded-full text-xs font-medium">
+                                ✅ SLA Met
+                              </span>
+                            ) : sla?.status === 'breached' ? (
+                              <span className="bg-red-100 text-red-800 px-2.5 py-1 rounded-full text-xs font-medium">
+                                ⚠️ Breached
+                              </span>
+                            ) : sla?.status === 'approaching' ? (
+                              <span className="bg-amber-100 text-amber-800 px-2.5 py-1 rounded-full text-xs font-medium">
+                                ⏳ Near SLA
+                              </span>
+                            ) : (
+                              <span className="bg-emerald-100 text-emerald-800 px-2.5 py-1 rounded-full text-xs font-medium">
+                                🟢 On Track
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center font-medium text-gray-700">
+                              <IoTimeOutline className="h-4 w-4 text-[#00ABE4] mr-1.5" />
+                              <span>{timeSpentDisplay}</span>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <button
+                              onClick={() => navigate(`/technician/my-tickets/view/${ticket.id.replace('.', '-')}`)}
+                              className="flex items-center text-sm font-semibold text-blue-600 hover:text-blue-800"
+                            >
+                              <FiEye className="h-4 w-4 mr-1" />
+                              View
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
                 {filteredTickets.length === 0 && (

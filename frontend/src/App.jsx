@@ -7,6 +7,7 @@ import UserDashboard from './pages/UserDashboard';
 import TechnicianDashboard from './pages/TechnicianDashboard';
 import TrackStatus from './pages/TrackStatus';
 import UserProfile from './pages/UserProfile';
+import MttrReport from './pages/MttrReport';
 import MyTickets from './pages/techPages/MyTickets';
 import UrgentTickets from './pages/techPages/UrgentTickets';
 import Analytics from './pages/techPages/Analytics';
@@ -44,6 +45,15 @@ function App() {
             element={
               <ProtectedRoute>
                 <TrackStatus />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/user/mttr-report"
+            element={
+              <ProtectedRoute>
+                <MttrReport />
               </ProtectedRoute>
             }
           />
@@ -98,6 +108,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <UrgentTickets />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/technician/mttr-report"
+            element={
+              <ProtectedRoute>
+                <MttrReport />
               </ProtectedRoute>
             }
           />

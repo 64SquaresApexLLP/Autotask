@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { FileText, Plus, Clock, CheckCircle, ChevronUp, Loader2, Eye, Sparkles } from 'lucide-react';
+import { FileText, Plus, Clock, CheckCircle, ChevronUp, Loader2, Eye, Sparkles, User, Phone, Mail, Calendar } from 'lucide-react';
 import Header from '../components/Header';
 import Sidebar from '../components/Sidebar';
 import AiPipelineModal from '../components/AiPipelineModal.jsx';
@@ -7,12 +7,11 @@ import ExpandedTicketDetails from '../components/ExpandedTicketDetails.jsx';
 import { ticketService } from '../services/ticketService.js';
 import { ApiError } from '../services/api.js';
 import useAuth from '../hooks/useAuth';
-import MttrCard, { calculateTicketSla } from '../components/MttrCard';
+import { calculateTicketSla } from '../components/MttrCard';
 
 const UserDashboard = () => {
   const { user } = useAuth();
   const [tickets, setTickets] = useState([]);
-  const [mttrAnalytics, setMttrAnalytics] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [showCreateForm, setShowCreateForm] = useState(false);
@@ -49,13 +48,8 @@ const UserDashboard = () => {
       const userId = user?.username?.trim().toLowerCase();
       const userEmail = user?.email?.trim().toLowerCase();
 
-      // Load all tickets and MTTR analytics concurrently
-      const [allTickets, mttrData] = await Promise.all([
-        ticketService.getAllTickets({ limit: 150 }),
-        ticketService.getMttrAnalytics({ user_email: userEmail || userId }).catch(() => null)
-      ]);
-
-      setMttrAnalytics(mttrData);
+      // Load all tickets
+      const allTickets = await ticketService.getAllTickets({ limit: 150 });
 
       // Filter tickets for current user with case-insensitivity
       const userName = (user?.name || user?.full_name)?.trim().toLowerCase();
@@ -233,13 +227,6 @@ const UserDashboard = () => {
                 </div>
               </div>
             </div>
-
-            {/* MTTR & Turnaround Estimates Card */}
-            <MttrCard
-              mttrData={mttrAnalytics}
-              isTechnician={false}
-              className="mb-8"
-            />
 
             {/* Create New Ticket Section */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 md:p-8 mb-8">
@@ -488,6 +475,12 @@ const UserDashboard = () => {
                                 <div className="flex items-center space-x-2">
                                   <User className="w-4 h-4" />
                                   <span>Assigned to: {ticket.assigned_technician}</span>
+                                </div>
+                              )}
+                              {ticket.time_spent && (
+                                <div className="flex items-center space-x-2 font-medium text-[#00ABE4]">
+                                  <Clock className="w-4 h-4" />
+                                  <span>Time Logged: {ticket.time_spent}</span>
                                 </div>
                               )}
                             </div>

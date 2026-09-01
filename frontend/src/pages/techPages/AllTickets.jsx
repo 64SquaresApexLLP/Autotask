@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import Header from '../../components/Header';
 import Sidebar from '../../components/Sidebar';
 import ChatButton from '../../components/ChatButton';
-import { Search, Filter, Download, UserCheck, RotateCcw, AlertTriangle, Calendar, User, Loader2, Clock, CheckCircle, AlertCircle } from 'lucide-react';
+import { Search, Filter, Download, UserCheck, RotateCcw, AlertTriangle, Calendar, User, Loader2, Clock, CheckCircle, AlertCircle, Tag, X } from 'lucide-react';
 import { ticketService } from '../../services/ticketService.js';
 import { technicianService } from '../../services/technicianService.js';
 import { ApiError } from '../../services/api.js';
@@ -10,14 +11,32 @@ import useAuth from '../../hooks/useAuth';
 
 const AllTickets = () => {
   const { user } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [tickets, setTickets] = useState([]);
   const [technicians, setTechnicians] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [priorityFilter, setPriorityFilter] = useState('all');
-  const [assignedFilter, setAssignedFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || 'all');
+  const [priorityFilter, setPriorityFilter] = useState(searchParams.get('priority') || 'all');
+  const [categoryFilter, setCategoryFilter] = useState(searchParams.get('category') || 'all');
+  const [assignedFilter, setAssignedFilter] = useState(searchParams.get('assigned') || 'all');
+
+  // Synchronize state when URL query parameters change
+  useEffect(() => {
+    const cat = searchParams.get('category');
+    if (cat) {
+      setCategoryFilter(cat);
+    }
+    const prio = searchParams.get('priority');
+    if (prio) {
+      setPriorityFilter(prio);
+    }
+    const stat = searchParams.get('status');
+    if (stat) {
+      setStatusFilter(stat);
+    }
+  }, [searchParams]);
 
   // Load tickets and technicians on component mount
   useEffect(() => {
@@ -77,7 +96,16 @@ const AllTickets = () => {
     }
   };
 
-  // Filter tickets based on search and filter criteria
+  // Extract dynamic list of unique categories from real ticket dataset
+  const availableCategories = Array.from(
+    new Set(
+      tickets
+        .map(t => t.category || t.ticket_category || t.issue_type)
+        .filter(Boolean)
+    )
+  ).sort();
+
+  // Filter tickets based on search, category, and filter criteria
   const filteredTickets = tickets.filter(ticket => {
     const matchesSearch = ticket.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       ticket.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -88,7 +116,15 @@ const AllTickets = () => {
     const matchesPriority = priorityFilter === 'all' || ticket.priority?.toLowerCase() === priorityFilter.toLowerCase();
     const matchesAssigned = assignedFilter === 'all' || ticket.assigned_technician === assignedFilter;
 
-    return matchesSearch && matchesStatus && matchesPriority && matchesAssigned;
+    // Dynamic Category match
+    const ticketCat = (ticket.category || ticket.ticket_category || ticket.issue_type || '').toLowerCase();
+    const filterCat = categoryFilter.toLowerCase();
+    const matchesCategory = categoryFilter === 'all' || 
+      ticketCat === filterCat || 
+      ticketCat.includes(filterCat) || 
+      filterCat.includes(ticketCat);
+
+    return matchesSearch && matchesStatus && matchesPriority && matchesAssigned && matchesCategory;
   });
 
   const getStatusIcon = (status) => {
@@ -179,21 +215,84 @@ const AllTickets = () => {
               </div>
             </div>
 
+            {/* Active Category Filter Alert Banner */}
+            {categoryFilter !== 'all' && (
+              <div className="flex items-center justify-between bg-blue-50 border border-blue-200 text-blue-800 px-4 py-3 rounded-xl shadow-sm animate-fadeIn">
+                <div className="flex items-center gap-2.5">
+                  <span className="text-xl">🏷️</span>
+                  <div>
+                    <span className="font-semibold text-sm">Active Category Filter: </span>
+                    <span className="font-bold text-blue-900 bg-blue-100/80 px-2 py-0.5 rounded border border-blue-300 ml-1">
+                      {categoryFilter}
+                    </span>
+                    <span className="text-xs text-blue-600 ml-2">
+                      ({filteredTickets.length} ticket{filteredTickets.length === 1 ? '' : 's'} matching)
+                    </span>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    setCategoryFilter('all');
+                    setSearchParams({});
+                  }}
+                  className="flex items-center gap-1 text-xs bg-white hover:bg-blue-100 text-blue-700 font-bold px-3 py-1.5 rounded-lg border border-blue-300 transition shadow-sm cursor-pointer"
+                >
+                  <X className="w-3.5 h-3.5" />
+                  <span>Show All Categories</span>
+                </button>
+              </div>
+            )}
+
             {/* Filter Card */}
             <div className="bg-white rounded-lg shadow p-4 space-y-4">
-              <div className="flex items-center gap-2">
-                <Filter className="h-5 w-5 text-gray-500" />
-                <h2 className="text-lg font-semibold text-gray-800">Filter Tickets</h2>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Filter className="h-5 w-5 text-gray-500" />
+                  <h2 className="text-lg font-semibold text-gray-800">Filter Tickets</h2>
+                </div>
+                {(categoryFilter !== 'all' || priorityFilter !== 'all' || statusFilter !== 'all' || assignedFilter !== 'all' || searchTerm) && (
+                  <button
+                    onClick={() => {
+                      setCategoryFilter('all');
+                      setPriorityFilter('all');
+                      setStatusFilter('all');
+                      setAssignedFilter('all');
+                      setSearchTerm('');
+                      setSearchParams({});
+                    }}
+                    className="text-xs text-blue-600 hover:underline font-medium cursor-pointer"
+                  >
+                    Reset all filters
+                  </button>
+                )}
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
                 <input
                   type="text"
-                  placeholder="Search..."
-                  className="px-3 py-2 border rounded w-full"
+                  placeholder="Search title, ID, requester..."
+                  className="px-3 py-2 border rounded-lg w-full text-sm"
                   value={searchTerm}
                   onChange={e => setSearchTerm(e.target.value)}
                 />
-                <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="px-3 py-2 border rounded w-full">
+                <select
+                  value={categoryFilter}
+                  onChange={e => {
+                    setCategoryFilter(e.target.value);
+                    if (e.target.value === 'all') {
+                      searchParams.delete('category');
+                      setSearchParams(searchParams);
+                    } else {
+                      setSearchParams({ ...Object.fromEntries(searchParams.entries()), category: e.target.value });
+                    }
+                  }}
+                  className="px-3 py-2 border rounded-lg w-full text-sm font-medium bg-white"
+                >
+                  <option value="all">📁 All Categories</option>
+                  {availableCategories.map(cat => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                </select>
+                <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="px-3 py-2 border rounded-lg w-full text-sm bg-white">
                   <option value="all">All Status</option>
                   <option value="open">Open</option>
                   <option value="in_progress">In Progress</option>
@@ -201,14 +300,14 @@ const AllTickets = () => {
                   <option value="resolved">Resolved</option>
                   <option value="completed">Completed</option>
                 </select>
-                <select value={priorityFilter} onChange={e => setPriorityFilter(e.target.value)} className="px-3 py-2 border rounded w-full">
+                <select value={priorityFilter} onChange={e => setPriorityFilter(e.target.value)} className="px-3 py-2 border rounded-lg w-full text-sm bg-white">
                   <option value="all">All Priority</option>
                   <option value="low">Low</option>
                   <option value="medium">Medium</option>
                   <option value="high">High</option>
                   <option value="critical">Critical</option>
                 </select>
-                <select value={assignedFilter} onChange={e => setAssignedFilter(e.target.value)} className="px-3 py-2 border rounded w-full">
+                <select value={assignedFilter} onChange={e => setAssignedFilter(e.target.value)} className="px-3 py-2 border rounded-lg w-full text-sm bg-white">
                   <option value="all">All Technicians</option>
                   <option value="">Unassigned</option>
                   {technicians.map(t => (
@@ -218,7 +317,7 @@ const AllTickets = () => {
                 <button
                   onClick={loadTickets}
                   disabled={loading}
-                  className="px-4 py-2 bg-[#00ABE4] text-white rounded hover:bg-blue-600 transition-colors disabled:opacity-50 flex items-center space-x-2"
+                  className="px-4 py-2 bg-[#00ABE4] hover:bg-blue-600 text-white rounded-lg font-medium transition-colors disabled:opacity-50 flex items-center justify-center space-x-2 text-sm cursor-pointer"
                 >
                   {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />}
                   <span>Refresh</span>
@@ -237,7 +336,22 @@ const AllTickets = () => {
                 <div className="p-8 text-center">
                   <AlertCircle className="w-12 h-12 text-gray-400 mx-auto mb-4" />
                   <p className="text-gray-600 text-lg mb-2">No tickets found</p>
-                  <p className="text-gray-500">Try adjusting your filters or create a new ticket.</p>
+                  <p className="text-gray-500 text-sm">
+                    {categoryFilter !== 'all' 
+                      ? `No tickets currently match category "${categoryFilter}".`
+                      : 'Try adjusting your filters or create a new ticket.'}
+                  </p>
+                  {categoryFilter !== 'all' && (
+                    <button
+                      onClick={() => {
+                        setCategoryFilter('all');
+                        setSearchParams({});
+                      }}
+                      className="mt-3 inline-flex items-center gap-1 text-xs bg-blue-50 text-blue-700 font-semibold px-3 py-1.5 rounded-lg border border-blue-200 hover:bg-blue-100 transition"
+                    >
+                      Show All Categories
+                    </button>
+                  )}
                 </div>
               ) : (
                 <table className="min-w-full text-sm text-left">
@@ -245,6 +359,7 @@ const AllTickets = () => {
                     <tr>
                       <th className="p-3">#</th>
                       <th className="p-3">Title</th>
+                      <th className="p-3">Category</th>
                       <th className="p-3">Requester</th>
                       <th className="p-3">Status</th>
                       <th className="p-3">Priority</th>
@@ -256,12 +371,27 @@ const AllTickets = () => {
                   <tbody>
                     {filteredTickets.map((ticket, idx) => (
                       <tr key={ticket.id} className="border-b hover:bg-gray-50">
-                        <td className="p-3 font-mono text-xs">#{ticket.id}</td>
+                        <td className="p-3 font-mono text-xs font-bold text-slate-700">#{ticket.id}</td>
                         <td className="p-3">
                           <div>
-                            <div className="font-medium">{ticket.title}</div>
+                            <div className="font-medium text-slate-900">{ticket.title}</div>
                             <div className="text-xs text-gray-500 truncate max-w-xs">{ticket.description}</div>
                           </div>
+                        </td>
+                        <td className="p-3">
+                          <span
+                            onClick={() => {
+                              const cat = ticket.category || ticket.ticket_category || ticket.issue_type;
+                              if (cat) {
+                                setCategoryFilter(cat);
+                                setSearchParams({ category: cat });
+                              }
+                            }}
+                            className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold bg-slate-100 hover:bg-blue-50 text-slate-700 hover:text-blue-700 border border-slate-200 hover:border-blue-200 transition cursor-pointer"
+                            title="Filter by this category"
+                          >
+                            🏷️ {ticket.category || ticket.ticket_category || ticket.issue_type || 'General'}
+                          </span>
                         </td>
                         <td className="p-3">
                           <div className="flex items-center gap-1">
