@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { FileText, Plus, Clock, CheckCircle, ChevronUp, Loader2, Eye } from 'lucide-react';
+import { FileText, Plus, Clock, CheckCircle, ChevronUp, Loader2, Eye, Sparkles } from 'lucide-react';
 import Header from '../components/Header';
 import Sidebar from '../components/Sidebar';
 import AiPipelineModal from '../components/AiPipelineModal.jsx';
@@ -433,7 +433,6 @@ const UserDashboard = () => {
                         <div className="flex items-start justify-between mb-4">
                           <div className="flex-1">
                             <div className="flex items-center flex-wrap gap-2 mb-2">
-                              {getStatusIcon(ticket.status)}
                               <h3 className="text-lg font-semibold text-gray-800">{ticket.title}</h3>
                               <span className={`px-3 py-1 rounded-full text-xs font-medium ${getPriorityColor(ticket.priority)}`}>
                                 {ticket.priority || 'Medium'}
