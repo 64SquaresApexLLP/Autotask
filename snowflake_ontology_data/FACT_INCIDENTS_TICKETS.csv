@@ -1,0 +1,5 @@
+TICKET_NUMBER,TITLE,CATEGORY,PRIORITY,STATUS,AFFECTED_DEVICE_ID,ASSOCIATED_DEFECT_ID,BLAST_RADIUS_DEVICES_COUNT,IMPACTED_SERVICES_COUNT,ASSIGNED_TECHNICIAN,CREATED_AT,RESOLUTION_SUMMARY
+INC-2026-0941,Cell-Tower Backhaul Packet Drops on AGG-02,Hardware,Critical,Open,dev:mx304-02,def:evpn-qinq,8,8,Ruchir Chincholkar,2026-09-01T12:36:16.033986,Identified Junos 23.4R2 EVPN QinQ defect. Scheduled software upgrade to 24.4R1-S3.6.
+INC-2026-0942,Unprotected 100G Trunk Risk - San Angelo Aggregation,Network,High,In Progress,dev:mx304-sang,spof:sang-100g,3,12,Anant Lad,2026-09-01T12:36:16.034103,Engineering ticket submitted for secondary diverse fiber path.
+INC-2026-0943,Version Drift Remediation - SANG-AGG-01 & ACX-19,Software,Medium,Open,dev:mx304-sang,drift:fleet-outliers,2,4,Support Technician,2026-09-01T12:36:16.034177,Staging 22.4R3-S7.5 golden image for scheduled maintenance.
+INC-2026-0944,High Temp Alarm on 400G ZR Optic - GLDT-CORE-01,Hardware,High,Open,dev:mx960-gldt,alarm:gldt-optical,3,24,Ruchir Chincholkar,2026-09-01T12:36:16.034244,Technician dispatched to replace optic transceiver.

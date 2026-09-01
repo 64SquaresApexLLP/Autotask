@@ -52,6 +52,14 @@ export const API_ENDPOINTS = {
   // Analytics & SLA endpoints
   ANALYTICS: {
     MTTR: '/analytics/mttr'
+  },
+
+  // CTTC Network Ontology endpoints
+  ONTOLOGY: {
+    TOPOLOGY: '/ontology/topology',
+    BLAST_RADIUS: (targetId) => `/ontology/blast-radius/${encodeURIComponent(targetId)}`,
+    DATA: '/ontology/data',
+    FULL_GRAPH: '/ontology/full-graph'
   }
 };
 

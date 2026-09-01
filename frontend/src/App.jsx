@@ -13,6 +13,12 @@ import UrgentTickets from './pages/techPages/UrgentTickets';
 import Analytics from './pages/techPages/Analytics';
 import AllTickets from './pages/techPages/AllTickets';
 import ViewTicket from './pages/techPages/ViewTicket';
+import NetworkOntology from './pages/techPages/NetworkOntology';
+import AdminDashboard from './pages/adminPages/AdminDashboard';
+import AdminTechnicians from './pages/adminPages/AdminTechnicians';
+import AdminUsers from './pages/adminPages/AdminUsers';
+import AdminTicketsReport from './pages/adminPages/AdminTicketsReport';
+import AdminWiderMttr from './pages/adminPages/AdminWiderMttr';
 
 function App() {
   return (
@@ -132,6 +138,77 @@ function App() {
             element={
               <ProtectedRoute>
                 <AllTickets />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/technician/ontology"
+            element={
+              <ProtectedRoute>
+                <NetworkOntology />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/ontology"
+            element={
+              <ProtectedRoute>
+                <NetworkOntology />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Admin Routes */}
+          <Route
+            path="/admin"
+            element={
+              <ProtectedRoute>
+                <AdminDashboard />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/admin/dashboard"
+            element={
+              <ProtectedRoute>
+                <AdminDashboard />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/admin/technicians"
+            element={
+              <ProtectedRoute>
+                <AdminTechnicians />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/admin/users"
+            element={
+              <ProtectedRoute>
+                <AdminUsers />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/admin/tickets-report"
+            element={
+              <ProtectedRoute>
+                <AdminTicketsReport />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/admin/wider-mttr"
+            element={
+              <ProtectedRoute>
+                <AdminWiderMttr />
               </ProtectedRoute>
             }
           />

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bot, User, Wrench, Eye, EyeOff, Loader2 } from 'lucide-react';
+import { Bot, User, Wrench, ShieldCheck, Eye, EyeOff, Loader2 } from 'lucide-react';
 import useAuth from '../hooks/useAuth';
 
 const Login = () => {
@@ -32,6 +32,8 @@ const Login = () => {
         navigate('/user');
       } else if (role === 'technician') {
         navigate('/technician');
+      } else if (role === 'admin') {
+        navigate('/admin/dashboard');
       }
     } catch (error) {
       setError(error.message || 'Login failed. Please check your credentials.');
@@ -40,7 +42,7 @@ const Login = () => {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#E9F1FA] to-[#00ABE4] p-6">
-      <div className="bg-white shadow-xl rounded-2xl p-8 w-full max-w-md">
+      <div className="bg-white shadow-xl rounded-2xl p-8 w-full max-w-lg">
         <div className="flex justify-center mb-8">
           <div className="bg-[#00ABE4] p-4 rounded-full">
             <Bot className="w-12 h-12 text-white" />
@@ -61,40 +63,56 @@ const Login = () => {
         )}
 
         <div className="space-y-6">
-          {/* Enhanced Role Selection */}
+          {/* Enhanced 3-Way Role Selection */}
           <div className="mb-6">
-            <label className="block text-gray-700 mb-4 font-semibold text-base">Select Your Role</label>
-            <div className="grid grid-cols-2 gap-4">
+            <label className="block text-gray-700 mb-3 font-semibold text-base">Select Your Role</label>
+            <div className="grid grid-cols-3 gap-3">
               <button
                 type="button"
                 onClick={() => setRole('user')}
-                className={`p-4 border-2 rounded-xl flex flex-col items-center transition-all duration-200 ${role === 'user'
+                className={`p-3.5 border-2 rounded-xl flex flex-col items-center transition-all duration-200 cursor-pointer ${role === 'user'
                     ? 'border-[#00ABE4] bg-[#E9F1FA] shadow-md'
                     : 'border-gray-200 hover:border-gray-300'
                   }`}
               >
-                <div className={`p-3 rounded-full mb-3 ${role === 'user' ? 'bg-[#00ABE4] text-white' : 'bg-gray-100 text-gray-600'
+                <div className={`p-2.5 rounded-full mb-2 ${role === 'user' ? 'bg-[#00ABE4] text-white' : 'bg-gray-100 text-gray-600'
                   }`}>
-                  <User className="w-6 h-6" />
+                  <User className="w-5 h-5" />
                 </div>
-                <span className={`font-medium ${role === 'user' ? 'text-[#00ABE4]' : 'text-gray-600'
+                <span className={`font-medium text-sm ${role === 'user' ? 'text-[#00ABE4] font-semibold' : 'text-gray-600'
                   }`}>User</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => setRole('technician')}
-                className={`p-4 border-2 rounded-xl flex flex-col items-center transition-all duration-200 ${role === 'technician'
+                className={`p-3.5 border-2 rounded-xl flex flex-col items-center transition-all duration-200 cursor-pointer ${role === 'technician'
                     ? 'border-[#00ABE4] bg-[#E9F1FA] shadow-md'
                     : 'border-gray-200 hover:border-gray-300'
                   }`}
               >
-                <div className={`p-3 rounded-full mb-3 ${role === 'technician' ? 'bg-[#00ABE4] text-white' : 'bg-gray-100 text-gray-600'
+                <div className={`p-2.5 rounded-full mb-2 ${role === 'technician' ? 'bg-[#00ABE4] text-white' : 'bg-gray-100 text-gray-600'
                   }`}>
-                  <Wrench className="w-6 h-6" />
+                  <Wrench className="w-5 h-5" />
                 </div>
-                <span className={`font-medium ${role === 'technician' ? 'text-[#00ABE4]' : 'text-gray-600'
+                <span className={`font-medium text-sm ${role === 'technician' ? 'text-[#00ABE4] font-semibold' : 'text-gray-600'
                   }`}>Technician</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setRole('admin')}
+                className={`p-3.5 border-2 rounded-xl flex flex-col items-center transition-all duration-200 cursor-pointer ${role === 'admin'
+                    ? 'border-[#00ABE4] bg-[#E9F1FA] shadow-md'
+                    : 'border-gray-200 hover:border-gray-300'
+                  }`}
+              >
+                <div className={`p-2.5 rounded-full mb-2 ${role === 'admin' ? 'bg-[#00ABE4] text-white' : 'bg-gray-100 text-gray-600'
+                  }`}>
+                  <ShieldCheck className="w-5 h-5" />
+                </div>
+                <span className={`font-medium text-sm ${role === 'admin' ? 'text-[#00ABE4] font-semibold' : 'text-gray-600'
+                  }`}>Admin 👑</span>
               </button>
             </div>
           </div>

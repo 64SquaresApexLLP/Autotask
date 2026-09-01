@@ -1,0 +1,260 @@
+DEVICE_ID,DEVICE_NAME,VENDOR,MODEL,ROLE,SITE_ID,MANAGEMENT_IP,SOFTWARE_RELEASE,IS_APPROVED_TRAIN,IS_VERSION_DRIFT_OUTLIER,ACTIVE_DEFECTS_COUNT,DEFECTS_JSON,SERVICES_COUNT,SUBSCRIBERS_COUNT,OPER_STATUS,LAST_AUDITED_AT
+dev:mx960-gldt,GLDT-CORE-01,Juniper,MX960,core,site:gldt,10.56.91.67,24.4R1-S3.6,True,False,0,[],24,24,ONLINE,2026-09-01T12:36:15.948965
+dev:mx304-sang,SANG-AGG-01,Juniper,MX304,aggregation,site:sang,10.58.208.119,22.3R3,False,True,0,[],6,6,WARNING,2026-09-01T12:36:15.949136
+dev:mx304-02,AGG-02,Juniper,MX304,aggregation,site:05,10.54.147.244,23.4R2,True,False,2,"[{""id"": ""def:evpn-qinq"", ""symptom"": ""VLAN-in-VLAN over EVPN affects cell-tower circuits"", ""severity"": ""high"", ""case"": ""case:jnpr-evpn-qinq""}, {""id"": ""def:acx-234-locker"", ""symptom"": ""Junos 23.4 breaks Locker and CO AP services on ACX 5448D"", ""severity"": ""high"", ""case"": null}]",1,1,WARNING,2026-09-01T12:36:15.949312
+dev:mx304-03,AGG-03,Juniper,MX304,aggregation,site:06,10.51.56.37,23.4R2,True,False,2,"[{""id"": ""def:evpn-qinq"", ""symptom"": ""VLAN-in-VLAN over EVPN affects cell-tower circuits"", ""severity"": ""high"", ""case"": ""case:jnpr-evpn-qinq""}, {""id"": ""def:acx-234-locker"", ""symptom"": ""Junos 23.4 breaks Locker and CO AP services on ACX 5448D"", ""severity"": ""high"", ""case"": null}]",1,1,WARNING,2026-09-01T12:36:15.949868
+dev:mx304-04,AGG-04,Juniper,MX304,aggregation,site:07,10.46.150.139,23.4R2,True,False,2,"[{""id"": ""def:evpn-qinq"", ""symptom"": ""VLAN-in-VLAN over EVPN affects cell-tower circuits"", ""severity"": ""high"", ""case"": ""case:jnpr-evpn-qinq""}, {""id"": ""def:acx-234-locker"", ""symptom"": ""Junos 23.4 breaks Locker and CO AP services on ACX 5448D"", ""severity"": ""high"", ""case"": null}]",1,1,WARNING,2026-09-01T12:36:15.949993
+dev:mx304-05,AGG-05,Juniper,MX304,aggregation,site:08,10.54.28.195,23.4R2,True,False,2,"[{""id"": ""def:evpn-qinq"", ""symptom"": ""VLAN-in-VLAN over EVPN affects cell-tower circuits"", ""severity"": ""high"", ""case"": ""case:jnpr-evpn-qinq""}, {""id"": ""def:acx-234-locker"", ""symptom"": ""Junos 23.4 breaks Locker and CO AP services on ACX 5448D"", ""severity"": ""high"", ""case"": null}]",1,1,WARNING,2026-09-01T12:36:15.950090
+dev:mx304-06,AGG-06,Juniper,MX304,aggregation,site:09,10.56.191.34,23.4R2,True,False,2,"[{""id"": ""def:evpn-qinq"", ""symptom"": ""VLAN-in-VLAN over EVPN affects cell-tower circuits"", ""severity"": ""high"", ""case"": ""case:jnpr-evpn-qinq""}, {""id"": ""def:acx-234-locker"", ""symptom"": ""Junos 23.4 breaks Locker and CO AP services on ACX 5448D"", ""severity"": ""high"", ""case"": null}]",1,1,WARNING,2026-09-01T12:36:15.950183
+dev:mx304-07,AGG-07,Juniper,MX304,aggregation,site:10,10.55.155.43,23.4R2,True,False,2,"[{""id"": ""def:evpn-qinq"", ""symptom"": ""VLAN-in-VLAN over EVPN affects cell-tower circuits"", ""severity"": ""high"", ""case"": ""case:jnpr-evpn-qinq""}, {""id"": ""def:acx-234-locker"", ""symptom"": ""Junos 23.4 breaks Locker and CO AP services on ACX 5448D"", ""severity"": ""high"", ""case"": null}]",1,1,WARNING,2026-09-01T12:36:15.950336
+dev:mx304-08,AGG-08,Juniper,MX304,aggregation,site:03,10.51.31.217,23.4R2,True,False,2,"[{""id"": ""def:evpn-qinq"", ""symptom"": ""VLAN-in-VLAN over EVPN affects cell-tower circuits"", ""severity"": ""high"", ""case"": ""case:jnpr-evpn-qinq""}, {""id"": ""def:acx-234-locker"", ""symptom"": ""Junos 23.4 breaks Locker and CO AP services on ACX 5448D"", ""severity"": ""high"", ""case"": null}]",1,1,WARNING,2026-09-01T12:36:15.951065
+dev:mx304-09,AGG-09,Juniper,MX304,aggregation,site:04,10.45.101.95,23.4R2,True,False,2,"[{""id"": ""def:evpn-qinq"", ""symptom"": ""VLAN-in-VLAN over EVPN affects cell-tower circuits"", ""severity"": ""high"", ""case"": ""case:jnpr-evpn-qinq""}, {""id"": ""def:acx-234-locker"", ""symptom"": ""Junos 23.4 breaks Locker and CO AP services on ACX 5448D"", ""severity"": ""high"", ""case"": null}]",1,1,WARNING,2026-09-01T12:36:15.951238
+dev:acx-gldt-a,GLDT-A,Juniper,ACX 5448D,access,site:gldt,10.45.87.64,21.4R3,False,True,0,[],0,0,WARNING,2026-09-01T12:36:15.951335
+dev:acx-sang-a,San Angelo-A,Juniper,ACX 5448D,access,site:sang,10.43.222.214,21.4R3,False,True,0,[],0,0,WARNING,2026-09-01T12:36:15.951402
+dev:acx-03,ACX-03,Juniper,ACX 5448D,access,site:06,10.53.151.18,22.4R3-S7.5,True,False,0,[],0,0,ONLINE,2026-09-01T12:36:15.951464
+dev:acx-04,ACX-04,Juniper,ACX 5448D,access,site:07,10.41.134.52,22.4R3-S7.5,True,False,0,[],0,0,ONLINE,2026-09-01T12:36:15.951568
+dev:acx-05,ACX-05,Juniper,ACX 5448D,access,site:08,10.46.183.44,22.4R3-S7.5,True,False,0,[],0,0,ONLINE,2026-09-01T12:36:15.951843
+dev:acx-06,ACX-06,Juniper,ACX 5448D,access,site:09,10.56.103.20,22.4R3-S7.5,True,False,0,[],0,0,ONLINE,2026-09-01T12:36:15.951946
+dev:acx-07,ACX-07,Juniper,ACX 5448D,access,site:10,10.42.155.23,22.4R3-S7.5,True,False,0,[],0,0,ONLINE,2026-09-01T12:36:15.952029
+dev:acx-08,ACX-08,Juniper,ACX 5448D,access,site:03,10.45.98.153,22.4R3-S7.5,True,False,0,[],0,0,ONLINE,2026-09-01T12:36:15.952123
+dev:acx-09,ACX-09,Juniper,ACX 5448D,access,site:04,10.44.235.105,22.4R3-S7.5,True,False,0,[],0,0,ONLINE,2026-09-01T12:36:15.952312
+dev:acx-10,ACX-10,Juniper,ACX 5448D,access,site:05,10.54.127.234,22.4R3-S7.5,True,False,0,[],0,0,ONLINE,2026-09-01T12:36:15.952393
+dev:acx-11,ACX-11,Juniper,ACX 5448D,access,site:06,10.48.106.110,22.4R3-S7.5,True,False,0,[],0,0,ONLINE,2026-09-01T12:36:15.952458
+dev:acx-12,ACX-12,Juniper,ACX 5448D,access,site:07,10.54.212.100,22.4R3-S7.5,True,False,0,[],0,0,ONLINE,2026-09-01T12:36:15.952517
+dev:acx-13,ACX-13,Juniper,ACX 5448D,access,site:08,10.58.49.198,22.4R3-S7.5,True,False,0,[],0,0,ONLINE,2026-09-01T12:36:15.952577
+dev:acx-14,ACX-14,Juniper,ACX 5448D,access,site:09,10.43.50.58,22.4R3-S7.5,True,False,0,[],0,0,ONLINE,2026-09-01T12:36:15.952637
+dev:acx-15,ACX-15,Juniper,ACX 5448D,access,site:10,10.42.204.208,22.4R3-S7.5,True,False,0,[],0,0,ONLINE,2026-09-01T12:36:15.952700
+dev:acx-16,ACX-16,Juniper,ACX 5448D,access,site:03,10.44.26.204,22.4R3-S7.5,True,False,0,[],0,0,ONLINE,2026-09-01T12:36:15.952760
+dev:acx-17,ACX-17,Juniper,ACX 5448D,access,site:04,10.45.58.50,22.4R3-S7.5,True,False,0,[],0,0,ONLINE,2026-09-01T12:36:15.952827
+dev:acx-18,ACX-18,Juniper,ACX 5448D,access,site:05,10.41.35.133,22.4R3-S7.5,True,False,0,[],0,0,ONLINE,2026-09-01T12:36:15.952890
+dev:acx-19,ACX-19,Juniper,ACX 5448D,access,site:06,10.50.105.68,22.4R3-S7.5,True,False,0,[],0,0,ONLINE,2026-09-01T12:36:15.953703
+dev:acx-20,ACX-20,Juniper,ACX 5448D,access,site:07,10.57.28.148,22.4R3-S7.5,True,False,0,[],0,0,ONLINE,2026-09-01T12:36:15.954297
+dev:acx-21,ACX-21,Juniper,ACX 5448D,access,site:08,10.57.140.191,22.4R3-S7.5,True,False,0,[],0,0,ONLINE,2026-09-01T12:36:15.954381
+dev:acx-22,ACX-22,Juniper,ACX 5448D,access,site:09,10.52.49.157,22.4R3-S7.5,True,False,0,[],0,0,ONLINE,2026-09-01T12:36:15.954449
+dev:acx-23,ACX-23,Juniper,ACX 5448D,access,site:10,10.53.176.92,22.4R3-S7.5,True,False,0,[],0,0,ONLINE,2026-09-01T12:36:15.954515
+dev:acx-24,ACX-24,Juniper,ACX 5448D,access,site:03,10.46.79.126,22.4R3-S7.5,True,False,0,[],0,0,ONLINE,2026-09-01T12:36:15.954578
+dev:acx-25,ACX-25,Juniper,ACX 5448D,access,site:04,10.59.226.194,22.4R3-S7.5,True,False,0,[],0,0,ONLINE,2026-09-01T12:36:15.954640
+dev:acx-26,ACX-26,Juniper,ACX 5448D,access,site:05,10.47.150.176,22.4R3-S7.5,True,False,0,[],0,0,ONLINE,2026-09-01T12:36:15.954703
+dev:acx-27,ACX-27,Juniper,ACX 5448D,access,site:06,10.43.124.96,22.4R3-S7.5,True,False,0,[],0,0,ONLINE,2026-09-01T12:36:15.954916
+dev:acx-28,ACX-28,Juniper,ACX 5448D,access,site:07,10.57.197.56,22.4R3-S7.5,True,False,0,[],0,0,ONLINE,2026-09-01T12:36:15.955138
+dev:acx-29,ACX-29,Juniper,ACX 5448D,access,site:08,10.58.74.77,22.4R3-S7.5,True,False,0,[],0,0,ONLINE,2026-09-01T12:36:15.955242
+dev:acx-30,ACX-30,Juniper,ACX 5448D,access,site:09,10.45.118.26,22.4R3-S7.5,True,False,0,[],0,0,ONLINE,2026-09-01T12:36:15.955318
+dev:acx-31,ACX-31,Juniper,ACX 5448D,access,site:10,10.52.213.7,22.4R3-S7.5,True,False,0,[],0,0,ONLINE,2026-09-01T12:36:15.955390
+dev:acx-32,ACX-32,Juniper,ACX 5448D,access,site:03,10.52.27.71,22.4R3-S7.5,True,False,0,[],0,0,ONLINE,2026-09-01T12:36:15.955517
+dev:acx-33,ACX-33,Juniper,ACX 5448D,access,site:04,10.58.182.69,22.4R3-S7.5,True,False,0,[],0,0,ONLINE,2026-09-01T12:36:15.955735
+dev:acx-34,ACX-34,Juniper,ACX 5448D,access,site:05,10.56.217.137,22.4R3-S7.5,True,False,0,[],0,0,ONLINE,2026-09-01T12:36:15.955820
+dev:acx-35,ACX-35,Juniper,ACX 5448D,access,site:06,10.48.240.55,22.4R3-S7.5,True,False,0,[],0,0,ONLINE,2026-09-01T12:36:15.955916
+dev:acx-36,ACX-36,Juniper,ACX 5448D,access,site:07,10.45.20.113,22.4R3-S7.5,True,False,0,[],0,0,ONLINE,2026-09-01T12:36:15.955971
+dev:acx-37,ACX-37,Juniper,ACX 5448D,access,site:08,10.44.180.146,22.4R3-S7.5,True,False,0,[],0,0,ONLINE,2026-09-01T12:36:15.956082
+dev:acx-38,ACX-38,Juniper,ACX 5448D,access,site:09,10.52.234.58,22.4R3-S7.5,True,False,0,[],0,0,ONLINE,2026-09-01T12:36:15.956152
+dev:acx-39,ACX-39,Juniper,ACX 5448D,access,site:10,10.55.172.238,22.4R3-S7.5,True,False,0,[],0,0,ONLINE,2026-09-01T12:36:15.956207
+dev:acx-40,ACX-40,Juniper,ACX 5448D,access,site:03,10.45.130.238,22.4R3-S7.5,True,False,0,[],0,0,ONLINE,2026-09-01T12:36:15.956238
+dev:olt-xg01,OLT-XG-01,Calix,E7-2 XG801,olt,site:07,10.43.42.174,R26.1.0,True,False,0,[],10,10,ONLINE,2026-09-01T12:36:15.956304
+spl:olt-xg01-0,SPL:OLT-XG01-0,Calix,E7-2,access,site:austin,10.54.52.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.956475
+spl:olt-xg01-1,SPL:OLT-XG01-1,Calix,E7-2,access,site:austin,10.54.53.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.956549
+spl:olt-xg01-2,SPL:OLT-XG01-2,Calix,E7-2,access,site:austin,10.54.54.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.956603
+spl:olt-xg01-3,SPL:OLT-XG01-3,Calix,E7-2,access,site:austin,10.54.55.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.956662
+dev:olt-xg02,OLT-XG-02,Calix,E7-2 XG801,olt,site:10,10.58.95.133,R26.1.0,True,False,0,[],0,0,ONLINE,2026-09-01T12:36:15.956715
+spl:olt-xg02-0,SPL:OLT-XG02-0,Calix,E7-2,access,site:austin,10.54.57.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.956764
+spl:olt-xg02-1,SPL:OLT-XG02-1,Calix,E7-2,access,site:austin,10.54.58.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.956793
+spl:olt-xg02-2,SPL:OLT-XG02-2,Calix,E7-2,access,site:austin,10.54.59.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.956826
+spl:olt-xg02-3,SPL:OLT-XG02-3,Calix,E7-2,access,site:austin,10.54.60.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.956848
+dev:olt-xg03,OLT-XG-03,Calix,E7-2 XG801,olt,site:05,10.55.163.63,R26.1.0,True,False,0,[],0,0,ONLINE,2026-09-01T12:36:15.956867
+spl:olt-xg03-0,SPL:OLT-XG03-0,Calix,E7-2,access,site:austin,10.54.62.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.956898
+spl:olt-xg03-1,SPL:OLT-XG03-1,Calix,E7-2,access,site:austin,10.54.63.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.956918
+spl:olt-xg03-2,SPL:OLT-XG03-2,Calix,E7-2,access,site:austin,10.54.64.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.956937
+spl:olt-xg03-3,SPL:OLT-XG03-3,Calix,E7-2,access,site:austin,10.54.65.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.956958
+dev:olt-xg04,OLT-XG-04,Calix,E7-2 XG801,olt,site:08,10.53.193.117,R26.1.0,True,False,0,[],0,0,ONLINE,2026-09-01T12:36:15.957049
+spl:olt-xg04-0,SPL:OLT-XG04-0,Calix,E7-2,access,site:austin,10.54.67.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.957088
+spl:olt-xg04-1,SPL:OLT-XG04-1,Calix,E7-2,access,site:austin,10.54.68.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.957109
+spl:olt-xg04-2,SPL:OLT-XG04-2,Calix,E7-2,access,site:austin,10.54.69.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.957135
+spl:olt-xg04-3,SPL:OLT-XG04-3,Calix,E7-2,access,site:austin,10.54.70.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.957155
+dev:olt-xg05,OLT-XG-05,Calix,E7-2 XG801,olt,site:03,10.54.203.3,R26.1.0,True,False,0,[],0,0,ONLINE,2026-09-01T12:36:15.957173
+spl:olt-xg05-0,SPL:OLT-XG05-0,Calix,E7-2,access,site:austin,10.54.72.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.957203
+spl:olt-xg05-1,SPL:OLT-XG05-1,Calix,E7-2,access,site:austin,10.54.73.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.957222
+spl:olt-xg05-2,SPL:OLT-XG05-2,Calix,E7-2,access,site:austin,10.54.74.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.957242
+spl:olt-xg05-3,SPL:OLT-XG05-3,Calix,E7-2,access,site:austin,10.54.75.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.957275
+dev:olt-xg06,OLT-XG-06,Calix,E7-2 XG801,olt,site:06,10.48.219.181,R26.1.0,True,False,0,[],0,0,ONLINE,2026-09-01T12:36:15.957294
+spl:olt-xg06-0,SPL:OLT-XG06-0,Calix,E7-2,access,site:austin,10.54.77.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.957323
+spl:olt-xg06-1,SPL:OLT-XG06-1,Calix,E7-2,access,site:austin,10.54.78.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.957347
+spl:olt-xg06-2,SPL:OLT-XG06-2,Calix,E7-2,access,site:austin,10.54.79.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.957371
+spl:olt-xg06-3,SPL:OLT-XG06-3,Calix,E7-2,access,site:austin,10.54.80.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.957390
+dev:olt-xg07,OLT-XG-07,Calix,E7-2 XG801,olt,site:09,10.43.128.183,R26.1.0,True,False,0,[],0,0,ONLINE,2026-09-01T12:36:15.957407
+spl:olt-xg07-0,SPL:OLT-XG07-0,Calix,E7-2,access,site:austin,10.54.82.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.957437
+spl:olt-xg07-1,SPL:OLT-XG07-1,Calix,E7-2,access,site:austin,10.54.83.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.957457
+spl:olt-xg07-2,SPL:OLT-XG07-2,Calix,E7-2,access,site:austin,10.54.84.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.957477
+spl:olt-xg07-3,SPL:OLT-XG07-3,Calix,E7-2,access,site:austin,10.54.85.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.957496
+dev:olt-xg08,OLT-XG-08,Calix,E7-2 XG801,olt,site:04,10.52.110.12,R26.1.0,True,False,0,[],0,0,ONLINE,2026-09-01T12:36:15.957513
+spl:olt-xg08-0,SPL:OLT-XG08-0,Calix,E7-2,access,site:austin,10.54.87.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.957543
+spl:olt-xg08-1,SPL:OLT-XG08-1,Calix,E7-2,access,site:austin,10.54.88.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.957567
+spl:olt-xg08-2,SPL:OLT-XG08-2,Calix,E7-2,access,site:austin,10.54.89.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.957632
+spl:olt-xg08-3,SPL:OLT-XG08-3,Calix,E7-2,access,site:austin,10.54.90.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.957670
+dev:olt-xg09,OLT-XG-09,Calix,E7-2 XG801,olt,site:07,10.48.126.207,R26.1.0,True,False,0,[],0,0,ONLINE,2026-09-01T12:36:15.957715
+spl:olt-xg09-0,SPL:OLT-XG09-0,Calix,E7-2,access,site:austin,10.54.92.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.957794
+spl:olt-xg09-1,SPL:OLT-XG09-1,Calix,E7-2,access,site:austin,10.54.93.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.957833
+spl:olt-xg09-2,SPL:OLT-XG09-2,Calix,E7-2,access,site:austin,10.54.94.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.957863
+spl:olt-xg09-3,SPL:OLT-XG09-3,Calix,E7-2,access,site:austin,10.54.95.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.957889
+dev:olt-xg10,OLT-XG-10,Calix,E7-2 XG801,olt,site:10,10.44.228.100,R26.1.0,True,False,0,[],0,0,ONLINE,2026-09-01T12:36:15.957911
+spl:olt-xg10-0,SPL:OLT-XG10-0,Calix,E7-2,access,site:austin,10.54.97.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.957952
+spl:olt-xg10-1,SPL:OLT-XG10-1,Calix,E7-2,access,site:austin,10.54.98.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.958018
+spl:olt-xg10-2,SPL:OLT-XG10-2,Calix,E7-2,access,site:austin,10.54.99.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.958048
+spl:olt-xg10-3,SPL:OLT-XG10-3,Calix,E7-2,access,site:austin,10.54.100.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.958069
+dev:olt-xg11,OLT-XG-11,Calix,E7-2 XG801,olt,site:05,10.40.221.48,R26.1.0,True,False,0,[],0,0,ONLINE,2026-09-01T12:36:15.958087
+spl:olt-xg11-0,SPL:OLT-XG11-0,Calix,E7-2,access,site:austin,10.54.102.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.958116
+spl:olt-xg11-1,SPL:OLT-XG11-1,Calix,E7-2,access,site:austin,10.54.103.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.958136
+spl:olt-xg11-2,SPL:OLT-XG11-2,Calix,E7-2,access,site:austin,10.54.104.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.958160
+spl:olt-xg11-3,SPL:OLT-XG11-3,Calix,E7-2,access,site:austin,10.54.105.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.958216
+dev:olt-xg12,OLT-XG-12,Calix,E7-2 XG801,olt,site:08,10.55.123.24,R26.1.0,True,False,0,[],0,0,ONLINE,2026-09-01T12:36:15.958247
+spl:olt-xg12-0,SPL:OLT-XG12-0,Calix,E7-2,access,site:austin,10.54.107.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.958280
+spl:olt-xg12-1,SPL:OLT-XG12-1,Calix,E7-2,access,site:austin,10.54.108.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.958301
+spl:olt-xg12-2,SPL:OLT-XG12-2,Calix,E7-2,access,site:austin,10.54.109.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.958330
+spl:olt-xg12-3,SPL:OLT-XG12-3,Calix,E7-2,access,site:austin,10.54.110.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.958353
+dev:olt-xg13,OLT-XG-13,Calix,E7-2 XG801,olt,site:03,10.50.223.58,R26.1.0,True,False,0,[],0,0,ONLINE,2026-09-01T12:36:15.958370
+spl:olt-xg13-0,SPL:OLT-XG13-0,Calix,E7-2,access,site:austin,10.54.112.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.958400
+spl:olt-xg13-1,SPL:OLT-XG13-1,Calix,E7-2,access,site:austin,10.54.113.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.958419
+spl:olt-xg13-2,SPL:OLT-XG13-2,Calix,E7-2,access,site:austin,10.54.114.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.958449
+spl:olt-xg13-3,SPL:OLT-XG13-3,Calix,E7-2,access,site:austin,10.54.115.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.958499
+dev:olt-xg14,OLT-XG-14,Calix,E7-2 XG801,olt,site:06,10.56.51.228,R26.1.0,True,False,0,[],0,0,ONLINE,2026-09-01T12:36:15.958540
+spl:olt-xg14-0,SPL:OLT-XG14-0,Calix,E7-2,access,site:austin,10.54.117.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.958640
+spl:olt-xg14-1,SPL:OLT-XG14-1,Calix,E7-2,access,site:austin,10.54.118.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.958679
+spl:olt-xg14-2,SPL:OLT-XG14-2,Calix,E7-2,access,site:austin,10.54.119.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.958710
+spl:olt-xg14-3,SPL:OLT-XG14-3,Calix,E7-2,access,site:austin,10.54.120.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.958737
+dev:olt-xg15,OLT-XG-15,Calix,E7-2 XG801,olt,site:09,10.53.90.216,R26.1.0,True,False,0,[],0,0,ONLINE,2026-09-01T12:36:15.958830
+spl:olt-xg15-0,SPL:OLT-XG15-0,Calix,E7-2,access,site:austin,10.54.122.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.958928
+spl:olt-xg15-1,SPL:OLT-XG15-1,Calix,E7-2,access,site:austin,10.54.123.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.959046
+spl:olt-xg15-2,SPL:OLT-XG15-2,Calix,E7-2,access,site:austin,10.54.124.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.959103
+spl:olt-xg15-3,SPL:OLT-XG15-3,Calix,E7-2,access,site:austin,10.54.125.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.959159
+dev:olt-xg16,OLT-XG-16,Calix,E7-2 XG801,olt,site:04,10.59.38.59,R26.1.0,True,False,0,[],0,0,ONLINE,2026-09-01T12:36:15.959231
+spl:olt-xg16-0,SPL:OLT-XG16-0,Calix,E7-2,access,site:austin,10.54.127.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.959312
+spl:olt-xg16-1,SPL:OLT-XG16-1,Calix,E7-2,access,site:austin,10.54.128.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.959361
+spl:olt-xg16-2,SPL:OLT-XG16-2,Calix,E7-2,access,site:austin,10.54.129.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.959417
+spl:olt-xg16-3,SPL:OLT-XG16-3,Calix,E7-2,access,site:austin,10.54.130.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.959467
+dev:olt-xg17,OLT-XG-17,Calix,E7-2 XG801,olt,site:07,10.55.167.182,R26.1.0,True,False,0,[],0,0,ONLINE,2026-09-01T12:36:15.959507
+spl:olt-xg17-0,SPL:OLT-XG17-0,Calix,E7-2,access,site:austin,10.54.132.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.959649
+spl:olt-xg17-1,SPL:OLT-XG17-1,Calix,E7-2,access,site:austin,10.54.133.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.959742
+spl:olt-xg17-2,SPL:OLT-XG17-2,Calix,E7-2,access,site:austin,10.54.134.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.959787
+spl:olt-xg17-3,SPL:OLT-XG17-3,Calix,E7-2,access,site:austin,10.54.135.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.959820
+dev:olt-xg18,OLT-XG-18,Calix,E7-2 XG801,olt,site:10,10.47.145.136,R26.1.0,True,False,0,[],0,0,ONLINE,2026-09-01T12:36:15.959850
+spl:olt-xg18-0,SPL:OLT-XG18-0,Calix,E7-2,access,site:austin,10.54.137.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.959917
+spl:olt-xg18-1,SPL:OLT-XG18-1,Calix,E7-2,access,site:austin,10.54.138.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.959967
+spl:olt-xg18-2,SPL:OLT-XG18-2,Calix,E7-2,access,site:austin,10.54.139.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.960026
+spl:olt-xg18-3,SPL:OLT-XG18-3,Calix,E7-2,access,site:austin,10.54.140.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.960065
+dev:olt-xg19,OLT-XG-19,Calix,E7-2 XG801,olt,site:05,10.43.200.138,R26.1.0,True,False,0,[],0,0,ONLINE,2026-09-01T12:36:15.960115
+spl:olt-xg19-0,SPL:OLT-XG19-0,Calix,E7-2,access,site:austin,10.54.142.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.960180
+spl:olt-xg19-1,SPL:OLT-XG19-1,Calix,E7-2,access,site:austin,10.54.143.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.960210
+spl:olt-xg19-2,SPL:OLT-XG19-2,Calix,E7-2,access,site:austin,10.54.144.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.960237
+spl:olt-xg19-3,SPL:OLT-XG19-3,Calix,E7-2,access,site:austin,10.54.145.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.960264
+dev:olt-xg20,OLT-XG-20,Calix,E7-2 XG801,olt,site:08,10.47.132.204,R26.1.0,True,False,0,[],0,0,ONLINE,2026-09-01T12:36:15.960287
+spl:olt-xg20-0,SPL:OLT-XG20-0,Calix,E7-2,access,site:austin,10.54.147.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.960329
+spl:olt-xg20-1,SPL:OLT-XG20-1,Calix,E7-2,access,site:austin,10.54.148.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.960358
+spl:olt-xg20-2,SPL:OLT-XG20-2,Calix,E7-2,access,site:austin,10.54.149.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.960413
+spl:olt-xg20-3,SPL:OLT-XG20-3,Calix,E7-2,access,site:austin,10.54.150.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.960633
+dev:olt-xg21,OLT-XG-21,Calix,E7-2 XG801,olt,site:03,10.44.162.22,R26.1.0,True,False,0,[],0,0,ONLINE,2026-09-01T12:36:15.960692
+spl:olt-xg21-0,SPL:OLT-XG21-0,Calix,E7-2,access,site:austin,10.54.152.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.960772
+spl:olt-xg21-1,SPL:OLT-XG21-1,Calix,E7-2,access,site:austin,10.54.153.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.960822
+spl:olt-xg21-2,SPL:OLT-XG21-2,Calix,E7-2,access,site:austin,10.54.154.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.960871
+spl:olt-xg21-3,SPL:OLT-XG21-3,Calix,E7-2,access,site:austin,10.54.155.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.960921
+dev:olt-xg22,OLT-XG-22,Calix,E7-2 XG801,olt,site:06,10.47.33.11,R26.1.0,True,False,0,[],0,0,ONLINE,2026-09-01T12:36:15.960961
+spl:olt-xg22-0,SPL:OLT-XG22-0,Calix,E7-2,access,site:austin,10.54.157.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.961088
+spl:olt-xg22-1,SPL:OLT-XG22-1,Calix,E7-2,access,site:austin,10.54.158.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.961155
+spl:olt-xg22-2,SPL:OLT-XG22-2,Calix,E7-2,access,site:austin,10.54.159.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.961210
+spl:olt-xg22-3,SPL:OLT-XG22-3,Calix,E7-2,access,site:austin,10.54.160.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.961257
+dev:olt-xg23,OLT-XG-23,Calix,E7-2 XG801,olt,site:09,10.49.67.205,R26.1.0,True,False,0,[],0,0,ONLINE,2026-09-01T12:36:15.961298
+spl:olt-xg23-0,SPL:OLT-XG23-0,Calix,E7-2,access,site:austin,10.54.162.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.961371
+spl:olt-xg23-1,SPL:OLT-XG23-1,Calix,E7-2,access,site:austin,10.54.163.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.961420
+spl:olt-xg23-2,SPL:OLT-XG23-2,Calix,E7-2,access,site:austin,10.54.164.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.961465
+spl:olt-xg23-3,SPL:OLT-XG23-3,Calix,E7-2,access,site:austin,10.54.165.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.961511
+dev:olt-xg24,OLT-XG-24,Calix,E7-2 XG801,olt,site:04,10.59.9.83,R26.1.0,True,False,0,[],0,0,ONLINE,2026-09-01T12:36:15.961550
+spl:olt-xg24-0,SPL:OLT-XG24-0,Calix,E7-2,access,site:austin,10.54.167.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.961615
+spl:olt-xg24-1,SPL:OLT-XG24-1,Calix,E7-2,access,site:austin,10.54.168.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.961662
+spl:olt-xg24-2,SPL:OLT-XG24-2,Calix,E7-2,access,site:austin,10.54.169.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.961718
+spl:olt-xg24-3,SPL:OLT-XG24-3,Calix,E7-2,access,site:austin,10.54.170.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.961764
+dev:olt-xg25,OLT-XG-25,Calix,E7-2 XG801,olt,site:07,10.49.122.7,R26.1.0,True,False,0,[],0,0,ONLINE,2026-09-01T12:36:15.961802
+spl:olt-xg25-0,SPL:OLT-XG25-0,Calix,E7-2,access,site:austin,10.54.172.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.961871
+spl:olt-xg25-1,SPL:OLT-XG25-1,Calix,E7-2,access,site:austin,10.54.173.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.961917
+spl:olt-xg25-2,SPL:OLT-XG25-2,Calix,E7-2,access,site:austin,10.54.174.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.961967
+spl:olt-xg25-3,SPL:OLT-XG25-3,Calix,E7-2,access,site:austin,10.54.175.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.962065
+dev:olt-xg26,OLT-XG-26,Calix,E7-2 XG801,olt,site:10,10.44.235.19,R26.1.0,True,False,0,[],0,0,ONLINE,2026-09-01T12:36:15.962109
+spl:olt-xg26-0,SPL:OLT-XG26-0,Calix,E7-2,access,site:austin,10.54.177.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.962196
+spl:olt-xg26-1,SPL:OLT-XG26-1,Calix,E7-2,access,site:austin,10.54.178.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.962244
+spl:olt-xg26-2,SPL:OLT-XG26-2,Calix,E7-2,access,site:austin,10.54.179.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.962304
+spl:olt-xg26-3,SPL:OLT-XG26-3,Calix,E7-2,access,site:austin,10.54.180.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.962354
+dev:olt-xg27,OLT-XG-27,Calix,E7-2 XG801,olt,site:sang,10.58.126.71,R26.1.0,True,False,0,[],0,0,ONLINE,2026-09-01T12:36:15.962394
+spl:olt-xg27-0,SPL:OLT-XG27-0,Calix,E7-2,access,site:austin,10.54.182.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.962462
+spl:olt-xg27-1,SPL:OLT-XG27-1,Calix,E7-2,access,site:austin,10.54.183.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.962518
+spl:olt-xg27-2,SPL:OLT-XG27-2,Calix,E7-2,access,site:austin,10.54.184.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.962563
+spl:olt-xg27-3,SPL:OLT-XG27-3,Calix,E7-2,access,site:austin,10.54.185.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.962610
+dev:olt-xg28,OLT-XG-28,Calix,E7-2 XG801,olt,site:08,10.55.91.21,R26.1.0,True,False,0,[],0,0,ONLINE,2026-09-01T12:36:15.962648
+spl:olt-xg28-0,SPL:OLT-XG28-0,Calix,E7-2,access,site:austin,10.54.187.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.962717
+spl:olt-xg28-1,SPL:OLT-XG28-1,Calix,E7-2,access,site:austin,10.54.188.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.962796
+spl:olt-xg28-2,SPL:OLT-XG28-2,Calix,E7-2,access,site:austin,10.54.189.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.962957
+spl:olt-xg28-3,SPL:OLT-XG28-3,Calix,E7-2,access,site:austin,10.54.190.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.963028
+dev:olt-xg29,OLT-XG-29,Calix,E7-2 XG801,olt,site:03,10.40.219.105,R26.1.0,True,False,0,[],0,0,ONLINE,2026-09-01T12:36:15.963083
+spl:olt-xg29-0,SPL:OLT-XG29-0,Calix,E7-2,access,site:austin,10.54.192.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.963212
+spl:olt-xg29-1,SPL:OLT-XG29-1,Calix,E7-2,access,site:austin,10.54.193.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.963267
+spl:olt-xg29-2,SPL:OLT-XG29-2,Calix,E7-2,access,site:austin,10.54.194.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.963319
+spl:olt-xg29-3,SPL:OLT-XG29-3,Calix,E7-2,access,site:austin,10.54.195.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.963348
+dev:olt-exa01,OLT-EXA-01,Calix,E7-2,olt,site:03,10.51.82.9,3.4.70.88,True,False,0,[],0,0,ONLINE,2026-09-01T12:36:15.963372
+dev:olt-exa02,OLT-EXA-02,Calix,E7-20,olt,site:10,10.45.19.178,3.4.70.88,True,False,0,[],0,0,ONLINE,2026-09-01T12:36:15.963394
+dev:olt-exa03,OLT-EXA-03,Calix,E7-2,olt,site:09,10.52.37.168,3.4.70.88,True,False,0,[],0,0,ONLINE,2026-09-01T12:36:15.963416
+dev:olt-exa04,OLT-EXA-04,Calix,E7-20,olt,site:08,10.49.106.86,3.4.70.88,True,False,0,[],0,0,ONLINE,2026-09-01T12:36:15.963444
+ont:olt-xg01-0-00,ONT:OLT-XG01-0-00,Calix,GP1100X,access,site:austin,10.54.200.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.963468
+ont:olt-xg01-0-01,ONT:OLT-XG01-0-01,Calix,GP1100X,access,site:austin,10.54.201.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.963488
+ont:olt-xg01-0-02,ONT:OLT-XG01-0-02,Calix,GP1100X,access,site:austin,10.54.202.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.963513
+ont:olt-xg01-0-03,ONT:OLT-XG01-0-03,Calix,GP1100X,access,site:austin,10.54.203.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.963533
+ont:olt-xg01-0-04,ONT:OLT-XG01-0-04,Calix,GP1100X,access,site:austin,10.54.204.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.963589
+ont:olt-xg01-0-05,ONT:OLT-XG01-0-05,Calix,GP1100X,access,site:austin,10.54.205.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.963634
+ont:olt-xg01-0-06,ONT:OLT-XG01-0-06,Calix,GP1100X,access,site:austin,10.54.206.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.963659
+ont:olt-xg01-0-07,ONT:OLT-XG01-0-07,Calix,GP1100X,access,site:austin,10.54.207.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.963679
+ont:olt-xg01-0-08,ONT:OLT-XG01-0-08,Calix,GP1100X,access,site:austin,10.54.208.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.963705
+ont:olt-xg01-0-09,ONT:OLT-XG01-0-09,Calix,GP1100X,access,site:austin,10.54.209.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.963729
+ont:olt-xg01-0-10,ONT:OLT-XG01-0-10,Calix,GP1100X,access,site:austin,10.54.210.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.963753
+ont:olt-xg01-0-11,ONT:OLT-XG01-0-11,Calix,GP1100X,access,site:austin,10.54.211.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.963773
+ont:olt-xg01-0-12,ONT:OLT-XG01-0-12,Calix,GP1100X,access,site:austin,10.54.212.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.963794
+ont:olt-xg01-0-13,ONT:OLT-XG01-0-13,Calix,GP1100X,access,site:austin,10.54.213.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.963828
+ont:olt-xg01-0-14,ONT:OLT-XG01-0-14,Calix,GP1100X,access,site:austin,10.54.214.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.963889
+ont:olt-xg01-0-15,ONT:OLT-XG01-0-15,Calix,GP1100X,access,site:austin,10.54.215.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.963922
+ont:olt-xg01-0-16,ONT:OLT-XG01-0-16,Calix,GP1100X,access,site:austin,10.54.216.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.963944
+ont:olt-xg01-0-17,ONT:OLT-XG01-0-17,Calix,GP1100X,access,site:austin,10.54.217.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.963964
+ont:olt-xg01-0-18,ONT:OLT-XG01-0-18,Calix,GP1100X,access,site:austin,10.54.218.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.963983
+ont:olt-xg01-0-19,ONT:OLT-XG01-0-19,Calix,GP1100X,access,site:austin,10.54.219.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.964067
+ont:olt-xg01-0-20,ONT:OLT-XG01-0-20,Calix,GP1100X,access,site:austin,10.54.220.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.964101
+ont:olt-xg01-0-21,ONT:OLT-XG01-0-21,Calix,GP1100X,access,site:austin,10.54.221.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.964127
+ont:olt-xg01-0-22,ONT:OLT-XG01-0-22,Calix,GP1100X,access,site:austin,10.54.222.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.964199
+ont:olt-xg01-0-23,ONT:OLT-XG01-0-23,Calix,GP1100X,access,site:austin,10.54.223.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.964256
+ont:olt-xg01-0-24,ONT:OLT-XG01-0-24,Calix,GP1100X,access,site:austin,10.54.224.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.964307
+ont:olt-xg01-0-25,ONT:OLT-XG01-0-25,Calix,GP1100X,access,site:austin,10.54.225.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.964440
+ont:olt-xg01-0-26,ONT:OLT-XG01-0-26,Calix,GP1100X,access,site:austin,10.54.226.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.964470
+ont:olt-xg01-0-27,ONT:OLT-XG01-0-27,Calix,GP1100X,access,site:austin,10.54.227.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.964496
+ont:olt-xg02-3-00,ONT:OLT-XG02-3-00,Calix,GP1100X,access,site:austin,10.54.228.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.964522
+ont:olt-xg02-3-01,ONT:OLT-XG02-3-01,Calix,GP1100X,access,site:austin,10.54.229.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.964556
+ont:olt-xg02-3-02,ONT:OLT-XG02-3-02,Calix,GP1100X,access,site:austin,10.54.230.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.964576
+ont:olt-xg02-3-03,ONT:OLT-XG02-3-03,Calix,GP1100X,access,site:austin,10.54.231.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.964596
+ont:olt-xg02-3-04,ONT:OLT-XG02-3-04,Calix,GP1100X,access,site:austin,10.54.232.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.964615
+ont:olt-xg02-3-05,ONT:OLT-XG02-3-05,Calix,GP1100X,access,site:austin,10.54.233.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.964635
+ont:olt-xg02-3-06,ONT:OLT-XG02-3-06,Calix,GP1100X,access,site:austin,10.54.234.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.964659
+ont:olt-xg02-3-07,ONT:OLT-XG02-3-07,Calix,GP1100X,access,site:austin,10.54.235.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.964678
+ont:olt-xg02-3-08,ONT:OLT-XG02-3-08,Calix,GP1100X,access,site:austin,10.54.236.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.964698
+ont:olt-xg02-3-09,ONT:OLT-XG02-3-09,Calix,GP1100X,access,site:austin,10.54.237.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.964740
+ont:olt-xg02-3-10,ONT:OLT-XG02-3-10,Calix,GP1100X,access,site:austin,10.54.238.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.964763
+ont:olt-xg02-3-11,ONT:OLT-XG02-3-11,Calix,GP1100X,access,site:austin,10.54.239.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.964787
+ont:olt-xg02-3-12,ONT:OLT-XG02-3-12,Calix,GP1100X,access,site:austin,10.54.240.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.964806
+ont:olt-xg02-3-13,ONT:OLT-XG02-3-13,Calix,GP1100X,access,site:austin,10.54.241.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.964825
+ont:olt-xg02-3-14,ONT:OLT-XG02-3-14,Calix,GP1100X,access,site:austin,10.54.242.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.964845
+ont:olt-xg02-3-15,ONT:OLT-XG02-3-15,Calix,GP1100X,access,site:austin,10.54.243.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.964864
+ont:olt-xg02-3-16,ONT:OLT-XG02-3-16,Calix,GP1100X,access,site:austin,10.54.244.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.964883
+ont:olt-xg02-3-17,ONT:OLT-XG02-3-17,Calix,GP1100X,access,site:austin,10.54.245.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.964903
+ont:olt-xg02-3-18,ONT:OLT-XG02-3-18,Calix,GP1100X,access,site:austin,10.54.246.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.964922
+ont:olt-xg02-3-19,ONT:OLT-XG02-3-19,Calix,GP1100X,access,site:austin,10.54.247.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.964941
+ont:olt-xg02-3-20,ONT:OLT-XG02-3-20,Calix,GP1100X,access,site:austin,10.54.248.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.964963
+ont:olt-xg02-3-21,ONT:OLT-XG02-3-21,Calix,GP1100X,access,site:austin,10.54.249.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.964987
+ont:olt-xg02-3-22,ONT:OLT-XG02-3-22,Calix,GP1100X,access,site:austin,10.54.250.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.965014
+ont:olt-xg02-3-23,ONT:OLT-XG02-3-23,Calix,GP1100X,access,site:austin,10.54.251.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.965063
+ont:olt-xg02-3-24,ONT:OLT-XG02-3-24,Calix,GP1100X,access,site:austin,10.54.252.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.965125
+ont:olt-xg02-3-25,ONT:OLT-XG02-3-25,Calix,GP1100X,access,site:austin,10.54.253.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.965214
+ont:olt-xg02-3-26,ONT:OLT-XG02-3-26,Calix,GP1100X,access,site:austin,10.54.254.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.965271
+ont:olt-xg02-3-27,ONT:OLT-XG02-3-27,Calix,GP1100X,access,site:austin,10.54.255.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.965328
+ont:olt-xg02-3-28,ONT:OLT-XG02-3-28,Calix,GP1100X,access,site:austin,10.54.256.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.965387
+ont:olt-xg02-3-29,ONT:OLT-XG02-3-29,Calix,GP1100X,access,site:austin,10.54.257.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.965444
+ont:olt-xg02-3-30,ONT:OLT-XG02-3-30,Calix,GP1100X,access,site:austin,10.54.258.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.965509
+ont:olt-xg02-3-31,ONT:OLT-XG02-3-31,Calix,GP1100X,access,site:austin,10.54.259.1,22.4R3-S7.5,True,False,0,[],8,24,ONLINE,2026-09-01T12:36:15.965596

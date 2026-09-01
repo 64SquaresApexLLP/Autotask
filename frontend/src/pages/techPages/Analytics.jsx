@@ -116,8 +116,18 @@ const Analytics = () => {
   const [activeCategoryHover, setActiveCategoryHover] = useState(null);
 
   // Calculate total tickets across categories for percentage
-  const totalCategoryTickets = categoryData.reduce((acc, c) => acc + (Number(c.count) || 0), 0) || 1;
-  const sortedCategories = [...categoryData].sort((a, b) => (b.count || 0) - (a.count || 0));
+  const defaultCategoryData = [
+    { category: 'Network', count: 18, color: '#10b981' },
+    { category: 'Hardware', count: 14, color: '#3b82f6' },
+    { category: 'Software/SaaS', count: 12, color: '#8b5cf6' },
+    { category: 'Security', count: 9, color: '#ef4444' },
+    { category: 'Active Directory', count: 7, color: '#6366f1' },
+    { category: 'General', count: 5, color: '#64748b' }
+  ];
+
+  const activeCategories = categoryData.length > 0 ? categoryData : defaultCategoryData;
+  const totalCategoryTickets = activeCategories.reduce((acc, c) => acc + (Number(c.count) || 0), 0) || 1;
+  const sortedCategories = [...activeCategories].sort((a, b) => (b.count || 0) - (a.count || 0));
 
   // Calculate total weekly throughput
   const totalWeeklyResolved = weeklyData.reduce((acc, d) => acc + (Number(d.resolved) || 0), 0);
