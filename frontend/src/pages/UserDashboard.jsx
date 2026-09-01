@@ -26,9 +26,9 @@ const UserDashboard = () => {
     description: '',
     priority: 'medium',
     due_date: '',
-    requester_name: '',
-    phone_number: '',
-    user_email: ''
+    requester_name: user?.full_name || user?.username || '',
+    phone_number: user?.phone_number || user?.phone || '',
+    user_email: user?.email || user?.username || ''
   });
 
   useEffect(() => {
@@ -39,6 +39,19 @@ const UserDashboard = () => {
   useEffect(() => {
     loadUserTickets();
   }, []);
+
+  // Keep the signed-in user's contact info in sync with the create-ticket form.
+  // These fields (name, phone, email) are read-only on the form and are
+  // automatically attached to every ticket the user creates.
+
+  useEffect(() => {
+    setFormData(prev => ({
+      ...prev,
+      requester_name: user?.full_name || user?.username || '',
+      phone_number: user?.phone_number || user?.phone || '',
+      user_email: user?.email || user?.username || ''
+    }));
+  }, [user]);
 
   const loadUserTickets = async () => {
     try {
@@ -103,8 +116,9 @@ const UserDashboard = () => {
 
       const ticketData = {
         ...formData,
-        user_email: user?.email || user?.username,
-        requester_name: formData.requester_name || user?.full_name || user?.username
+        user_email: formData.user_email || user?.email || user?.username,
+        requester_name: formData.requester_name || user?.full_name || user?.username,
+        phone_number: formData.phone_number || user?.phone_number || user?.phone || ''
       };
 
       // Single real call to the AI workflow - the pipeline modal shows a
@@ -119,9 +133,9 @@ const UserDashboard = () => {
         description: '',
         priority: 'medium',
         due_date: '',
-        requester_name: '',
-        phone_number: '',
-        user_email: ''
+        requester_name: user?.full_name || user?.username || '',
+        phone_number: user?.phone_number || user?.phone || '',
+        user_email: user?.email || user?.username || ''
       });
       setShowCreateForm(false);
 
@@ -283,10 +297,12 @@ const UserDashboard = () => {
                       <input
                         type="text"
                         name="requester_name"
-                        value={formData.requester_name}
+                        value={formData.requester_name || user?.full_name || user?.username || ''}
                         onChange={handleInputChange}
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#00ABE4] focus:border-transparent"
+                        readOnly
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg bg-gray-50 text-gray-700 cursor-not-allowed focus:ring-2 focus:ring-[#00ABE4] focus:border-transparent"
                         placeholder={user?.full_name || user?.username || "Your name"}
+                        title="Your name is taken from your profile and cannot be changed"
                       />
                     </div>
 
@@ -297,10 +313,12 @@ const UserDashboard = () => {
                       <input
                         type="tel"
                         name="phone_number"
-                        value={formData.phone_number}
+                        value={formData.phone_number || user?.phone_number || user?.phone || ''}
                         onChange={handleInputChange}
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#00ABE4] focus:border-transparent"
+                        readOnly
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg bg-gray-50 text-gray-700 cursor-not-allowed focus:ring-2 focus:ring-[#00ABE4] focus:border-transparent"
                         placeholder="Your phone number"
+                        title="Your phone number is taken from your profile and cannot be changed"
                       />
                     </div>
 
@@ -324,10 +342,12 @@ const UserDashboard = () => {
                       <input
                         type="email"
                         name="user_email"
-                        value={formData.user_email}
+                        value={formData.user_email || user?.email || user?.username || ''}
                         onChange={handleInputChange}
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#00ABE4] focus:border-transparent"
+                        readOnly
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg bg-gray-50 text-gray-700 cursor-not-allowed focus:ring-2 focus:ring-[#00ABE4] focus:border-transparent"
                         placeholder={user?.email || user?.username || "your.email@example.com"}
+                        title="Your email is taken from your profile and cannot be changed"
                       />
                     </div>
                   </div>
@@ -443,47 +463,6 @@ const UserDashboard = () => {
                                 )}
                               </div>
                             )}
-
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-gray-500">
-                              <div className="flex items-center space-x-2">
-                                <User className="w-4 h-4" />
-                                <span>Requester: {ticket.requester_name || 'Not specified'}</span>
-                              </div>
-                              {ticket.phone_number && (
-                                <div className="flex items-center space-x-2">
-                                  <Phone className="w-4 h-4" />
-                                  <span>{ticket.phone_number}</span>
-                                </div>
-                              )}
-                              {ticket.user_email && (
-                                <div className="flex items-center space-x-2">
-                                  <Mail className="w-4 h-4" />
-                                  <span>{ticket.user_email}</span>
-                                </div>
-                              )}
-                              {ticket.due_date && (
-                                <div className="flex items-center space-x-2">
-                                  <Calendar className="w-4 h-4" />
-                                  <span>Due: {new Date(ticket.due_date).toLocaleDateString()}</span>
-                                </div>
-                              )}
-                              <div className="flex items-center space-x-2">
-                                <Clock className="w-4 h-4" />
-                                <span>Created: {new Date(ticket.created_at || Date.now()).toLocaleDateString()}</span>
-                              </div>
-                              {ticket.assigned_technician && (
-                                <div className="flex items-center space-x-2">
-                                  <User className="w-4 h-4" />
-                                  <span>Assigned to: {ticket.assigned_technician}</span>
-                                </div>
-                              )}
-                              {ticket.time_spent && (
-                                <div className="flex items-center space-x-2 font-medium text-[#00ABE4]">
-                                  <Clock className="w-4 h-4" />
-                                  <span>Time Logged: {ticket.time_spent}</span>
-                                </div>
-                              )}
-                            </div>
                           </div>
 
                           <div className="flex items-center gap-3 shrink-0">
