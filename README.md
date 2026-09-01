@@ -1,6 +1,6 @@
 # TeamLogic AutoTask - IT Support Ticket Management System
 
-A comprehensive AI-powered IT support ticket management system built with Snowflake Cortex LLM.
+A comprehensive AI-powered IT support ticket management system built with Streamlit and Snowflake Cortex LLM.
 
 ## 🚀 Features
 
@@ -10,9 +10,7 @@ A comprehensive AI-powered IT support ticket management system built with Snowfl
 - **Resolution Generation**: AI-generated resolution suggestions based on historical data
 - **Email Notifications**: Automated confirmation emails to users
 - **Knowledge Management**: Persistent knowledge base with similar ticket tracking
-- **Core Processing Engine**: Backend processing without UI dependencies
-- **FastAPI Backend**: RESTful API with complete AI workflow integration
-- **Swagger Documentation**: Interactive API documentation with testing interface
+- **Real-time Dashboard**: Interactive Streamlit interface with analytics
 
 ## 📁 Project Structure
 
@@ -21,17 +19,8 @@ teamlogic-autotask/
 ├── README.md                       # This file
 ├── requirements.txt                # Python dependencies
 ├── .env                           # Environment variables (not in repo)
-├── app.py                         # Main Streamlit application
 ├── config.py                      # Configuration settings
-├── start_backend.py               # FastAPI backend starter script
-│
-├── backend/                       # FastAPI Backend
-│   ├── main.py                    # Main FastAPI application
-│   ├── run.py                     # Backend runner script
-│   ├── test_api.py                # API testing script
-│   ├── requirements.txt           # Backend dependencies
-│   ├── README.md                  # Backend documentation
-│   └── API_ENDPOINTS.md           # Complete API documentation
+├── backend/                       # FastAPI backend server
 │
 ├── src/                           # Source code
 │   ├── agents/                    # AI Agents
@@ -78,39 +67,49 @@ teamlogic-autotask/
 3. **Configure environment variables**
    Create a `.env` file with:
    ```env
-   # Snowflake Configuration
+   # Snowflake Configuration for Key-Pair (RSA) Authentication — no password / no MFA/TOTP
    SF_ACCOUNT=your_account
    SF_USER=your_username
-   SF_PASSWORD=your_password
-   SF_WAREHOUSE=your_warehouse
-   SF_DATABASE=your_database
-   SF_SCHEMA=your_schema
-   SF_ROLE=your_role
-   SF_PASSCODE=your_mfa_code
+   SF_AUTHENTICATOR=keypair
+   SF_PRIVATE_KEY_PATH=/absolute/path/to/rsa_key.p8
+   SF_PRIVATE_KEY_PWD=
 
    # Email Configuration
+   EMAIL_ACCOUNT=your_email_account
    SUPPORT_EMAIL_PASSWORD=your_app_password
+   IMAP_SERVER=imap.gmail.com
+   EMAIL_FOLDER=inbox
+
+   # Support Contact Info
    SUPPORT_PHONE=your_phone
    SUPPORT_EMAIL=your_email
    ```
 
-4. **Run the application**
-   
-   **Option A: Streamlit Frontend**
-   ```bash
-   streamlit run app.py
-   ```
-   
-   **Option B: FastAPI Backend**
-   ```bash
-   # Using the starter script
-   python start_backend.py
-   
-   # Or directly with uvicorn
-   uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
-   ```
-   
-   **API Documentation**: http://localhost:8000/docs
+### 🔑 Snowflake Key-Pair (RSA) Authentication (recommended)
+The app authenticates to Snowflake with an RSA key pair instead of a password/TOTP, so the
+service account never triggers an MFA prompt. One-time setup (as the account owner):
+
+```bash
+# 1. Generate the key pair (or run the bundled helper)
+openssl genrsa 2048 2>/dev/null | openssl pkcs8 -topk8 -inform PEM -out rsa_key.p8 -nocrypt
+openssl rsa -in rsa_key.p8 -pubout -out rsa_key.pub
+
+# 2. Register the public key on the Snowflake user (AccountAdmin)
+#    ALTER USER ATISHC SET RSA_PUBLIC_KEY='<contents of rsa_key.pub, base64 body only>';
+
+# 3. Or let the helper generate + print + optionally register + verify everything:
+python scripts/setup_keypair_auth.py            # generate keys + print ALTER USER
+python scripts/setup_keypair_auth.py --register # also run the ALTER USER (needs password in .env, one-time)
+python scripts/setup_keypair_auth.py --test     # verify key-pair connection only
+```
+
+Connect points already wired for key-pair auth: `src/database/snowflake_db.py`
+(`SnowflakeConnection`, used by the backend/site uploader), the chatbot Cortex
+`llm_service`, and the chatbot SQLAlchemy engine. Set `SF_AUTHENTICATOR=keypair`
+(and the `SNOWFLAKE_*` aliases in `.env`) and ensure `SF_PASSWORD`/`SF_PASSCODE`
+are blank — then no password and no TOTP is ever used for this account.
+
+
 
 ## 🔧 Configuration
 
@@ -125,20 +124,10 @@ teamlogic-autotask/
 
 ## 📊 Usage
 
-### Web Interface (Streamlit)
 1. **Manual Ticket Creation**: Use the web interface to submit tickets
 2. **Email Integration**: Send emails to monitored inbox for automatic processing
 3. **Dashboard**: View ticket analytics and recent activity
 4. **Assignment**: Tickets are automatically assigned to best-matched technicians
-
-### API Interface (FastAPI)
-1. **Create Tickets**: POST `/tickets` with title, description, and due date
-2. **Get Ticket Details**: GET `/tickets/{ticket_number}`
-3. **Get Assigned Technician**: GET `/tickets/{ticket_number}/technician`
-4. **List All Tickets**: GET `/tickets` with optional filtering and pagination
-5. **Health Check**: GET `/health` for monitoring
-
-**API Documentation**: http://localhost:8000/docs
 
 ## 🔄 Workflow
 

@@ -46,9 +46,16 @@ class DataManager:
             with open(self.data_ref_file, 'r') as f:
                 data = json.load(f)
 
-            employees_data = data.get("Employees", {}).get("Employee", [])
+            # Handle both flat array and nested structure
+            if isinstance(data, list):
+                # Flat array structure
+                items = data
+            else:
+                # Nested structure (fallback)
+                employees_data = data.get("Employees", {}).get("Employee", [])
+                items = employees_data
 
-            for item in employees_data:
+            for item in items:
                 field = item.get("Field")
                 value = item.get("Value")
                 label = item.get("Label")
@@ -59,6 +66,7 @@ class DataManager:
                     self.reference_data[field][str(value)] = label
 
             print(f"Successfully loaded reference data from {self.data_ref_file}")
+            print(f"Loaded {len(self.reference_data)} field types with mappings")
         except json.JSONDecodeError as e:
             print(f"Error decoding JSON from {self.data_ref_file}: {e}")
         except Exception as e:
@@ -315,3 +323,15 @@ class DataManager:
                 continue
 
         return sorted(filtered_tickets, key=lambda x: x["created_at"], reverse=True)
+
+def load_kb_data():
+    from config import KNOWLEDGEBASE_FILE
+    if os.path.exists(KNOWLEDGEBASE_FILE):
+        with open(KNOWLEDGEBASE_FILE, 'r') as f:
+            return json.load(f)
+    return []
+
+def save_kb_data(kb_data):
+    from config import KNOWLEDGEBASE_FILE
+    with open(KNOWLEDGEBASE_FILE, 'w') as f:
+        json.dump(kb_data, f, indent=2)

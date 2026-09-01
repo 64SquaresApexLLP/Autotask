@@ -313,7 +313,7 @@ class ImageProcessor:
         
         return found_categories
 
-    def classify_image_content(self, image_metadata: Dict, model: str = 'mixtral-8x7b') -> Optional[Dict]:
+    def classify_image_content(self, image_metadata: Dict, model: str = 'llama3.1-70b') -> Optional[Dict]:
         """
         Classify the image content and extract issue-related information using LLM.
 
@@ -849,7 +849,7 @@ class ImageProcessor:
 
         return classification
 
-    def process_image(self, image_path: str, model: str = 'mixtral-8x7b') -> Optional[Dict]:
+    def process_image(self, image_path: str, model: str = 'llama3.1-70b') -> Optional[Dict]:
         """
         Complete image processing pipeline: validation, metadata extraction, and classification.
 
@@ -899,7 +899,7 @@ class ImageProcessor:
             print(f"Failed to convert image to base64: {e}")
             return None
 
-    def save_processed_image_data(self, image_result: Dict, output_path: Optional[str] = None) -> bool:
+    def save_processed_image_data(self, image_result: Dict, output_path: str = None) -> bool:
         """
         Save processed image data to JSON file.
 

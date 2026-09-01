@@ -1,6 +1,6 @@
 """
 AI/LLM processing module for TeamLogic-AutoTask application.
-Handles metadata extraction, ticket classification, and resolution generation using LLM.
+Handles metadata extraction, ticket classification, and resolution generation using Snowflake Cortex LLM.
 """
 
 import json
@@ -29,7 +29,24 @@ class AIProcessor:
         self.db_connection = db_connection
         self.reference_data = reference_data
 
-    def extract_metadata(self, title: str, description: str, model: str = 'llama3-8b') -> Optional[Dict]:
+    def _find_value_by_label(self, field_name: str, label: str) -> str:
+        """
+        Find the value (ID) for a given label in the reference data.
+        
+        Args:
+            field_name (str): The field name (e.g., "issuetype", "subissuetype")
+            label (str): The label to search for
+            
+        Returns:
+            str: The value (ID) for the label, or "N/A" if not found
+        """
+        if field_name in self.reference_data:
+            for value, ref_label in self.reference_data[field_name].items():
+                if ref_label.lower() == label.lower():
+                    return value
+        return "N/A"
+
+    def extract_metadata(self, title: str, description: str, model: str = 'llama3.1-70b') -> Optional[Dict]:
         """
         Extracts structured metadata from the ticket title and description using LLM.
 
@@ -73,13 +90,66 @@ class AIProcessor:
         }}
         """
         print("Extracting metadata with LLM...")
-        extracted_data = self.db_connection.call_cortex_llm(prompt, model=model)
+        extracted_data = None
+        if self.db_connection and self.db_connection.is_connected():
+            try:
+                extracted_data = self.db_connection.call_cortex_llm(prompt, model=model)
+            except Exception as e:
+                print(f"⚠️ Cortex LLM call failed: {e}")
+                extracted_data = None
+
         if extracted_data:
             extracted_data["STATUS"] = "Open"
-        return extracted_data
+            return extracted_data
+
+        # Robust Heuristic Fallback when LLM is offline or Snowflake SSO is disconnected
+        print("ℹ️ Using intelligent rule-based metadata extraction fallback...")
+        text_combined = f"{title} {description}".lower()
+
+        # Determine affected system
+        affected_system = "Workstation / OS"
+        if any(w in text_combined for w in ['vpn', 'wifi', 'wi-fi', 'network', 'internet', 'dns', 'gateway', 'dhcp', 'ip']):
+            affected_system = "Network / VPN"
+        elif any(w in text_combined for w in ['outlook', 'email', 'mail', 'exchange', 'inbox', 'spam', 'phishing']):
+            affected_system = "Email / Outlook"
+        elif any(w in text_combined for w in ['printer', 'print', 'spooler', 'paper', 'jam', 'toner']):
+            affected_system = "Printer"
+        elif any(w in text_combined for w in ['active directory', 'password', 'lockout', 'login', 'account', 'credential', 'access denied', 'permission']):
+            affected_system = "Active Directory / Identity"
+        elif any(w in text_combined for w in ['excel', 'teams', 'slack', 'chrome', 'browser', 'salesforce', 'adobe', 'app', 'crash', 'freeze']):
+            affected_system = "Software / SaaS"
+        elif any(w in text_combined for w in ['mac', 'macbook', 'apple', 'macos', 'jamf', 'ios']):
+            affected_system = "macOS / Apple"
+        elif any(w in text_combined for w in ['server', 'backup', 'datto', 'veeam', 'hyper-v', 'virtual']):
+            affected_system = "Server / Backup"
+        elif any(w in text_combined for w in ['screen', 'monitor', 'keyboard', 'mouse', 'battery', 'overheating', 'laptop', 'hardware', 'dock']):
+            affected_system = "Hardware"
+
+        # Determine urgency
+        urgency = "Medium"
+        if any(w in text_combined for w in ['urgent', 'critical', 'immediately', 'outage', 'down', 'locked out', 'blocked', 'emergency']):
+            urgency = "High"
+        elif any(w in text_combined for w in ['low', 'minor', 'cosmetic', 'question']):
+            urgency = "Low"
+
+        # Extract keywords
+        raw_words = re.findall(r'\b[a-zA-Z0-9_\-\.]{3,}\b', text_combined)
+        stop_words = {'the', 'and', 'for', 'with', 'this', 'that', 'from', 'user', 'have', 'been', 'cannot', 'unable', 'please', 'help', 'not', 'issue', 'problem', 'reported'}
+        keywords = [w for w in raw_words if w not in stop_words][:8]
+
+        return {
+            "main_issue": title.strip() or "Reported IT Issue",
+            "affected_system": affected_system,
+            "urgency_level": urgency,
+            "error_messages": "See description for error signatures and symptoms",
+            "technical_keywords": keywords if keywords else ["IT Support", "Workstation"],
+            "user_actions": "Standard workplace operations",
+            "resolution_indicators": "Systematic diagnostic troubleshooting and standard IT procedure",
+            "STATUS": "Open"
+        }
 
     def classify_ticket(self, new_ticket_data: Dict, extracted_metadata: Dict,
-                       similar_tickets: List[Dict], model: str = 'mixtral-8x7b') -> Optional[Dict]:
+                       similar_tickets: List[Dict], model: str = 'llama3.1-70b') -> Optional[Dict]:
         """
         Classifies the new ticket (ISSUETYPE, SUBISSUETYPE, TICKETCATEGORY, TICKETTYPE, PRIORITY)
         based on extracted metadata and similar tickets using LLM.
@@ -109,14 +179,45 @@ class AIProcessor:
             summary_str += f"{field}: {info['Value']} (Label: {label}, appeared {info['Count']} times)\n"
 
         classification_prompt = f"""
-        You are an expert IT support ticket classifier. Based on the new ticket details and similar historical tickets,
-        classify the new ticket for the following categories: ISSUETYPE, SUBISSUETYPE, TICKETCATEGORY, TICKETTYPE, and PRIORITY.
-        The STATUS should be 'Open'.
+        You are an expert IT support ticket classifier. Analyze the ticket content carefully and classify it based on what the issue is actually about.
 
-        New Ticket Title: "{new_ticket_data['title']}"
-        New Ticket Description: "{new_ticket_data['description']}"
-        New Ticket Extracted Metadata: {json.dumps(extracted_metadata, indent=2)}
-        New Ticket Initial Priority: "{new_ticket_data['priority']}"
+        **CRITICAL CLASSIFICATION RULES:**
+        1. **Content-First Analysis**: Base your classification PRIMARILY on the ticket title, description, and extracted metadata
+        2. **Logical Categorization**:
+           - Software applications (Teams, Office, browsers, etc.) → TICKETCATEGORY: Software/SaaS
+           - Hardware devices (printers, computers, phones) → TICKETCATEGORY: Hardware
+           - Network connectivity, WiFi, internet → TICKETCATEGORY: Network
+           - Email, Exchange, Outlook → TICKETCATEGORY: Email/Communication
+           - Security, passwords, access → TICKETCATEGORY: Security
+        3. **Ignore Misleading Patterns**: Do NOT be influenced by potentially incorrect historical classifications
+
+        **Classification Fields:**
+        - **ISSUETYPE** → Type of request (Incident=something broken, Request=asking for something, Problem=recurring issue, Change=modification)
+        - **SUBISSUETYPE** → Specific sub-category within the issue type
+        - **TICKETCATEGORY** → What system/area is affected (Software, Hardware, Network, Security, etc.)
+        - **TICKETTYPE** → Service Request, Incident, Problem, Change Request, or Task
+        - **PRIORITY** → Urgency level based on business impact and user-specified priority
+        - **STATUS** → Always "Open" for new tickets
+
+        **ANALYSIS STEPS:**
+        1. Read the ticket title and description carefully
+        2. Identify what system/application/hardware is mentioned
+        3. Determine if it's broken (Incident) or a request for something (Request)
+        4. Choose the category that matches the affected system
+        5. Set appropriate priority based on impact and urgency
+ 
+        ---
+ 
+        **New Ticket Information**  
+        - **Title:** "{new_ticket_data.get('title', '')}"  
+        - **Description:** "{new_ticket_data.get('description', '')}"  
+        - **Extracted Metadata:** {json.dumps(extracted_metadata, indent=2)}  
+        - **Initial Priority (user-given):** "{new_ticket_data.get('priority', new_ticket_data.get('priority_initial', 'Medium'))}"  
+ 
+        ---
+ 
+        **Similar Historical Tickets for Context:**  
+        (Use these as references for classification consistency)  
 
         Consider the following similar historical tickets for classification context:
         """
@@ -124,9 +225,13 @@ class AIProcessor:
         MAX_SIMILAR_TICKETS_FOR_PROMPT = 15
         if similar_tickets:
             for i, ticket in enumerate(similar_tickets[:MAX_SIMILAR_TICKETS_FOR_PROMPT]):
+                # Safely handle None values in ticket data
+                title = ticket.get('TITLE') or 'N/A'
+                title_truncated = title[:100] if isinstance(title, str) else 'N/A'
+
                 classification_prompt += f"""
                 --- Similar Ticket {i+1} ---
-                Title: {ticket.get('TITLE', 'N/A')[:100]}
+                Title: {title_truncated}
                 ISSUE_TYPE: {ticket.get('ISSUETYPE', 'N/A')}
                 SUBISSUE_TYPE: {ticket.get('SUBISSUETYPE', 'N/A')}
                 CATEGORY: {ticket.get('TICKETCATEGORY', 'N/A')}
@@ -149,46 +254,122 @@ class AIProcessor:
                 classification_prompt += f"  {field_name.upper()}: No specific options provided.\n"
 
         classification_prompt += """
-\n\nIMPORTANT: For each classification field, especially SUBISSUETYPE, analyze the metadata and values of the similar historical tickets above. If any similar ticket has a clear value for SUBISSUETYPE, use the most relevant one as a strong suggestion for the new ticket. Only use "N/A" if absolutely no similar context or option applies. If unsure, select the closest reasonable option from the available list.\n\nBased on all the provided information and the available options, determine the classification for the New Ticket in JSON format.\nFor each classification field, provide both the `Value` (numerical ID) and the `Label` (descriptive name) from the provided options.\nIf a precise match cannot be determined for a field, choose the closest reasonable option or use "N/A" for the Label and an appropriate default/null for Value.\nThe `PRIORITY` should be re-evaluated based on the issue's urgency and impact, considering the initial priority and the provided priority options.\n\nJSON Schema:\n{{\n    \"ISSUETYPE\": {{ \"Value\": \"numerical_id\", \"Label\": \"Descriptive Label\" }},\n    \"SUBISSUETYPE\": {{ \"Value\": \"numerical_id\", \"Label\": \"Descriptive Label\" }},\n    \"TICKETCATEGORY\": {{ \"Value\": \"numerical_id\", \"Label\": \"Descriptive Label\" }},\n    \"TICKETTYPE\": {{ \"Value\": \"numerical_id\", \"Label\": \"Descriptive Label\" }},\n    \"STATUS\": {{ \"Value\": \"numerical_id\", \"Label\": \"Descriptive Label\" }},\n    \"PRIORITY\": {{ \"Value\": \"numerical_id\", \"Label\": \"Descriptive Label\" }}\n}}\n"""
+
+**CLASSIFICATION INSTRUCTIONS:**
+
+1. **ANALYZE THE TICKET CONTENT FIRST**: Look at the title, description, and extracted metadata to understand what the issue is actually about.
+
+2. **CHOOSE THE CORRECT CATEGORY**: Based on the content analysis:
+   - If it mentions software applications (Teams, Office, browsers, etc.) → TICKETCATEGORY should be "Software/SaaS"
+   - If it mentions hardware (printers, computers, phones) → TICKETCATEGORY should be "Hardware"
+   - If it mentions network/connectivity → TICKETCATEGORY should be "Network"
+   - If it mentions email/communication → TICKETCATEGORY should be "Email" or similar
+
+3. **DETERMINE ISSUE TYPE**:
+   - If something is broken/not working → ISSUETYPE: "Incident"
+   - If user is requesting something → ISSUETYPE: "Request"
+
+4. **USE AVAILABLE OPTIONS**: Select from the provided classification options that best match your analysis.
+
+5. **HISTORICAL CONTEXT**: Use similar tickets only as secondary reference, not as the primary decision factor.
+
+**OUTPUT FORMAT**: Provide classification in JSON format with both Value (numerical ID) and Label from the available options.
+
+JSON Schema:
+{{
+    "ISSUETYPE": {{ "Value": "numerical_id", "Label": "Descriptive Label" }},
+    "SUBISSUETYPE": {{ "Value": "numerical_id", "Label": "Descriptive Label" }},
+    "TICKETCATEGORY": {{ "Value": "numerical_id", "Label": "Descriptive Label" }},
+    "TICKETTYPE": {{ "Value": "numerical_id", "Label": "Descriptive Label" }},
+    "STATUS": {{ "Value": "numerical_id", "Label": "Descriptive Label" }},
+    "PRIORITY": {{ "Value": "numerical_id", "Label": "Descriptive Label" }}
+}}
+"""
 
         print("Classifying ticket with LLM...")
         classified_data = self.db_connection.call_cortex_llm(classification_prompt, model=model)
 
-        if classified_data is None:
-            print("❌ LLM classification failed, creating fallback classification...")
-            # Create fallback classification using most common values from similar tickets
+        # Handle case where LLM returns None
+        if not classified_data:
+            print("LLM classification failed, using intelligent content-based fallback classification")
             classified_data = {}
-            for field in ["ISSUETYPE", "SUBISSUETYPE", "TICKETCATEGORY", "TICKETTYPE", "PRIORITY"]:
-                if field in summary:
-                    label = self.reference_data.get(field.lower(), {}).get(str(summary[field]["Value"]), "Unknown")
-                    classified_data[field] = {"Value": summary[field]["Value"], "Label": label}
-                else:
-                    # Use default values if no similar tickets
-                    default_values = {
-                        "ISSUETYPE": {"Value": "1", "Label": "Hardware"},
-                        "SUBISSUETYPE": {"Value": "1", "Label": "General Hardware"},
-                        "TICKETCATEGORY": {"Value": "1", "Label": "Incident"},
-                        "TICKETTYPE": {"Value": "1", "Label": "Service Request"},
-                        "PRIORITY": {"Value": "3", "Label": "Medium"}
-                    }
-                    classified_data[field] = default_values.get(field, {"Value": "N/A", "Label": "Unknown"})
-            classified_data["STATUS"] = {"Value": "1", "Label": "Open"}
-            print("✅ Fallback classification created successfully")
 
-        if classified_data and "status" in self.reference_data:
-            new_status_info = next(((val, label) for val, label in self.reference_data["status"].items() if label == "New"), ("N/A", "New"))
-            classified_data["STATUS"] = {"Value": new_status_info[0], "Label": new_status_info[1]}
-        elif classified_data:
-            classified_data["STATUS"] = {"Value": "N/A", "Label": "Open"}
+            # Intelligent fallback based on ticket content analysis
+            classified_data = self._intelligent_fallback_classification(new_ticket_data, extracted_metadata, summary)
 
-        # Fallback: For any field, use the most common value from similar tickets if LLM returns N/A
-        if classified_data:
-            for field in ["ISSUETYPE", "SUBISSUETYPE", "TICKETCATEGORY", "TICKETTYPE", "PRIORITY"]:
-                if classified_data.get(field, {}).get("Value") in [None, "N/A"] and field in summary:
-                    label = self.reference_data.get(field.lower(), {}).get(str(summary[field]["Value"]), "Unknown")
-                    classified_data[field] = {"Value": summary[field]["Value"], "Label": label}
+        return classified_data
 
-        print("✅ Ticket classification completed")
+    def _intelligent_fallback_classification(self, ticket_data: Dict, extracted_metadata: Dict, summary: Dict) -> Dict:
+        """
+        Intelligent fallback classification based on content analysis when LLM fails
+        """
+        # Analyze ticket content
+        title = ticket_data.get('title', '').lower()
+        description = ticket_data.get('description', '').lower()
+        main_issue = extracted_metadata.get('main_issue', '').lower()
+        affected_system = extracted_metadata.get('affected_system', '').lower()
+
+        # Combine all text for analysis
+        all_text = f"{title} {description} {main_issue} {affected_system}"
+
+        # Content-based classification logic
+        classified_data = {}
+
+        # Determine TICKETCATEGORY based on content
+        if any(keyword in all_text for keyword in ['teams', 'office', 'software', 'application', 'app', 'saas', 'browser', 'outlook']):
+            category_value = self._find_value_by_label("ticketcategory", "Software/SaaS") or self._find_value_by_label("ticketcategory", "Software")
+            classified_data["TICKETCATEGORY"] = {"Value": category_value, "Label": "Software/SaaS"}
+        elif any(keyword in all_text for keyword in ['printer', 'computer', 'laptop', 'hardware', 'device', 'phone']):
+            category_value = self._find_value_by_label("ticketcategory", "Hardware") or self._find_value_by_label("ticketcategory", "Printer")
+            classified_data["TICKETCATEGORY"] = {"Value": category_value, "Label": "Hardware"}
+        elif any(keyword in all_text for keyword in ['network', 'wifi', 'internet', 'connectivity', 'connection']):
+            category_value = self._find_value_by_label("ticketcategory", "Network")
+            classified_data["TICKETCATEGORY"] = {"Value": category_value, "Label": "Network"}
+        elif any(keyword in all_text for keyword in ['email', 'exchange', 'mail']):
+            category_value = self._find_value_by_label("ticketcategory", "Email")
+            classified_data["TICKETCATEGORY"] = {"Value": category_value, "Label": "Email"}
+        else:
+            # Use most common from similar tickets or default
+            if "TICKETCATEGORY" in summary:
+                label = self.reference_data.get('ticketcategory', {}).get(str(summary["TICKETCATEGORY"]["Value"]), "Unknown")
+                classified_data["TICKETCATEGORY"] = {"Value": summary["TICKETCATEGORY"]["Value"], "Label": label}
+            else:
+                # Default to Software/SaaS for unknown issues
+                category_value = self._find_value_by_label("ticketcategory", "Software/SaaS") or "5"
+                classified_data["TICKETCATEGORY"] = {"Value": category_value, "Label": "Software/SaaS"}
+
+        # Determine ISSUETYPE (Incident vs Request)
+        if any(keyword in all_text for keyword in ['not working', 'broken', 'error', 'issue', 'problem', 'down', 'failed', 'not responding']):
+            issue_value = self._find_value_by_label("issuetype", "Incident") or "1"
+            classified_data["ISSUETYPE"] = {"Value": issue_value, "Label": "Incident"}
+        else:
+            issue_value = self._find_value_by_label("issuetype", "Request") or "2"
+            classified_data["ISSUETYPE"] = {"Value": issue_value, "Label": "Request"}
+
+        # Set other fields with intelligent defaults
+        for field in ["SUBISSUETYPE", "TICKETTYPE", "PRIORITY"]:
+            if field in summary:
+                label = self.reference_data.get(field.lower(), {}).get(str(summary[field]["Value"]), "Unknown")
+                classified_data[field] = {"Value": summary[field]["Value"], "Label": label}
+            else:
+                # Set reasonable defaults
+                if field == "SUBISSUETYPE":
+                    classified_data[field] = {"Value": "N/A", "Label": "N/A"}
+                elif field == "TICKETTYPE":
+                    type_value = self._find_value_by_label("tickettype", "Incident") or "2"
+                    classified_data[field] = {"Value": type_value, "Label": "Incident"}
+                elif field == "PRIORITY":
+                    priority_value = self._find_value_by_label("priority", "Medium") or "2"
+                    classified_data[field] = {"Value": priority_value, "Label": "Medium"}
+
+        # Always set STATUS to Open
+        status_value = self._find_value_by_label("status", "Open") or "1"
+        classified_data["STATUS"] = {"Value": status_value, "Label": "Open"}
+
+        print("Applied intelligent content-based fallback classification:")
+        for field, value in classified_data.items():
+            print(f"  {field}: {value['Value']} ({value['Label']})")
+
         return classified_data
 
     def generate_resolution_note(self, ticket_data: Dict, classified_data: Dict,
@@ -231,7 +412,7 @@ class AIProcessor:
         '''
 
         print("Calling Cortex LLM for resolution generation...")
-        llm_response = self.db_connection.call_cortex_llm(prompt, model='mixtral-8x7b', expect_json=False)
+        llm_response = self.db_connection.call_cortex_llm(prompt, model='llama3.1-70b', expect_json=False)
 
         if isinstance(llm_response, str) and llm_response.strip():
             return llm_response.strip()
