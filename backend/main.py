@@ -180,6 +180,7 @@ def load_csv_users_into_demo():
                         u_email = (row.get('USER_EMAIL') or '').strip()
                         u_pass = (row.get('PASSWORD_HASH') or row.get('USER_PASSWORD') or row.get('PASSWORD') or 'UserPass001!').strip()
                         u_name = (row.get('NAME') or '').strip()
+                        u_phone = (row.get('USER_PHONENUMBER') or row.get('PHONENUMBER') or row.get('PHONE') or '').strip()
 
                         if u_id:
                             entry = {
@@ -187,7 +188,8 @@ def load_csv_users_into_demo():
                                 "password": u_pass,
                                 "role": "user",
                                 "email": u_email,
-                                "full_name": u_name
+                                "full_name": u_name,
+                                "phone_number": u_phone
                             }
                             DEMO_USERS[u_id] = entry
                             DEMO_USERS[u_id.lower()] = entry
@@ -266,7 +268,8 @@ def authenticate_user_from_db(username: str, password: str) -> Optional[dict]:
                         "password": stored_pwd,
                         "role": "user",
                         "email": user.get('USER_EMAIL'),
-                        "full_name": user.get('NAME')
+                        "full_name": user.get('NAME'),
+                        "phone_number": user.get('USER_PHONENUMBER')
                     }
 
     except Exception as e:
@@ -352,6 +355,7 @@ def authenticate_user(username: str, password: str, requested_role: Optional[str
                 "role": role,
                 "email": "anant.lad@64-squares.com",
                 "full_name": "Anant Lad",
+                "phone_number": (DEMO_USERS.get("anantl") or DEMO_USERS.get("anant.lad@64-squares.com") or {}).get("phone_number", ""),
                 "technician_role": "Lead Technician" if role == "technician" else None
             }
 
@@ -365,6 +369,7 @@ def authenticate_user(username: str, password: str, requested_role: Optional[str
                 "role": role,
                 "email": "venkatehp12@gmail.com",
                 "full_name": "Venkatesh P",
+                "phone_number": (DEMO_USERS.get("venkatehp12") or DEMO_USERS.get("venkatehp12@gmail.com") or {}).get("phone_number", ""),
                 "technician_role": "Technician" if role == "technician" else None
             }
 
@@ -421,6 +426,7 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
             "role": payload.get("role", "user"),
             "email": payload.get("email", ""),
             "full_name": payload.get("full_name", username),
+            "phone_number": payload.get("phone_number", ""),
             "technician_role": payload.get("technician_role", "Technician")
         }
     except JWTError:
@@ -535,6 +541,7 @@ async def login(login_request: dict):
             "role": effective_role,
             "email": user.get("email", ""),
             "full_name": user.get("full_name", user["username"]),
+            "phone_number": user.get("phone_number", ""),
             "technician_role": user.get("technician_role", "")
         }
         access_token = create_access_token(
@@ -553,6 +560,7 @@ async def login(login_request: dict):
                 "role": effective_role,
                 "email": user.get("email"),
                 "full_name": user.get("full_name"),
+                "phone_number": user.get("phone_number"),
                 "technician_role": user.get("technician_role")
             }
         }
@@ -586,6 +594,7 @@ async def refresh_access_token(body: dict):
         "role": payload.get("role", "user"),
         "email": payload.get("email", ""),
         "full_name": payload.get("full_name", username),
+        "phone_number": payload.get("phone_number", ""),
         "technician_role": payload.get("technician_role", "")
     }
 
@@ -614,7 +623,8 @@ async def get_current_user_info(current_user: dict = Depends(get_current_user)):
         "username": current_user["username"],
         "role": current_user["role"],
         "email": current_user.get("email"),
-        "full_name": current_user.get("full_name")
+        "full_name": current_user.get("full_name"),
+        "phone_number": current_user.get("phone_number")
     }
 
 # --- Authentication Models ---

@@ -29,8 +29,14 @@ const AuthProvider = ({ children }) => {
         try {
           setLoading(true);
           const userData = await authService.getCurrentUser();
-          setUser(userData);
-          localStorage.setItem('user', JSON.stringify(userData));
+          const normalizedUser = {
+            ...userData,
+            // Ensure phone number is always present in the stored user,
+            // backing it up from the legacy "phone" key if needed.
+            phone_number: userData.phone_number || userData.phone || '',
+          };
+          setUser(normalizedUser);
+          localStorage.setItem('user', JSON.stringify(normalizedUser));
         } catch (err) {
           console.warn('Failed to restore session:', err.message);
           // ApiService already tried a silent refresh – if we still get an
@@ -68,6 +74,8 @@ const AuthProvider = ({ children }) => {
         role: credentials.role || 'user',
         token: response.access_token,
         ...response.user,
+        // Ensure phone number is always saved with the stored user in localStorage
+        phone_number: response.user?.phone_number || response.user?.phone || '',
       };
 
       setUser(userData);
