@@ -1,5 +1,5 @@
 import React from 'react';
-import { Settings, Wrench, FileText, Users, BarChart3, CheckSquare, AlertCircle, List, Timer } from 'lucide-react';
+import { Settings, Wrench, FileText, Users, BarChart3, CheckSquare, AlertCircle, List, Timer, Network, ShieldCheck } from 'lucide-react';
 import useAuth from '../hooks/useAuth';
 import { NavLink } from 'react-router-dom';
 
@@ -7,22 +7,36 @@ const Sidebar = () => {
   const { user } = useAuth();
 
   const userMenuItems = [
-    { icon: FileText, label: 'Submit Request', active: true, path: '/user' },
-    { icon: BarChart3, label: 'Track Status', active: false, path: '/user/track-status' },
-    { icon: Timer, label: 'MTTR Report', active: false, path: '/user/mttr-report' },
-    { icon: Settings, label: 'My Profile', active: false, path: '/user/profile' }
+    { icon: FileText, label: 'Submit Request', path: '/user' },
+    { icon: BarChart3, label: 'Track Status', path: '/user/track-status' },
+    { icon: Timer, label: 'Resolution Report', path: '/user/mttr-report' },
+    { icon: Settings, label: 'My Profile', path: '/user/profile' }
   ];
 
   const technicianMenuItems = [
     { icon: Wrench, label: 'Dashboard', path: '/technician/dashboard' },
     { icon: List, label: 'My Tickets', path: '/technician/my-tickets' },
     { icon: AlertCircle, label: 'Urgent Tickets', path: '/technician/urgent-tickets' },
+    { icon: Network, label: 'Network Ontology', path: '/technician/ontology' },
     { icon: Timer, label: 'MTTR & SLA Report', path: '/technician/mttr-report' },
     { icon: BarChart3, label: 'Workload Analytics', path: '/technician/analytics' },
     { icon: CheckSquare, label: 'All Tickets', path: '/technician/all-tickets' }
   ];
 
-  const menuItems = user?.role === 'user' ? userMenuItems : technicianMenuItems;
+  const adminMenuItems = [
+    { icon: ShieldCheck, label: 'Executive Dashboard', path: '/admin/dashboard' },
+    { icon: CheckSquare, label: 'Master Tickets Report', path: '/admin/tickets-report' },
+    { icon: Wrench, label: 'Technicians & Shifts', path: '/admin/technicians' },
+    { icon: Users, label: 'User Management', path: '/admin/users' },
+    { icon: Timer, label: 'Wider MTTR Analytics', path: '/admin/wider-mttr' },
+    { icon: Network, label: 'Network Ontology', path: '/technician/ontology' }
+  ];
+
+  const menuItems = user?.role === 'admin' 
+    ? adminMenuItems 
+    : user?.role === 'user' 
+      ? userMenuItems 
+      : technicianMenuItems;
 
   return (
     <aside className="w-64 bg-white shadow-sm border-r border-gray-200 min-h-screen">

@@ -1,0 +1,11 @@
+SITE_ID,SITE_NAME,SITE_TYPE,LATITUDE,LONGITUDE,REGION,STATUS,CREATED_AT
+site:gldt,Goldthwaite,central_office,,,"Texas, USA",ACTIVE,2026-09-01T12:36:15.947036
+site:sang,San Angelo,aggregation_site,,,"Texas, USA",ACTIVE,2026-09-01T12:36:15.947077
+site:03,Service Area 03,remote_site,,,"Texas, USA",ACTIVE,2026-09-01T12:36:15.947092
+site:04,Service Area 04,remote_site,,,"Texas, USA",ACTIVE,2026-09-01T12:36:15.947103
+site:05,Service Area 05,remote_site,,,"Texas, USA",ACTIVE,2026-09-01T12:36:15.947115
+site:06,Service Area 06,remote_site,,,"Texas, USA",ACTIVE,2026-09-01T12:36:15.947127
+site:07,Service Area 07,remote_site,,,"Texas, USA",ACTIVE,2026-09-01T12:36:15.947146
+site:08,Service Area 08,remote_site,,,"Texas, USA",ACTIVE,2026-09-01T12:36:15.947158
+site:09,Service Area 09,remote_site,,,"Texas, USA",ACTIVE,2026-09-01T12:36:15.947169
+site:10,Service Area 10,remote_site,,,"Texas, USA",ACTIVE,2026-09-01T12:36:15.947180

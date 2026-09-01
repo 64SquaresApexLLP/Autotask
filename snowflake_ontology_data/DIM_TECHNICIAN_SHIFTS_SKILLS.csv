@@ -1,0 +1,5 @@
+TECHNICIAN_ID,USERNAME,FULL_NAME,EMAIL,PHONE_NUMBER,PRIMARY_SHIFT,ON_CALL_STATUS,SKILL_SETS,EXPERIENCE_LEVEL,STATUS,CURRENT_TICKETS_LOAD,MAX_CAPACITY
+tech-001,tech,Demo Technician,tech@example.com,+1-555-0199,Morning (08:00 - 16:00),Active,"Network Routing & EVPN, Optical & Fiber Trunks, Hardware Diagnostics",Senior L2,ACTIVE,4,10
+tech-002,tech1,Alex Smith,tech1@example.com,+1-555-0248,Afternoon (14:00 - 22:00),Standby,"Software & OS Drift, Active Directory, Server Infrastructure",L2 Specialist,ACTIVE,3,10
+tech-003,technician,Support Technician,technician@example.com,+1-555-0312,Night (22:00 - 06:00),Active,"VoIP & Central Office AP, Optical Transceivers, Emergency Triage",Senior L3,ACTIVE,5,12
+tech-004,tech_anant,Anant Lad (Technician),anant.lad@64-squares.com,+1-555-0450,Morning (08:00 - 16:00),Standby,"Network Routing & EVPN, Core MX960 Architecture, Cloud Infrastructure",Principal Architect,ACTIVE,2,8

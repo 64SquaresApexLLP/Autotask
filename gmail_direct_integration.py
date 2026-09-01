@@ -277,6 +277,12 @@ class DirectGmailIntegration:
                             
                             email_data = self.extract_email_data(email_message)
                             if email_data:
+                                sender = email_data.get('from_email', '').lower()
+                                # Ignore automated bounces to prevent infinite mailer loops
+                                if any(bad in sender for bad in ['mailer-daemon', 'postmaster', 'noreply', 'no-reply']):
+                                    self.processed_uids.add(email_id)
+                                    continue
+
                                 email_data['message_id'] = email_id.decode()
                                 new_emails.append(email_data)
                             
