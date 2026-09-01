@@ -10,9 +10,9 @@ from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 from .config import settings
 from .database import get_db, init_database, TechnicianDummyData
-from .auth import authenticate_technician, create_access_token, get_current_technician, verify_token
+from .auth import authenticate_technician, create_access_token, create_refresh_token, get_current_technician, verify_token, verify_refresh_token, REFRESH_TOKEN_EXPIRE_DAYS
 from .models import (
-    LoginRequest, TokenResponse, ChatMessage, ChatResponse,
+    LoginRequest, TokenResponse, RefreshTokenRequest, ChatMessage, ChatResponse,
     TicketResponse, TicketSummaryRequest, TicketSummaryResponse
 )
 from .services.ticket_service import TicketService
@@ -166,10 +166,17 @@ async def login(login_request: LoginRequest, db: Session = Depends(get_db)):
             expires_delta=access_token_expires
         )
 
+        # Create refresh token (7-day lifetime)
+        refresh_token = create_refresh_token(
+            data={"sub": str(technician.id), "username": technician.username}
+        )
+
         return TokenResponse(
             access_token=access_token,
             token_type="bearer",
-            expires_in=settings.jwt_access_token_expire_minutes * 60  # Convert to seconds
+            expires_in=settings.jwt_access_token_expire_minutes * 60,  # Convert to seconds
+            refresh_token=refresh_token,
+            refresh_expires_in=REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,  # 7 days in seconds
         )
     except HTTPException:
         raise
@@ -179,6 +186,58 @@ async def login(login_request: LoginRequest, db: Session = Depends(get_db)):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error during login"
         )
+
+@router.post("/auth/refresh", response_model=TokenResponse)
+async def refresh_access_token(
+    body: RefreshTokenRequest,
+    db: Session = Depends(get_db)
+):
+    """Exchange a valid refresh token for a new access token + refresh token pair.
+
+    The old refresh token is implicitly invalidated from the client's perspective
+    because the client replaces it with the new one returned here.
+    """
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid or expired refresh token",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+    payload = verify_refresh_token(body.refresh_token)
+    if payload is None:
+        raise credentials_exception
+
+    user_id: str = payload.get("sub")
+    if not user_id:
+        raise credentials_exception
+
+    # Look up the technician to make sure they still exist and are active
+    technician = db.query(TechnicianDummyData).filter(
+        TechnicianDummyData.id == int(user_id)
+    ).first()
+
+    if technician is None or not technician.is_active:
+        raise credentials_exception
+
+    token_data = {"sub": str(technician.id), "username": technician.username}
+
+    # Issue fresh access + refresh tokens
+    new_access_token = create_access_token(
+        data=token_data,
+        expires_delta=timedelta(minutes=settings.jwt_access_token_expire_minutes),
+    )
+    new_refresh_token = create_refresh_token(data=token_data)
+
+    logger.info(f"Refreshed tokens for technician {technician.username}")
+
+    return TokenResponse(
+        access_token=new_access_token,
+        token_type="bearer",
+        expires_in=settings.jwt_access_token_expire_minutes * 60,
+        refresh_token=new_refresh_token,
+        refresh_expires_in=REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
+    )
+
 
 @router.get("/tickets/my", response_model=List[TicketResponse])
 async def get_my_tickets(

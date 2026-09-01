@@ -19,6 +19,9 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 # JWT token security
 security = HTTPBearer()
 
+# Refresh token lifetime (7 days)
+REFRESH_TOKEN_EXPIRE_DAYS = 7
+
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify a password against its hash."""
@@ -31,26 +34,56 @@ def get_password_hash(password: str) -> str:
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
-    """Create JWT access token."""
+    """Create a short-lived JWT access token."""
     to_encode = data.copy()
     if expires_delta:
         expire = datetime.utcnow() + expires_delta
     else:
         expire = datetime.utcnow() + timedelta(minutes=settings.jwt_access_token_expire_minutes)
-    
-    to_encode.update({"exp": expire})
+
+    to_encode.update({"exp": expire, "type": "access"})
     encoded_jwt = jwt.encode(to_encode, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
     return encoded_jwt
 
 
-def verify_token(token: str) -> Optional[dict]:
-    """Verify and decode JWT token."""
+def create_refresh_token(data: dict) -> str:
+    """Create a long-lived JWT refresh token (7 days).
+
+    The refresh token carries a ``type: "refresh"`` claim so it cannot be
+    used as a regular access token and vice-versa.
+    """
+    to_encode = data.copy()
+    expire = datetime.utcnow() + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
+    to_encode.update({"exp": expire, "type": "refresh"})
+    encoded_jwt = jwt.encode(to_encode, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
+    return encoded_jwt
+
+
+def verify_token(token: str, token_type: str = "access") -> Optional[dict]:
+    """Verify and decode a JWT token.
+
+    Args:
+        token: The encoded JWT string.
+        token_type: Expected token type claim – ``"access"`` or ``"refresh"``.
+                    Tokens with a mismatched type are rejected.
+    """
     try:
         payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
+        # Accept tokens that either carry the correct type claim *or* have no
+        # type claim at all (backwards-compat with tokens issued before this change).
+        stored_type = payload.get("type")
+        if stored_type is not None and stored_type != token_type:
+            logger.warning(f"Token type mismatch: expected '{token_type}', got '{stored_type}'")
+            return None
         return payload
     except JWTError as e:
         logger.warning(f"Token verification failed: {e}")
         return None
+
+
+def verify_refresh_token(token: str) -> Optional[dict]:
+    """Verify and decode a refresh token specifically."""
+    return verify_token(token, token_type="refresh")
 
 
 def authenticate_technician(db: Session, username: str, password: str) -> Optional[TechnicianDummyData]:

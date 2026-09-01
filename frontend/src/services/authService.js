@@ -8,79 +8,82 @@ import { API_ENDPOINTS } from '../config/api.js';
 
 export const authService = {
   /**
-   * Login user with username and password
+   * Login user with username and password.
+   * Stores both the access token and the refresh token.
    */
   async login(credentials) {
-    try {
-      const response = await apiService.post(API_ENDPOINTS.AUTH.LOGIN, credentials);
-      
-      if (response.access_token) {
-        apiService.setAuthToken(response.access_token);
-      }
-      
-      return response;
-    } catch (error) {
-      throw error;
+    const response = await apiService.post(API_ENDPOINTS.AUTH.LOGIN, credentials);
+
+    if (response.access_token) {
+      apiService.setAuthToken(response.access_token);
     }
+    if (response.refresh_token) {
+      apiService.setRefreshToken(response.refresh_token);
+    }
+
+    return response;
   },
 
   /**
-   * Logout user
+   * Logout user – clears both tokens locally and notifies the backend.
    */
   async logout() {
     try {
-      // Call logout endpoint if available
       await apiService.post(API_ENDPOINTS.AUTH.LOGOUT);
     } catch (error) {
-      // Continue with logout even if API call fails
       console.warn('Logout API call failed:', error.message);
     } finally {
-      // Always remove token from storage
       apiService.removeAuthToken();
+      apiService.removeRefreshToken();
     }
   },
 
   /**
-   * Get current user information
+   * Get current user information.
    */
   async getCurrentUser() {
-    try {
-      return await apiService.get(API_ENDPOINTS.AUTH.ME);
-    } catch (error) {
-      throw error;
-    }
+    return await apiService.get(API_ENDPOINTS.AUTH.ME);
   },
 
   /**
-   * Refresh authentication token
+   * Manually request a new access token using the stored refresh token.
+   * Normally this is called automatically by ApiService on 401 responses,
+   * but you can call it proactively if needed.
    */
   async refreshToken() {
-    try {
-      const response = await apiService.post(API_ENDPOINTS.AUTH.REFRESH);
-      
-      if (response.access_token) {
-        apiService.setAuthToken(response.access_token);
-      }
-      
-      return response;
-    } catch (error) {
-      throw error;
+    const refreshToken = apiService.getRefreshToken();
+    if (!refreshToken) {
+      throw new Error('No refresh token available');
     }
+
+    const response = await apiService.post(API_ENDPOINTS.AUTH.REFRESH, {
+      refresh_token: refreshToken,
+    });
+
+    if (response.access_token) {
+      apiService.setAuthToken(response.access_token);
+    }
+    if (response.refresh_token) {
+      apiService.setRefreshToken(response.refresh_token);
+    }
+
+    return response;
   },
 
-  /**
-   * Check if user is authenticated
-   */
+  /** Returns true when an access token is present in storage. */
   isAuthenticated() {
     return !!apiService.getAuthToken();
   },
 
-  /**
-   * Get stored authentication token
-   */
+  /** Returns the stored access token. */
   getToken() {
     return apiService.getAuthToken();
-  }
+  },
+
+  /** Expose so AuthContext can remove the token directly. */
+  removeAuthToken() {
+    apiService.removeAuthToken();
+  },
 };
 
 export default authService;
