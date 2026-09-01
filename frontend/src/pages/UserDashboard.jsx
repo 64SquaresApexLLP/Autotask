@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { FileText, Plus, Clock, AlertCircle, CheckCircle, User, Calendar, Phone, Mail, Loader2, Sparkles } from 'lucide-react';
+import { FileText, Plus, Clock, CheckCircle, ChevronUp, Loader2, Eye } from 'lucide-react';
 import Header from '../components/Header';
 import Sidebar from '../components/Sidebar';
 import AiPipelineModal from '../components/AiPipelineModal.jsx';
+import ExpandedTicketDetails from '../components/ExpandedTicketDetails.jsx';
 import { ticketService } from '../services/ticketService.js';
 import { ApiError } from '../services/api.js';
 import useAuth from '../hooks/useAuth';
@@ -18,6 +19,7 @@ const UserDashboard = () => {
   const [aiPipelineSubmitted, setAiPipelineSubmitted] = useState(null);
   const [aiPipelineResult, setAiPipelineResult] = useState(null);
   const [successMessage, setSuccessMessage] = useState('');
+  const [expandedTicketId, setExpandedTicketId] = useState(null);
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -27,6 +29,10 @@ const UserDashboard = () => {
     phone_number: '',
     user_email: ''
   });
+
+  useEffect(() => {
+    console.log(tickets)
+  }, [tickets]);
 
   // Load user's tickets on component mount
   useEffect(() => {
@@ -140,6 +146,10 @@ const UserDashboard = () => {
     loadUserTickets();
   };
 
+  const toggleTicket = (ticketId) => {
+    setExpandedTicketId(prev => prev === ticketId ? null : ticketId);
+  };
+
   const getPriorityColor = (priority) => {
     switch (priority?.toLowerCase()) {
       case 'high':
@@ -151,19 +161,6 @@ const UserDashboard = () => {
         return 'text-green-600 bg-green-50';
       default:
         return 'text-gray-600 bg-gray-50';
-    }
-  };
-
-  const getStatusIcon = (status) => {
-    switch (status?.toLowerCase()) {
-      case 'completed':
-      case 'resolved':
-        return <CheckCircle className="w-5 h-5 text-green-600" />;
-      case 'in_progress':
-      case 'assigned':
-        return <Clock className="w-5 h-5 text-blue-600" />;
-      default:
-        return <AlertCircle className="w-5 h-5 text-yellow-600" />;
     }
   };
 
@@ -407,80 +404,41 @@ const UserDashboard = () => {
               ) : (
                 <div className="space-y-4">
                   {tickets.map((ticket) => (
-                    <div key={ticket.id} className="border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow">
-                      <div className="flex items-start justify-between mb-4">
-                        <div className="flex-1">
-                          <div className="flex items-center space-x-3 mb-2">
-                            {getStatusIcon(ticket.status)}
-                            <h3 className="text-lg font-semibold text-gray-800">{ticket.title}</h3>
-                            <span className={`px-3 py-1 rounded-full text-xs font-medium ${getPriorityColor(ticket.priority)}`}>
-                              {ticket.priority || 'Medium'}
-                            </span>
-                          </div>
-                          <p className="text-gray-600 mb-3">{ticket.description}</p>
 
-                          {(ticket.ticket_category || ticket.issue_type) && (
-                            <div className="flex items-center flex-wrap gap-2 mb-3">
-                              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium bg-[#E9F1FA] text-[#00ABE4]">
-                                <Sparkles className="w-3 h-3" />
-                                {ticket.ticket_category || ticket.issue_type}
-                              </span>
-                              {ticket.issue_type && ticket.issue_type !== ticket.ticket_category && (
-                                <span className="px-2 py-1 rounded-md text-xs font-medium bg-gray-100 text-gray-600">
-                                  {ticket.issue_type}
-                                </span>
-                              )}
-                            </div>
-                          )}
-
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-gray-500">
-                            <div className="flex items-center space-x-2">
-                              <User className="w-4 h-4" />
-                              <span>Requester: {ticket.requester_name || 'Not specified'}</span>
-                            </div>
-                            {ticket.phone_number && (
-                              <div className="flex items-center space-x-2">
-                                <Phone className="w-4 h-4" />
-                                <span>{ticket.phone_number}</span>
-                              </div>
-                            )}
-                            {ticket.user_email && (
-                              <div className="flex items-center space-x-2">
-                                <Mail className="w-4 h-4" />
-                                <span>{ticket.user_email}</span>
-                              </div>
-                            )}
-                            {ticket.due_date && (
-                              <div className="flex items-center space-x-2">
-                                <Calendar className="w-4 h-4" />
-                                <span>Due: {new Date(ticket.due_date).toLocaleDateString()}</span>
-                              </div>
-                            )}
-                            <div className="flex items-center space-x-2">
-                              <Clock className="w-4 h-4" />
-                              <span>Created: {new Date(ticket.created_at || Date.now()).toLocaleDateString()}</span>
-                            </div>
-                            {ticket.assigned_technician && (
-                              <div className="flex items-center space-x-2">
-                                <User className="w-4 h-4" />
-                                <span>Assigned to: {ticket.assigned_technician}</span>
-                              </div>
-                            )}
-                          </div>
+                    <div key={ticket.id} className="border border-gray-200 rounded-lg hover:shadow-md transition-shadow">
+                      {/* Compact summary: ticket id, name (title), priority, view icon */}
+                      <div
+                        className="flex items-center justify-between gap-4 p-4 cursor-pointer select-none"
+                        onClick={() => toggleTicket(ticket.id)}
+                      >
+                        <div className="flex items-center gap-4 min-w-0">
+                          <span className="text-sm font-mono font-medium text-[#00ABE4] whitespace-nowrap">
+                            {ticket.id || 'N/A'}
+                          </span>
+                          <h3 className="font-semibold text-gray-800 truncate">
+                            {ticket.title || 'Untitled Ticket'}
+                          </h3>
                         </div>
 
-                        <div className="ml-4">
-                          <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                            ticket.status?.toLowerCase() === 'completed' || ticket.status?.toLowerCase() === 'resolved'
-                              ? 'text-green-600 bg-green-50'
-                              : ticket.status?.toLowerCase() === 'in_progress' || ticket.status?.toLowerCase() === 'assigned'
-                              ? 'text-blue-600 bg-blue-50'
-                              : 'text-yellow-600 bg-yellow-50'
-                          }`}>
-                            {ticket.status || 'Open'}
+                        <div className="flex items-center gap-3 shrink-0">
+                          <span className={`px-3 py-1 rounded-full text-xs font-medium ${getPriorityColor(ticket.priority)}`}>
+                            {ticket.priority || 'Medium'}
                           </span>
+                          <button
+                            type="button"
+                            onClick={(event) => { event.stopPropagation(); toggleTicket(ticket.id); }}
+                            className="p-2 rounded-lg text-[#00ABE4] hover:bg-[#E9F1FA] transition-colors"
+                            title={expandedTicketId === ticket.id ? 'Collapse ticket details' : 'View all ticket details'}
+                            aria-label={expandedTicketId === ticket.id ? 'Collapse ticket details' : 'View all ticket details'}
+                          >
+                            {expandedTicketId === ticket.id ? <ChevronUp className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                          </button>
                         </div>
                       </div>
+
+                      {expandedTicketId === ticket.id && (
+                        <ExpandedTicketDetails ticket={ticket} />
+                      )}
                     </div>
                   ))}
                 </div>
