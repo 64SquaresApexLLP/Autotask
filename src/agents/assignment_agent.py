@@ -1361,8 +1361,7 @@ class TicketData:
 
 @dataclass
 class TechnicianData:
-    """Data class for technician information from TEST_DB.PUBLIC.TECHNICIAN_DUMMY_DATA
-    (max_workload and availability_status removed - availability checked via Google Calendar)"""
+    """Data class for technician information from TEST_DB.PUBLIC.TECHNICIAN_DUMMY_DATA"""
     technician_id: str
     name: str
     email: str
@@ -1370,6 +1369,12 @@ class TechnicianData:
     skills: List[str]
     current_workload: int
     specializations: List[str]
+    shift_start: str = "09:00"
+    shift_end: str = "17:00"
+    timezone: str = "America/New_York"
+    working_days: Optional[List[str]] = None
+    is_on_call: bool = False
+    is_on_leave: bool = False
 
 @dataclass
 class SkillAnalysis:
@@ -1480,16 +1485,16 @@ class AssignmentAgentIntegration:
         # Fallback assignment email - should be configured in environment or config
         self.fallback_email = os.getenv('FALLBACK_TECHNICIAN_EMAIL', 'support@company.com')
 
-        # Cortex LLM model configuration
-        self.cortex_model = os.getenv('CORTEX_LLM_MODEL', 'llama3.1-70b')
+        # Cortex LLM model configuration (mistral-7b / llama3.1-8b)
+        self.cortex_model = os.getenv('CORTEX_LLM_MODEL', 'mistral-7b')
 
-        # Priority tier definitions for assignment hierarchy (Tiers 4-5 commented out)
+        # Priority tier definitions for assignment hierarchy
         self.priority_tiers = {
-            1: "Available + Strong match (≥70%)",
-            2: "Available + Mid match (60-69%)",
-            3: "Available + Weak match (<60%)",
-            # 4: "Unavailable + Strong match",  # COMMENTED OUT
-            # 5: "Unavailable + Mid/Weak match",  # COMMENTED OUT
+            1: "On-Shift + Strong match (≥70%)",
+            2: "On-Shift + Mid match (60-69%)",
+            3: "On-Shift + Weak match (<60%)",
+            4: "Off-Shift / Standby + Strong match",
+            5: "Off-Shift / Standby + Mid/Weak match",
             6: "Fallback assignment"
         }
 
@@ -1554,7 +1559,7 @@ class AssignmentAgentIntegration:
 
             cursor = self.db_connection.conn.cursor()
 
-            # Query with all required fields
+            # Query with all required fields including schedules
             query = """
             SELECT
                 TECHNICIAN_ID,
@@ -1563,7 +1568,13 @@ class AssignmentAgentIntegration:
                 ROLE,
                 SKILLS,
                 CURRENT_WORKLOAD,
-                SPECIALIZATIONS
+                SPECIALIZATIONS,
+                COALESCE(SHIFT_START, '09:00') as SHIFT_START,
+                COALESCE(SHIFT_END, '17:00') as SHIFT_END,
+                COALESCE(TIMEZONE, 'America/New_York') as TIMEZONE,
+                COALESCE(WORKING_DAYS, '["Monday","Tuesday","Wednesday","Thursday","Friday"]') as WORKING_DAYS,
+                COALESCE(IS_ON_CALL, FALSE) as IS_ON_CALL,
+                COALESCE(IS_ON_LEAVE, FALSE) as IS_ON_LEAVE
             FROM TEST_DB.PUBLIC.TECHNICIAN_DUMMY_DATA
             ORDER BY CURRENT_WORKLOAD ASC, NAME ASC
             """
@@ -1594,6 +1605,16 @@ class AssignmentAgentIntegration:
                     else:
                         specializations = [s.strip() for s in specializations_raw.split(',') if s.strip()]
 
+                    # Parse working days
+                    days_raw = str(row[10]) if len(row) > 10 and row[10] else ""
+                    if days_raw.startswith('[') and days_raw.endswith(']'):
+                        try:
+                            working_days = json.loads(days_raw)
+                        except Exception:
+                            working_days = [d.strip() for d in days_raw.strip('[]').replace('"', '').split(',')]
+                    else:
+                        working_days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
+
                     technician_dict = {
                         'technician_id': str(row[0]) if row[0] else '',
                         'name': str(row[1]) if row[1] else '',
@@ -1601,7 +1622,13 @@ class AssignmentAgentIntegration:
                         'role': str(row[3]) if row[3] else '',
                         'skills': skills,
                         'current_workload': int(float(row[5])) if row[5] is not None else 0,
-                        'specializations': specializations
+                        'specializations': specializations,
+                        'shift_start': str(row[7]) if len(row) > 7 and row[7] else '09:00',
+                        'shift_end': str(row[8]) if len(row) > 8 and row[8] else '17:00',
+                        'timezone': str(row[9]) if len(row) > 9 and row[9] else 'America/New_York',
+                        'working_days': working_days,
+                        'is_on_call': bool(row[11]) if len(row) > 11 and row[11] is not None else False,
+                        'is_on_leave': bool(row[12]) if len(row) > 12 and row[12] is not None else False
                     }
                     technicians.append(technician_dict)
 
@@ -1610,7 +1637,7 @@ class AssignmentAgentIntegration:
                     continue
 
             if technicians:
-                logger.info(f"Retrieved {len(technicians)} technicians from TEST_DB.PUBLIC.TECHNICIAN_DUMMY_DATA")
+                logger.info(f"Retrieved {len(technicians)} technicians from TEST_DB.PUBLIC.TECHNICIAN_DUMMY_DATA with schedules")
                 return technicians
             else:
                 return self._get_fallback_technicians_from_csv()
@@ -1931,6 +1958,67 @@ class AssignmentAgentIntegration:
         except Exception as e:
             logger.error(f"Error checking calendar availability for {technician_email}: {str(e)}")
             return True
+
+    def check_shift_availability(self, technician: TechnicianData, priority: str = "Medium") -> Tuple[bool, str]:
+        """
+        Check if technician is currently on shift, on leave, or on-call for critical incidents.
+
+        Args:
+            technician (TechnicianData): Technician profile with shift settings
+            priority (str): Ticket priority ('Critical', 'High', 'Medium', 'Low')
+
+        Returns:
+            Tuple[bool, str]: (is_available, reasoning_status)
+        """
+        if technician.is_on_leave:
+            return False, "On Approved Leave"
+
+        try:
+            from zoneinfo import ZoneInfo
+            tech_tz = ZoneInfo(technician.timezone)
+        except Exception:
+            tech_tz = timezone.utc
+
+        now_tech = datetime.now(tech_tz)
+        day_name = now_tech.strftime('%A')
+
+        # Check working days
+        working_days = technician.working_days or ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
+        if isinstance(working_days, str):
+            try:
+                working_days = json.loads(working_days)
+            except Exception:
+                working_days = [d.strip() for d in working_days.strip('[]').replace('"', '').split(',')]
+
+        is_working_day = day_name in working_days
+
+        # Parse shift start and end times
+        try:
+            start_parts = [int(p) for p in (technician.shift_start or "09:00").split(':')]
+            end_parts = [int(p) for p in (technician.shift_end or "17:00").split(':')]
+
+            shift_start_time = now_tech.replace(hour=start_parts[0], minute=start_parts[1], second=0, microsecond=0)
+            shift_end_time = now_tech.replace(hour=end_parts[0], minute=end_parts[1], second=0, microsecond=0)
+
+            # Handle overnight shifts
+            if shift_end_time < shift_start_time:
+                is_in_hours = now_tech >= shift_start_time or now_tech <= shift_end_time
+            else:
+                is_in_hours = shift_start_time <= now_tech <= shift_end_time
+        except Exception as e:
+            logger.warning(f"Shift time parse error for {technician.technician_id}: {e}")
+            is_in_hours = True
+
+        is_on_shift = is_working_day and is_in_hours
+
+        if is_on_shift:
+            return True, f"Active Shift ({technician.shift_start}-{technician.shift_end} {technician.timezone})"
+
+        # If outside active shift, Critical tickets can be routed to On-Call engineers
+        if str(priority).capitalize() == "Critical" and technician.is_on_call:
+            return True, f"On-Call Critical Coverage ({technician.timezone})"
+
+        return False, f"Off-Shift (Hours: {technician.shift_start}-{technician.shift_end} {technician.timezone})"
 
     def select_best_candidate(self, candidates: List[AssignmentCandidate]) -> Optional[AssignmentCandidate]:
         """
@@ -2577,16 +2665,17 @@ class AssignmentAgentIntegration:
                     missing_skills=skill_match.missing_skills
                 )
 
+                # Check shift schedule availability
+                is_on_shift, shift_reason = self.check_shift_availability(technician, ticket.priority)
+
                 # Check calendar availability using the modular function
                 calendar_available = self.check_calendar_availability(technician.email, ticket.due_date)
 
-                # FILTER OUT UNAVAILABLE TECHNICIANS - Only consider available ones
-                if not calendar_available:
-                    logger.info(f"Skipping unavailable technician: {technician.name}")
-                    continue
+                # Overall availability considers active shift and calendar free/busy
+                is_available = is_on_shift and calendar_available
 
-                # Determine priority tier based on availability and enhanced skill match
-                priority_tier = self._determine_priority_tier(calendar_available, enhanced_skill_match.classification)
+                # Determine priority tier based on shift, calendar, and skill match
+                priority_tier = self._determine_priority_tier(is_on_shift, calendar_available, enhanced_skill_match.classification)
 
                 # Create detailed reasoning string
                 reasoning = (f"Technician: {technician.name}, "
@@ -2594,7 +2683,8 @@ class AssignmentAgentIntegration:
                            f"Specialization Bonus: +{specialization_bonus}%, "
                            f"Role Bonus: +{role_bonus}%, "
                            f"Final Match: {enhanced_skill_match.classification} ({enhanced_match_percentage}%), "
-                           f"Available: {calendar_available}, "
+                           f"Shift Status: {shift_reason}, "
+                           f"Calendar Available: {calendar_available}, "
                            f"Current Workload: {technician.current_workload} tickets, "
                            f"Matched Skills: {skill_match.matched_skills}, "
                            f"Priority Tier: {priority_tier}")
@@ -2602,7 +2692,7 @@ class AssignmentAgentIntegration:
                 candidate = AssignmentCandidate(
                     technician=technician,
                     skill_match=enhanced_skill_match,
-                    calendar_available=calendar_available,
+                    calendar_available=is_available,
                     priority_tier=priority_tier,
                     reasoning=reasoning
                 )
@@ -2716,33 +2806,37 @@ class AssignmentAgentIntegration:
         else:
             return "Weak"
 
-    def _determine_priority_tier(self, calendar_available: bool, skill_classification: str) -> int:
+    def _determine_priority_tier(self, is_on_shift: bool, calendar_available: bool, skill_classification: str) -> int:
         """
-        Determine priority tier based on availability and skill match classification
+        Determine priority tier based on shift schedule, calendar availability, and skill match classification.
 
-        Args:
-            calendar_available (bool): Whether technician is available
-            skill_classification (str): "Strong", "Mid", or "Weak"
+        Tiers:
+        1: On-Shift + Strong match (≥70%)
+        2: On-Shift + Mid match (60-69%)
+        3: On-Shift + Weak match (<60%)
+        4: Off-Shift / On-Call + Strong match (Secondary Standby)
+        5: Off-Shift / On-Call + Mid/Weak match (Secondary Standby)
+        6: Fallback
 
         Returns:
             int: Priority tier (1-6)
         """
-        if calendar_available:
+        if is_on_shift and calendar_available:
             if skill_classification == "Strong":
-                return 1  # Available + Strong match (≥70%)
+                return 1
             elif skill_classification == "Mid":
-                return 2  # Available + Mid match (60-69%)
-            else:  # Weak
-                return 3  # Available + Weak match (<60%)
+                return 2
+            else:
+                return 3
+        elif is_on_shift:
+            # Shift matches but calendar has busy event
+            return 4
         else:
-            # COMMENTED OUT: Unavailable technicians are not considered for assignment
-            # if skill_classification == "Strong":
-            #     return 4  # Unavailable + Strong match
-            # else:  # Mid or Weak
-            #     return 5  # Unavailable + Mid/Weak match
-
-            # Skip unavailable technicians - they will be filtered out
-            return 6  # Treat as fallback tier to exclude from selection
+            # Off-shift (available as standby if no on-shift technician is available)
+            if skill_classification == "Strong":
+                return 4
+            else:
+                return 5
         # Tier 6 (Fallback) is handled separately
 
     def _create_assignment_response(self, ticket: TicketData, candidate: Optional[AssignmentCandidate] = None,
@@ -2804,6 +2898,10 @@ class AssignmentAgentIntegration:
                     'skill_match_percentage': candidate.skill_match.match_percentage,
                     'skill_match_classification': candidate.skill_match.classification,
                     'calendar_available': candidate.calendar_available,
+                    'shift_start': candidate.technician.shift_start,
+                    'shift_end': candidate.technician.shift_end,
+                    'timezone': candidate.technician.timezone,
+                    'is_on_call': candidate.technician.is_on_call,
                     'matched_skills': candidate.skill_match.matched_skills,
                     'missing_skills': candidate.skill_match.missing_skills,
                     'reasoning': candidate.reasoning

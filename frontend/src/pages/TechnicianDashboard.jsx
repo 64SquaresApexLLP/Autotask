@@ -7,6 +7,7 @@ import useAuth from '../hooks/useAuth';
 import { ticketService } from '../services/ticketService.js';
 import { technicianService } from '../services/technicianService.js';
 import { ApiError } from '../services/api.js';
+import MttrCard, { calculateTicketSla } from '../components/MttrCard';
 
 const ProgressBar = ({ percentage, color = "bg-blue-500" }) => (
   <div className="w-full bg-gray-200 rounded-full h-3">
@@ -23,7 +24,8 @@ const TechnicianDashboard = () => {
     myTickets: [],
     allTickets: [],
     statistics: null,
-    technicians: []
+    technicians: [],
+    mttrAnalytics: null
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -39,16 +41,20 @@ const TechnicianDashboard = () => {
       setLoading(true);
       setError('');
 
-      // Load all tickets, statistics, and technicians
-      const [allTickets, statistics, technicians] = await Promise.all([
+      const currentUserId = (user?.username || '').trim().toLowerCase();
+      const currentUserEmail = (user?.email || '').trim().toLowerCase();
+
+      // Load all tickets, statistics, technicians, and MTTR analytics
+      const [allTickets, statistics, technicians, mttrAnalytics] = await Promise.all([
         ticketService.getAllTickets(),
-        ticketService.getTicketStatistics().catch(() => null), // Statistics might not be available
-        technicianService.getAllTechnicians().catch(() => []) // Get all technicians
+        ticketService.getTicketStatistics().catch(() => null),
+        technicianService.getAllTechnicians().catch(() => []),
+        ticketService.getMttrAnalytics({
+          technician_id: currentUserId || currentUserEmail
+        }).catch(() => null)
       ]);
 
       // Filter tickets assigned to current technician using real IDs
-      const currentUserId = (user?.username || '').trim().toLowerCase();
-      const currentUserEmail = (user?.email || '').trim().toLowerCase();
       const currentFullName = (user?.full_name || '').trim().toLowerCase();
 
       const myTickets = allTickets.filter(ticket => {
@@ -67,7 +73,8 @@ const TechnicianDashboard = () => {
         myTickets,
         allTickets,
         statistics,
-        technicians
+        technicians,
+        mttrAnalytics
       });
     } catch (error) {
       console.error('Failed to load dashboard data:', error);
@@ -203,6 +210,12 @@ const TechnicianDashboard = () => {
               </div>
             </div>
 
+            {/* MTTR & SLA Performance Card */}
+            <MttrCard
+              mttrData={dashboardData.mttrAnalytics}
+              isTechnician={true}
+            />
+
             {/* Performance Section */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Performance Metrics */}
@@ -337,12 +350,26 @@ const TechnicianDashboard = () => {
                       priorityColor === 'orange' ? 'text-orange-600' :
                         priorityColor === 'yellow' ? 'text-yellow-600' : 'text-green-600';
 
+                    const sla = calculateTicketSla(ticket);
+                    const slaBadgeClass = sla.color === 'red'
+                      ? 'bg-red-100 text-red-700 border-red-200'
+                      : sla.color === 'amber'
+                        ? 'bg-amber-100 text-amber-700 border-amber-200'
+                        : sla.color === 'blue'
+                          ? 'bg-blue-100 text-blue-700 border-blue-200'
+                          : 'bg-emerald-100 text-emerald-700 border-emerald-200';
+
                     return (
                       <div key={ticket.id} className={`flex flex-col sm:flex-row sm:items-center sm:justify-between p-4 border rounded-lg ${borderClass}`}>
                         <div className="flex items-start space-x-3 mb-3 sm:mb-0">
                           <div className={`w-3 h-3 rounded-full mt-1 ${dotClass}`}></div>
                           <div>
-                            <div className="font-semibold text-gray-800">{ticket.title}</div>
+                            <div className="font-semibold text-gray-800 flex flex-wrap items-center gap-2">
+                              <span>{ticket.title}</span>
+                              <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-md border ${slaBadgeClass}`}>
+                                ⏱️ {sla.text}
+                              </span>
+                            </div>
                             <div className="text-sm text-gray-600 mt-1">
                               #{ticket.id} • {ticket.requester_name || ticket.user_email || 'Unknown'} •
                               {new Date(ticket.created_at || Date.now()).toLocaleDateString()}

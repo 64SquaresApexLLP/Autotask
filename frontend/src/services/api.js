@@ -135,7 +135,8 @@ class ApiService {
       clearTimeout(timeoutId);
 
       // ── Auto-refresh on 401 ──────────────────────────────────────────────
-      if (response.status === 401 && !_isRetry) {
+      const isAuthEndpoint = endpoint.includes('/auth/login') || endpoint.includes('/auth/refresh');
+      if (response.status === 401 && !_isRetry && !isAuthEndpoint) {
         try {
           await this._silentRefresh();
           // Retry with the new access token (update Authorization header)

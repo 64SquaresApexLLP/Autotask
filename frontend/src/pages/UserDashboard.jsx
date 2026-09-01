@@ -6,10 +6,12 @@ import AiPipelineModal from '../components/AiPipelineModal.jsx';
 import { ticketService } from '../services/ticketService.js';
 import { ApiError } from '../services/api.js';
 import useAuth from '../hooks/useAuth';
+import MttrCard, { calculateTicketSla } from '../components/MttrCard';
 
 const UserDashboard = () => {
   const { user } = useAuth();
   const [tickets, setTickets] = useState([]);
+  const [mttrAnalytics, setMttrAnalytics] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [showCreateForm, setShowCreateForm] = useState(false);
@@ -38,12 +40,18 @@ const UserDashboard = () => {
       setLoading(true);
       setError('');
 
-      // Load all tickets and filter on frontend
-      const allTickets = await ticketService.getAllTickets({ limit: 150 });
-
-      // Filter tickets for current user with case-insensitivity
       const userId = user?.username?.trim().toLowerCase();
       const userEmail = user?.email?.trim().toLowerCase();
+
+      // Load all tickets and MTTR analytics concurrently
+      const [allTickets, mttrData] = await Promise.all([
+        ticketService.getAllTickets({ limit: 150 }),
+        ticketService.getMttrAnalytics({ user_email: userEmail || userId }).catch(() => null)
+      ]);
+
+      setMttrAnalytics(mttrData);
+
+      // Filter tickets for current user with case-insensitivity
       const userName = (user?.name || user?.full_name)?.trim().toLowerCase();
       const userRole = user?.role?.toLowerCase();
 
@@ -229,6 +237,13 @@ const UserDashboard = () => {
               </div>
             </div>
 
+            {/* MTTR & Turnaround Estimates Card */}
+            <MttrCard
+              mttrData={mttrAnalytics}
+              isTechnician={false}
+              className="mb-8"
+            />
+
             {/* Create New Ticket Section */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 md:p-8 mb-8">
               <div className="flex items-center justify-between mb-6">
@@ -406,18 +421,31 @@ const UserDashboard = () => {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {tickets.map((ticket) => (
-                    <div key={ticket.id} className="border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow">
-                      <div className="flex items-start justify-between mb-4">
-                        <div className="flex-1">
-                          <div className="flex items-center space-x-3 mb-2">
-                            {getStatusIcon(ticket.status)}
-                            <h3 className="text-lg font-semibold text-gray-800">{ticket.title}</h3>
-                            <span className={`px-3 py-1 rounded-full text-xs font-medium ${getPriorityColor(ticket.priority)}`}>
-                              {ticket.priority || 'Medium'}
-                            </span>
-                          </div>
-                          <p className="text-gray-600 mb-3">{ticket.description}</p>
+                  {tickets.map((ticket) => {
+                    const sla = calculateTicketSla(ticket);
+                    const slaBadgeClass = sla.color === 'red'
+                      ? 'bg-red-100 text-red-700 border-red-200'
+                      : sla.color === 'amber'
+                        ? 'bg-amber-100 text-amber-700 border-amber-200'
+                        : sla.color === 'blue'
+                          ? 'bg-blue-100 text-blue-700 border-blue-200'
+                          : 'bg-emerald-100 text-emerald-700 border-emerald-200';
+
+                    return (
+                      <div key={ticket.id} className="border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow">
+                        <div className="flex items-start justify-between mb-4">
+                          <div className="flex-1">
+                            <div className="flex items-center flex-wrap gap-2 mb-2">
+                              {getStatusIcon(ticket.status)}
+                              <h3 className="text-lg font-semibold text-gray-800">{ticket.title}</h3>
+                              <span className={`px-3 py-1 rounded-full text-xs font-medium ${getPriorityColor(ticket.priority)}`}>
+                                {ticket.priority || 'Medium'}
+                              </span>
+                              <span className={`text-[11px] font-semibold px-2.5 py-0.5 rounded-md border ${slaBadgeClass}`}>
+                                ⏱️ {sla.text}
+                              </span>
+                            </div>
+                            <p className="text-gray-600 mb-3">{ticket.description}</p>
 
                           {(ticket.ticket_category || ticket.issue_type) && (
                             <div className="flex items-center flex-wrap gap-2 mb-3">
@@ -482,7 +510,8 @@ const UserDashboard = () => {
                         </div>
                       </div>
                     </div>
-                  ))}
+                  );
+                })}
                 </div>
               )}
             </div>

@@ -47,6 +47,11 @@ export const API_ENDPOINTS = {
     SIMILAR_TICKETS: (ticketNumber) => `/chatbot/tickets/similar/${ticketNumber}`,
     CHAT: '/chatbot/chat',
     WEBSOCKET: '/ws'
+  },
+
+  // Analytics & SLA endpoints
+  ANALYTICS: {
+    MTTR: '/analytics/mttr'
   }
 };
 

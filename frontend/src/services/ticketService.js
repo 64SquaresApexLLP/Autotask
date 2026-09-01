@@ -261,10 +261,18 @@ export const ticketService = {
           if (ticket.priority && t.priority && ticket.priority.toLowerCase() === t.priority.toLowerCase()) score += 1;
           return { ticket: t, score };
         })
-        .filter((entry) => entry.score > 0)
-        .sort((a, b) => b.score - a.score);
-
       return scored.slice(0, limit).map((entry) => entry.ticket);
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  /**
+   * Get MTTR (Mean Time to Resolution) analytics and SLA metrics
+   */
+  async getMttrAnalytics(params = {}) {
+    try {
+      return await apiService.get(API_ENDPOINTS.ANALYTICS.MTTR, params);
     } catch (error) {
       throw error;
     }
