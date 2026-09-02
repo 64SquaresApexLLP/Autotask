@@ -133,7 +133,7 @@ const AdminTicketsReport = () => {
                 </div>
                 <div>
                   <h1 className="text-xl lg:text-2xl font-bold text-gray-800 tracking-tight">
-                    Master Tickets Operational Report
+                   Exicutive Dashboard
                   </h1>
                   <p className="text-gray-600 text-sm mt-0.5">
                     Centralized system ticket logs, resolution lifecycle auditing, technician assignments, and CSV data exports.

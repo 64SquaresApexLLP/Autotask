@@ -183,7 +183,7 @@ const AdminUsers = () => {
                     User Administration
                   </h1>
                   <p className="text-gray-600 text-sm mt-0.5">
-                    Manage registered employee accounts, contact details, departments, and support access privileges.
+                    Manage registered employee accounts, contact details, and support access privileges.
                   </p>
                 </div>
               </div>
@@ -228,7 +228,7 @@ const AdminUsers = () => {
               </div>
             )}
 
-            {/* Search and Department Filter Bar */}
+            {/* Search and Department Filter Bar
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
               <div className="relative w-full sm:w-96">
                 <Search className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 transform -translate-y-1/2" />
@@ -254,7 +254,7 @@ const AdminUsers = () => {
                   ))}
                 </select>
               </div>
-            </div>
+            </div> */}
 
             {/* Users Table */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
@@ -274,7 +274,7 @@ const AdminUsers = () => {
                       <tr>
                         <th className="py-3.5 px-4">User</th>
                         <th className="py-3.5 px-4">Email</th>
-                        <th className="py-3.5 px-4">Department</th>
+                        {/* <th className="py-3.5 px-4">Department</th> */}
                         <th className="py-3.5 px-4">Phone</th>
                         <th className="py-3.5 px-4">Mapped Tickets</th>
                         <th className="py-3.5 px-4">Status</th>
@@ -300,11 +300,11 @@ const AdminUsers = () => {
                             {u.email}
                           </td>
 
-                          <td className="py-3.5 px-4">
+                          {/* <td className="py-3.5 px-4">
                             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
                               {u.department || 'General'}
                             </span>
-                          </td>
+                          </td> */}
 
                           <td className="py-3.5 px-4 text-gray-700">
                             {u.phone_number || 'N/A'}
@@ -402,7 +402,7 @@ const AdminUsers = () => {
                       />
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3">
+                    {/* <div className="grid grid-cols-2 gap-3">
                       <div>
                         <label className="block text-xs font-semibold text-gray-700 mb-1">Department</label>
                         <select
@@ -426,7 +426,7 @@ const AdminUsers = () => {
                           placeholder="+1-555-0100"
                         />
                       </div>
-                    </div>
+                    </div> */}
 
                     <div className="flex items-center justify-end space-x-3 pt-4 border-t border-gray-100">
                       <button

@@ -123,7 +123,7 @@ ${(mttrData.technician_leaderboard || []).map((t, idx) => `  #${idx + 1} ${t.nam
                 <div>
                   <div className="flex items-center flex-wrap gap-2">
                     <h1 className="text-xl lg:text-2xl font-bold text-gray-800 tracking-tight">
-                      Wider Executive MTTR & SLA Analytics
+                      MTTR Reports
                     </h1>
                     <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-purple-50 text-purple-700 border border-purple-200">
                       <ShieldCheck className="w-3.5 h-3.5 text-purple-600" />
