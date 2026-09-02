@@ -17,7 +17,9 @@ import {
   Phone,
   Mail,
   Sliders,
-  Check
+  Check,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import Header from '../../components/Header';
 import Sidebar from '../../components/Sidebar';
@@ -61,7 +63,7 @@ const AdminTechnicians = () => {
   // Form states
   const [newTechForm, setNewTechForm] = useState({
     username: '',
-    password: 'password123',
+    password: '',
     full_name: '',
     email: '',
     phone_number: '',
@@ -72,6 +74,8 @@ const AdminTechnicians = () => {
     skill_sets: ['Network Routing & EVPN', 'Hardware Diagnostics'],
     max_capacity: 10
   });
+
+  const [showPassword, setShowPassword] = useState(false);
 
   const [scheduleForm, setScheduleForm] = useState({
     primary_shift: '',
@@ -141,15 +145,20 @@ const AdminTechnicians = () => {
       setError('Username and Full Name are required.');
       return;
     }
+    if (!newTechForm.password || newTechForm.password.length < 6) {
+      setError('Password is required and must be at least 6 characters.');
+      return;
+    }
 
     try {
       setLoading(true);
       await adminService.createTechnician(newTechForm);
       setSuccessMessage(`Technician ${newTechForm.full_name} added successfully!`);
       setShowAddModal(false);
+      setShowPassword(false);
       setNewTechForm({
         username: '',
-        password: 'password123',
+        password: '',
         full_name: '',
         email: '',
         phone_number: '',
@@ -456,7 +465,7 @@ const AdminTechnicians = () => {
                       <UserPlus className="w-5 h-5 text-[#00ABE4]" />
                       Add New Technician
                     </h3>
-                    <button onClick={() => setShowAddModal(false)} className="text-gray-400 hover:text-gray-600">
+                    <button onClick={() => { setShowAddModal(false); setShowPassword(false); }} className="text-gray-400 hover:text-gray-600">
                       <X className="w-5 h-5" />
                     </button>
                   </div>
@@ -484,6 +493,28 @@ const AdminTechnicians = () => {
                           className="w-full text-sm border border-gray-300 rounded-lg p-2.5 focus:ring-2 focus:ring-[#00ABE4] focus:outline-none"
                           placeholder="e.g. Sarah Jenkins"
                         />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-700 mb-1">Password *</label>
+                      <div className="relative">
+                        <input
+                          type={showPassword ? 'text' : 'password'}
+                          required
+                          value={newTechForm.password}
+                          onChange={(e) => setNewTechForm({ ...newTechForm, password: e.target.value })}
+                          className="w-full text-sm border border-gray-300 rounded-lg p-2.5 pr-10 focus:ring-2 focus:ring-[#00ABE4] focus:outline-none"
+                          placeholder="Min. 6 characters"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword(!showPassword)}
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                          tabIndex={-1}
+                        >
+                          {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
                       </div>
                     </div>
 

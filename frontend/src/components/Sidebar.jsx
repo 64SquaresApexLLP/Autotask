@@ -16,7 +16,7 @@ const Sidebar = () => {
     { icon: Wrench, label: 'Dashboard', path: '/technician/dashboard' },
     { icon: List, label: 'My Tickets', path: '/technician/my-tickets' },
     { icon: Network, label: 'Network Ontology', path: '/technician/ontology' },
-    { icon: Timer, label: 'MTTR & SLA Report', path: '/technician/mttr-report' },
+    { icon: Timer, label: 'MTTR Report', path: '/technician/mttr-report' },
   ];
 
   const adminMenuItems = [

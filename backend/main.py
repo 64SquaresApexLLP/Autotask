@@ -4262,11 +4262,12 @@ async def create_admin_technician(tech_data: dict):
                     shift_end = parts[1].strip()
 
             is_on_call = True if new_tech["on_call_status"].lower() == "active" else False
-            
+            plain_password = tech_data.get("password", "").strip()
+
             ins_sql = f"""
                 INSERT INTO {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TECHNICIAN_DATA 
-                (TECHNICIAN_ID, NAME, EMAIL, ROLE, SPECIALIZATIONS, SHIFT_START, SHIFT_END, IS_ON_CALL, SKILLS, CURRENT_WORKLOAD)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 0)
+                (TECHNICIAN_ID, NAME, EMAIL, ROLE, SPECIALIZATIONS, SHIFT_START, SHIFT_END, IS_ON_CALL, SKILLS, CURRENT_WORKLOAD, TECHNICIAN_PASSWORD)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 0, %s)
             """
             snowflake_conn.execute_query(ins_sql, (
                 new_tech["username"],
@@ -4277,15 +4278,17 @@ async def create_admin_technician(tech_data: dict):
                 shift_start,
                 shift_end,
                 is_on_call,
-                ", ".join(new_tech["skill_sets"])
+                ", ".join(new_tech["skill_sets"]),
+                plain_password
             ))
         except Exception as e:
             logger.warning(f"Could not persist technician to Snowflake: {e}")
 
     ADMIN_TECHNICIANS_STORE.append(new_tech)
+    plain_password = tech_data.get("password", "").strip()
     DEMO_USERS[username] = {
         "username": username,
-        "password": tech_data.get("password", "password123"),
+        "password": plain_password,
         "role": "technician",
         "email": new_tech["email"],
         "full_name": new_tech["full_name"],
