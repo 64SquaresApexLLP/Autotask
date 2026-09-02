@@ -184,7 +184,7 @@ const UserDashboard = () => {
     <div className="flex min-h-screen bg-gray-50">
       <Sidebar />
       <div className="flex-1">
-        <Header />
+        <Header onRefresh={loadUserTickets} isRefreshing={loading} />
         <main className="p-6 md:p-8">
           <div className="max-w-6xl mx-auto">
             <div className="mb-8">

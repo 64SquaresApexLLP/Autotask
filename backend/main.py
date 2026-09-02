@@ -200,6 +200,47 @@ def load_csv_users_into_demo():
             except Exception as e:
                 logger.warning(f"Could not load user CSV: {e}")
 
+    # 3. Load Admin Users from CSV (snowflake_ontology_data / data)
+    admin_paths = [
+        os.path.join(base_dir, 'snowflake_ontology_data', 'ADMIN_USERS.csv'),
+        os.path.join(base_dir, 'snowflake_ontology_data', 'Admin_user.csv'),
+        os.path.join(base_dir, 'data', 'ADMIN_USERS.csv')
+    ]
+    for path in admin_paths:
+        if os.path.exists(path):
+            try:
+                with open(path, 'r', encoding='utf-8') as f:
+                    reader = csv.DictReader(f)
+                    for row in reader:
+                        a_id = (row.get('ADMIN_ID') or '').strip()
+                        a_uname = (row.get('USERNAME') or '').strip()
+                        a_email = (row.get('EMAIL') or '').strip()
+                        a_name = (row.get('FULL_NAME') or '').strip()
+                        a_role = (row.get('ROLE') or 'admin').strip()
+                        a_perms = (row.get('PERMISSIONS_SCOPE') or '').strip()
+                        a_pass = (row.get('PASSWORD_HASH') or row.get('PASSWORD') or ('admin' if a_uname == 'admin' else 'password123')).strip()
+
+                        if a_uname:
+                            entry = {
+                                "username": a_uname,
+                                "password": a_pass,
+                                "role": "admin",
+                                "email": a_email,
+                                "full_name": a_name,
+                                "permissions_scope": a_perms,
+                                "admin_id": a_id
+                            }
+                            DEMO_USERS[a_uname] = entry
+                            DEMO_USERS[a_uname.lower()] = entry
+                            if a_email:
+                                DEMO_USERS[a_email.lower()] = entry
+                            if a_id:
+                                DEMO_USERS[a_id.lower()] = entry
+                print(f" Loaded admin accounts from {os.path.basename(path)}")
+                break
+            except Exception as e:
+                logger.warning(f"Could not load admin CSV: {e}")
+
 load_csv_users_into_demo()
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -234,8 +275,7 @@ def verify_token(token: str, token_type: str = "access") -> Optional[dict]:
     """Verify and decode JWT token."""
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        stored_type = payload.get("type")
-        if stored_type is not None and stored_type != token_type:
+        if payload.get("type") != token_type:
             return None
         return payload
     except JWTError:
@@ -244,6 +284,48 @@ def verify_token(token: str, token_type: str = "access") -> Optional[dict]:
 def verify_refresh_token(token: str) -> Optional[dict]:
     """Verify and decode refresh token."""
     return verify_token(token, token_type="refresh")
+
+def authenticate_admin_from_db(username: str, password: str) -> Optional[dict]:
+    """Authenticate admin user from Snowflake TEST_DB.PUBLIC.ADMIN_USERS table or local storage."""
+    try:
+        if snowflake_conn and snowflake_conn.is_connected():
+            query = """
+            SELECT * FROM TEST_DB.PUBLIC.ADMIN_USERS
+            WHERE UPPER(ADMIN_ID) = UPPER(%s) OR UPPER(USERNAME) = UPPER(%s) OR LOWER(EMAIL) = LOWER(%s)
+            """
+            results = snowflake_conn.execute_query(query, (username, username, username))
+            if results:
+                admin = results[0]
+                stored_pwd = (
+                    admin.get('PASSWORD_HASH') or
+                    admin.get('ADMIN_PASSWORD') or
+                    admin.get('PASSWORD') or
+                    ''
+                )
+                if check_password_match(password, stored_pwd):
+                    return {
+                        "username": admin.get('USERNAME') or admin.get('ADMIN_ID'),
+                        "password": stored_pwd,
+                        "role": "admin",
+                        "email": admin.get('EMAIL'),
+                        "full_name": admin.get('FULL_NAME') or admin.get('USERNAME'),
+                        "permissions_scope": admin.get('PERMISSIONS_SCOPE'),
+                        "admin_id": admin.get('ADMIN_ID'),
+                        "phone_number": admin.get('PHONE_NUMBER') or '+1-555-0100',
+                        "department": admin.get('DEPARTMENT') or 'IT Operations'
+                    }
+
+    except Exception as e:
+        logger.error(f"Error authenticating admin from database: {e}")
+
+    # Fallback to local DEMO_USERS cache
+    u_lower = username.strip().lower()
+    if u_lower in DEMO_USERS:
+        candidate = DEMO_USERS[u_lower]
+        if candidate.get("role") == "admin" and check_password_match(password, candidate.get("password")):
+            return candidate
+
+    return None
 
 def authenticate_user_from_db(username: str, password: str) -> Optional[dict]:
     """Authenticate user from Snowflake USER_DUMMY_DATA table or local storage."""
@@ -383,6 +465,13 @@ def authenticate_user(username: str, password: str, requested_role: Optional[str
                 user_info["role"] = requested_role
             return user_info
 
+    # Check real admins from Snowflake database
+    admin_user = authenticate_admin_from_db(u_clean, p_clean)
+    if admin_user:
+        if requested_role and requested_role != "admin":
+            admin_user["role"] = requested_role
+        return admin_user
+
     # Check real users from Snowflake database
     user = authenticate_user_from_db(u_clean, p_clean)
     if user:
@@ -484,6 +573,34 @@ except Exception as e:
 
 # Initialize TicketDB with the snowflake connection
 ticket_db = TicketDB(conn=snowflake_conn)
+
+def ensure_snowflake_admin_users_table(conn):
+    """Ensure ADMIN_USERS table exists in Snowflake TEST_DB.PUBLIC and contains ontology admin rows."""
+    if not conn or not conn.is_connected():
+        return
+    try:
+        ddl = """
+        CREATE TABLE IF NOT EXISTS TEST_DB.PUBLIC.ADMIN_USERS (
+            ADMIN_ID VARCHAR(64) PRIMARY KEY,
+            USERNAME VARCHAR(64) NOT NULL UNIQUE,
+            EMAIL VARCHAR(128) NOT NULL,
+            FULL_NAME VARCHAR(128),
+            ROLE VARCHAR(32) DEFAULT 'admin',
+            PERMISSIONS_SCOPE VARCHAR(512),
+            STATUS VARCHAR(32) DEFAULT 'ACTIVE',
+            PASSWORD_HASH VARCHAR(256),
+            DEPARTMENT VARCHAR(128) DEFAULT 'IT Operations',
+            PHONE_NUMBER VARCHAR(64) DEFAULT '+1-555-0100',
+            CREATED_AT TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP()
+        )
+        """
+        conn.execute_query(ddl)
+        print("✅ Snowflake TEST_DB.PUBLIC.ADMIN_USERS table verified")
+    except Exception as err:
+        logger.warning(f"Could not verify Snowflake ADMIN_USERS table: {err}")
+
+if snowflake_conn and snowflake_conn.is_connected():
+    ensure_snowflake_admin_users_table(snowflake_conn)
 
 # --- AGENTS & DATA MANAGER ---
 # Fix path for reference data file when running from backend directory
@@ -3699,12 +3816,47 @@ ADMIN_TECHNICIANS_STORE = [
 ]
 
 @app.get("/admin/users")
-async def get_admin_users():
-    """Retrieve all users directly from Snowflake TEST_DB.PUBLIC.USER_DUMMY_DATA with live ticket mappings"""
+async def get_admin_users(role: Optional[str] = None):
+    """Retrieve users directly from Snowflake TEST_DB.PUBLIC (USER_DUMMY_DATA / ADMIN_USERS) with live ticket mappings"""
     db_users = []
     
+    # If explicitly asking for admin role, query ADMIN_USERS first
+    if role and role.lower() == "admin":
+        if snowflake_conn and snowflake_conn.is_connected():
+            try:
+                sf_admins = snowflake_conn.execute_query("SELECT * FROM TEST_DB.PUBLIC.ADMIN_USERS")
+                if sf_admins:
+                    for row in sf_admins:
+                        a_id = row.get("ADMIN_ID") or row.get("USERNAME") or ""
+                        a_name = row.get("FULL_NAME") or row.get("USERNAME") or a_id
+                        a_email = row.get("EMAIL") or ""
+                        a_phone = row.get("PHONE_NUMBER") or "+1-555-0100"
+                        a_role = row.get("ROLE") or "admin"
+                        a_dept = row.get("DEPARTMENT") or "IT Operations"
+                        a_perms = row.get("PERMISSIONS_SCOPE") or "ALL_SYSTEMS"
+                        a_status = row.get("STATUS") or "ACTIVE"
+
+                        db_users.append({
+                            "user_id": str(a_id),
+                            "username": str(row.get("USERNAME") or a_id),
+                            "email": str(a_email),
+                            "full_name": str(a_name),
+                            "department": str(a_dept),
+                            "phone_number": str(a_phone),
+                            "role": str(a_role).lower(),
+                            "permissions_scope": a_perms,
+                            "status": str(a_status),
+                            "created_at": str(row.get("CREATED_AT") or "2026-08-15T09:00:00Z"),
+                            "total_tickets": 0,
+                            "active_tickets": 0,
+                            "resolved_tickets": 0,
+                            "last_ticket_date": None
+                        })
+            except Exception as e:
+                logger.error(f"Error querying TEST_DB.PUBLIC.ADMIN_USERS: {e}")
+
     # 1. Direct query from Snowflake TEST_DB.PUBLIC.USER_DUMMY_DATA
-    if snowflake_conn and snowflake_conn.is_connected():
+    if not db_users and snowflake_conn and snowflake_conn.is_connected():
         try:
             sf_users = snowflake_conn.execute_query("SELECT * FROM TEST_DB.PUBLIC.USER_DUMMY_DATA")
             if sf_users:
@@ -3776,6 +3928,135 @@ async def get_admin_users():
                     u["last_ticket_date"] = t_date
 
     return {"users": db_users, "total": len(db_users)}
+
+@app.get("/admin/admin-users")
+async def get_enterprise_admin_users():
+    """Retrieve all enterprise administrator accounts directly from Snowflake TEST_DB.PUBLIC.ADMIN_USERS"""
+    admin_users = []
+    if snowflake_conn and snowflake_conn.is_connected():
+        try:
+            sf_admins = snowflake_conn.execute_query("SELECT * FROM TEST_DB.PUBLIC.ADMIN_USERS ORDER BY CREATED_AT ASC")
+            if sf_admins:
+                for row in sf_admins:
+                    admin_users.append({
+                        "admin_id": row.get("ADMIN_ID"),
+                        "username": row.get("USERNAME"),
+                        "email": row.get("EMAIL"),
+                        "full_name": row.get("FULL_NAME"),
+                        "role": row.get("ROLE") or "admin",
+                        "permissions_scope": row.get("PERMISSIONS_SCOPE") or "ALL_SYSTEMS",
+                        "department": row.get("DEPARTMENT") or "IT Operations",
+                        "phone_number": row.get("PHONE_NUMBER") or "+1-555-0100",
+                        "status": row.get("STATUS") or "ACTIVE",
+                        "created_at": str(row.get("CREATED_AT") or "")
+                    })
+        except Exception as e:
+            logger.error(f"Error querying TEST_DB.PUBLIC.ADMIN_USERS: {e}")
+
+    # Fallback to local CSV if Snowflake query was empty
+    if not admin_users:
+        import csv
+        admin_csv_paths = [
+            os.path.join(parent_dir, "snowflake_ontology_data", "ADMIN_USERS.csv"),
+            os.path.join(parent_dir, "snowflake_ontology_data", "Admin_user.csv"),
+            os.path.join(parent_dir, "data", "ADMIN_USERS.csv")
+        ]
+        for path in admin_csv_paths:
+            if os.path.exists(path):
+                try:
+                    with open(path, "r", encoding="utf-8") as f:
+                        for r in csv.DictReader(f):
+                            admin_users.append({
+                                "admin_id": r.get("ADMIN_ID"),
+                                "username": r.get("USERNAME"),
+                                "email": r.get("EMAIL"),
+                                "full_name": r.get("FULL_NAME"),
+                                "role": r.get("ROLE") or "admin",
+                                "permissions_scope": r.get("PERMISSIONS_SCOPE") or "ALL_SYSTEMS",
+                                "department": "IT Operations",
+                                "phone_number": "+1-555-0100",
+                                "status": r.get("STATUS") or "ACTIVE",
+                                "created_at": r.get("CREATED_AT") or ""
+                            })
+                    break
+                except Exception as ex:
+                    logger.warning(f"Could not read admin CSV fallback: {ex}")
+
+    return {"admin_users": admin_users, "total": len(admin_users)}
+
+@app.post("/admin/admin-users")
+async def create_enterprise_admin_user(admin_data: dict):
+    """Add a new administrator into Snowflake TEST_DB.PUBLIC.ADMIN_USERS"""
+    username = admin_data.get("username", "").strip()
+    email = admin_data.get("email", "").strip()
+    if not username or not email:
+        raise HTTPException(status_code=400, detail="Username and Email are required")
+
+    admin_id = admin_data.get("admin_id") or f"adm-{datetime.now().strftime('%M%S')}"
+    full_name = admin_data.get("full_name", username).strip()
+    role = admin_data.get("role", "admin").strip()
+    permissions = admin_data.get("permissions_scope", "TECH_SCHEDULES,REPORTS,ONTOLOGY,TICKET_MGMT").strip()
+    dept = admin_data.get("department", "IT Operations").strip()
+    phone = admin_data.get("phone_number", "+1-555-0100").strip()
+    status_val = admin_data.get("status", "ACTIVE").strip()
+    pwd = admin_data.get("password", "admin123").strip()
+
+    new_admin = {
+        "admin_id": admin_id,
+        "username": username,
+        "email": email,
+        "full_name": full_name,
+        "role": role,
+        "permissions_scope": permissions,
+        "department": dept,
+        "phone_number": phone,
+        "status": status_val,
+        "created_at": datetime.now().isoformat()
+    }
+
+    if snowflake_conn and snowflake_conn.is_connected():
+        try:
+            ins_sql = """
+                MERGE INTO TEST_DB.PUBLIC.ADMIN_USERS t
+                USING (SELECT %s AS ADMIN_ID, %s AS USERNAME, %s AS EMAIL, %s AS FULL_NAME, %s AS ROLE, %s AS PERMISSIONS_SCOPE, %s AS DEPARTMENT, %s AS PHONE_NUMBER, %s AS STATUS, %s AS PASSWORD_HASH) s
+                ON t.ADMIN_ID = s.ADMIN_ID OR t.USERNAME = s.USERNAME
+                WHEN MATCHED THEN
+                    UPDATE SET EMAIL = s.EMAIL, FULL_NAME = s.FULL_NAME, ROLE = s.ROLE, PERMISSIONS_SCOPE = s.PERMISSIONS_SCOPE, DEPARTMENT = s.DEPARTMENT, PHONE_NUMBER = s.PHONE_NUMBER, STATUS = s.STATUS, PASSWORD_HASH = s.PASSWORD_HASH
+                WHEN NOT MATCHED THEN
+                    INSERT (ADMIN_ID, USERNAME, EMAIL, FULL_NAME, ROLE, PERMISSIONS_SCOPE, DEPARTMENT, PHONE_NUMBER, STATUS, PASSWORD_HASH)
+                    VALUES (s.ADMIN_ID, s.USERNAME, s.EMAIL, s.FULL_NAME, s.ROLE, s.PERMISSIONS_SCOPE, s.DEPARTMENT, s.PHONE_NUMBER, s.STATUS, s.PASSWORD_HASH)
+            """
+            snowflake_conn.execute_query(ins_sql, (
+                admin_id, username, email, full_name, role, permissions, dept, phone, status_val, pwd
+            ))
+        except Exception as e:
+            logger.error(f"Error persisting admin to Snowflake: {e}")
+
+    DEMO_USERS[username] = {
+        "username": username,
+        "password": pwd,
+        "role": "admin",
+        "email": email,
+        "full_name": full_name,
+        "permissions_scope": permissions,
+        "admin_id": admin_id
+    }
+    return {"status": "success", "message": "Administrator created successfully", "admin_user": new_admin}
+
+@app.delete("/admin/admin-users/{admin_id}")
+async def delete_enterprise_admin_user(admin_id: str):
+    """Remove/deactivate an administrator from Snowflake TEST_DB.PUBLIC.ADMIN_USERS"""
+    if snowflake_conn and snowflake_conn.is_connected():
+        try:
+            del_sql = "DELETE FROM TEST_DB.PUBLIC.ADMIN_USERS WHERE ADMIN_ID = %s OR USERNAME = %s"
+            snowflake_conn.execute_query(del_sql, (admin_id, admin_id))
+        except Exception as e:
+            logger.error(f"Error removing admin from Snowflake: {e}")
+
+    if admin_id in DEMO_USERS:
+        del DEMO_USERS[admin_id]
+
+    return {"status": "success", "message": f"Administrator {admin_id} removed successfully"}
 
 @app.post("/admin/users")
 async def create_admin_user(user_data: dict):

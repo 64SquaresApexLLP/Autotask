@@ -124,7 +124,7 @@ const TechnicianDashboard = () => {
     <div className="flex min-h-screen bg-gray-50">
       <Sidebar />
       <div className="flex-1 flex flex-col overflow-y-auto max-h-screen ">
-        <Header />
+        <Header onRefresh={loadDashboardData} isRefreshing={loading} />
         <main className="p-6 md:p-8 flex-1 overflow-y-auto ">
           <div className="max-w-7xl mx-auto space-y-6">
 
@@ -154,7 +154,7 @@ const TechnicianDashboard = () => {
                 <div className="flex items-center gap-3">
                   <button
                     onClick={() => window.location.href = '/technician/mttr-report'}
-                    className="inline-flex items-center gap-2 bg-blue-600/30 hover:bg-blue-600/50 text-blue-200 border border-blue-400/30 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all shadow-sm"
+                    className="inline-flex items-center gap-2 bg-blue-600/30 hover:bg-blue-600/50 text-blue-200 border border-blue-400/30 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all shadow-sm cursor-pointer"
                   >
                     <Clock className="w-4 h-4 text-blue-300" />
                     <span>View SLA Speedometer &rarr;</span>
@@ -162,10 +162,10 @@ const TechnicianDashboard = () => {
                   <button
                     onClick={loadDashboardData}
                     disabled={loading}
-                    className="inline-flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white border border-white/15 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all shadow-sm disabled:opacity-50"
+                    className="inline-flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white border border-white/15 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all shadow-sm disabled:opacity-50 cursor-pointer"
                   >
                     <Loader2 className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-                    <span>Refresh</span>
+                    <span>{loading ? 'Refreshing...' : 'Refresh'}</span>
                   </button>
                 </div>
               </div>
@@ -178,41 +178,22 @@ const TechnicianDashboard = () => {
             )}
 
             {/* Welcome Section */}
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between bg-white rounded-xl shadow-sm border border-gray-200 p-4 lg:p-6">
-              <div className="flex items-center space-x-4">
-                <button
-                  onClick={loadDashboardData}
-                  disabled={loading}
-                  className="flex items-center space-x-2 text-[#00ABE4] hover:text-blue-600 transition-colors disabled:opacity-50"
-                >
-                  {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Clock className="w-5 h-5" />}
-                  <span className="text-sm">Refresh</span>
-                </button>
-                <div className="relative">
-                  <Bell className="w-6 h-6 text-gray-500 hover:text-gray-700 cursor-pointer" />
-                  {stats.myUrgent > 0 && (
-                    <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
-                      {stats.myUrgent}
-                    </span>
-                  )}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between bg-white rounded-xl shadow-sm border border-gray-200 p-5 lg:p-6 gap-4">
+              <div className="flex items-center space-x-3.5">
+                <div className="w-12 h-12 rounded-xl bg-blue-50 text-[#00ABE4] flex items-center justify-center text-2xl shadow-xs border border-blue-100 flex-shrink-0">
+                  🔧
                 </div>
-              </div>
-              <div className="flex items-center space-x-3 mb-4 sm:mb-0">
-                <div className="text-2xl">🔧</div>
                 <div>
                   <h1 className="text-xl lg:text-2xl font-bold text-gray-800">Welcome back, {user?.full_name || user?.username}!</h1>
-                  <p className="text-gray-600 text-sm lg:text-base">Here's your current workload and team status</p>
+                  <p className="text-gray-600 text-sm mt-0.5">Here's your current workload and active dispatch queue</p>
                 </div>
               </div>
-
-              <button
-                className="relative px-2  py-2 text-sm lg:text-sm font-bold text-white bg-gradient-to-r from-violet-600 to-indigo-600 rounded-xl shadow-lg hover:shadow-violet-500/50 hover:scale-105 active:scale-95 transition-all duration-200 overflow-hidden group"
-                onClick={handleClick}
-              >
-                <span className="relative z-10">View Ontology</span>
-                <span className="absolute inset-0 bg-gradient-to-r from-indigo-600 to-violet-600 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-              </button>
-
+              <div className="flex items-center gap-3">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-50 text-[#00ABE4] border border-blue-200">
+                  <CheckCircle className="w-3.5 h-3.5 text-[#00ABE4]" />
+                  <span>{stats.myOpen} Active Tickets Assigned</span>
+                </span>
+              </div>
             </div>
 
             {/* Stats Cards */}

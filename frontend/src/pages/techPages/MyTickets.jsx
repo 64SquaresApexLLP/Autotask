@@ -132,7 +132,7 @@ const MyTickets = () => {
     <div className="flex min-h-screen bg-gray-50">
       <Sidebar />
       <div className="flex-1 flex flex-col overflow-y-auto max-h-screen">
-        <Header />
+        <Header onRefresh={loadMyTickets} isRefreshing={loading} />
         <main className=" p-6 md:p-8 flex-1 overflow-y-auto">
           <div className="max-w-6xl mx-auto space-y-6">
             {/* Header Section */}
