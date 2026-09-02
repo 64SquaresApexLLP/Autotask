@@ -4570,8 +4570,11 @@ async def get_admin_wider_mttr_report():
         t_name  = tech["name"].lower()
         t_email = tech["email"]
 
-        def matches_tech(ticket: dict) -> bool:
-            assigned = str(
+        def matches_tech_fn(ticket: dict, tech: dict) -> bool:
+            t_id_l    = tech["id"].lower()
+            t_name_l  = tech["name"].lower()
+            t_email_l = tech["email"]
+            assigned  = str(
                 ticket.get("ASSIGNED_TECHNICIAN") or ticket.get("assigned_technician") or
                 ticket.get("TECHNICIAN_ID")       or ticket.get("technician_id") or
                 ticket.get("TECHNICIANEMAIL")     or ""
@@ -4579,14 +4582,14 @@ async def get_admin_wider_mttr_report():
             if not assigned:
                 return False
             return (
-                (t_id    and (t_id    in assigned or assigned in t_id))
-                or (t_name  and (t_name  in assigned or assigned in t_name))
-                or (t_email and (t_email in assigned or assigned in t_email))
+                (t_id_l    and (t_id_l    in assigned or assigned in t_id_l))
+                or (t_name_l  and (t_name_l  in assigned or assigned in t_name_l))
+                or (t_email_l and (t_email_l in assigned or assigned in t_email_l))
             )
 
         tech_resolved = [
             t for t in all_tickets
-            if matches_tech(t)
+            if matches_tech_fn(t, tech)
             and str(t.get("STATUS") or t.get("status") or "").strip().lower() in resolved_statuses
         ]
 
@@ -4639,29 +4642,12 @@ async def get_admin_wider_mttr_report():
                 shift_buckets.setdefault(tech["shift"], []).append(compute_duration(t))
                 break
 
-    def matches_tech_fn(ticket: dict, tech: dict) -> bool:
-        t_id_l    = tech["id"].lower()
-        t_name_l  = tech["name"].lower()
-        t_email_l = tech["email"]
-        assigned  = str(
-            ticket.get("ASSIGNED_TECHNICIAN") or ticket.get("assigned_technician") or
-            ticket.get("TECHNICIAN_ID")       or ticket.get("technician_id") or
-            ticket.get("TECHNICIANEMAIL")     or ""
-        ).lower().strip()
-        if not assigned:
-            return False
-        return (
-            (t_id_l    and (t_id_l    in assigned or assigned in t_id_l))
-            or (t_name_l  and (t_name_l  in assigned or assigned in t_name_l))
-            or (t_email_l and (t_email_l in assigned or assigned in t_email_l))
-        )
-
     by_shift_out = []
     for sh, durs in shift_buckets.items():
         if not durs:
             continue
         sh_mttr    = round(sum(durs) / len(durs), 1)
-        sh_sla_met = sum(1 for d in durs if d <= 8.0)   # Use high-priority target as shift SLA
+        sh_sla_met = sum(1 for d in durs if d <= 8.0)
         sh_sla     = round((sh_sla_met / len(durs)) * 100, 1)
         by_shift_out.append({
             "shift":            sh,
