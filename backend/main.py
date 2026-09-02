@@ -1064,10 +1064,21 @@ def get_mttr_analytics(
         tech_filter = (technician_id or "").strip().lower()
         user_filter = (user_email or "").strip().lower()
 
+        def ticket_belongs_to_tech(t: dict, tf: str) -> bool:
+            """Check if a ticket is assigned to the given technician filter string."""
+            fields = [
+                str(t.get("TECHNICIAN_ID")       or t.get("technician_id")       or "").strip().lower(),
+                str(t.get("ASSIGNED_TECHNICIAN") or t.get("assigned_technician") or "").strip().lower(),
+                str(t.get("TECHNICIANEMAIL")     or t.get("technician_email")     or "").strip().lower(),
+            ]
+            return any(tf in f or f in tf for f in fields if f)
+
         now = datetime.utcnow()
 
-        # If user_email is provided (user view), filter tickets to only those created by the user
-        if user_filter:
+        # Scope target_tickets to the requesting technician/user only
+        if tech_filter:
+            target_tickets = [t for t in all_tickets if ticket_belongs_to_tech(t, tech_filter)]
+        elif user_filter:
             target_tickets = [
                 t for t in all_tickets
                 if (
@@ -1080,14 +1091,6 @@ def get_mttr_analytics(
             ]
         else:
             target_tickets = all_tickets
-
-        # Overall team tickets for benchmark comparison (kept for SLA compliance base)
-        all_resolved_durations = []
-
-        for t in all_tickets:
-            s_val = str(t.get("STATUS") or t.get("status") or "").strip().lower()
-            if s_val in resolved_statuses:
-                all_resolved_durations.append(1)  # just count resolved tickets
 
         for t in target_tickets:
             status_val = str(t.get("STATUS") or t.get("status") or "").strip().lower()
@@ -1143,6 +1146,12 @@ def get_mttr_analytics(
                         duration_hours = round(diff_h, 1)
                 except Exception:
                     pass
+            elif status_val in resolved_statuses and created_dt:
+                # No resolved timestamp but ticket IS resolved — use elapsed time from created → now
+                # This is the actual minimum time it took, better than a hardcoded estimate
+                elapsed = max(0.1, (now - created_dt).total_seconds() / 3600.0)
+                if elapsed <= 8760:  # cap at 1 year to ignore bad data
+                    duration_hours = round(elapsed, 1)
 
             target_hours = sla_targets.get(priority_key.lower(), 24.0)
 
@@ -1157,15 +1166,8 @@ def get_mttr_analytics(
                     sla_met_count += 1
                 total_evaluated_sla += 1
 
-                # Check if matches personal filter for technicians
-                is_personal = False
-                if tech_filter and (tech_filter in t_tech or t_tech in tech_filter):
-                    is_personal = True
-                if user_filter:
-                    is_personal = True
-
-                if is_personal:
-                    personal_durations.append(duration_hours)
+                # Every ticket in target_tickets is already scoped to this tech/user
+                personal_durations.append(duration_hours)
             else:
                 # Active open ticket SLA evaluation
                 total_evaluated_sla += 1
