@@ -56,7 +56,7 @@ const AdminWiderMttr = () => {
 
   // Derived values — computed from API data only, no hardcoded fallbacks
   const globalMttr    = mttrData?.global_mttr_hours ?? null;
-  const targetMttr    = mttrData?.target_mttr_hours ?? 8.0;
+  const targetMttr    = mttrData?.target_mttr_hours ?? null;
   const slaRate       = mttrData?.sla_compliance_rate ?? null;
   const auditedCount  = mttrData?.total_audited_tickets ?? null;
 
@@ -75,22 +75,22 @@ const AdminWiderMttr = () => {
     {
       priority: 'Critical (P1)',
       actual: mttrData?.by_priority?.Critical?.actual_mttr_hours ?? null,
-      target: mttrData?.by_priority?.Critical?.target_hours ?? 2.0,
+      target: mttrData?.by_priority?.Critical?.target_hours ?? null,
     },
     {
       priority: 'High (P2)',
       actual: mttrData?.by_priority?.High?.actual_mttr_hours ?? null,
-      target: mttrData?.by_priority?.High?.target_hours ?? 8.0,
+      target: mttrData?.by_priority?.High?.target_hours ?? null,
     },
     {
       priority: 'Medium (P3)',
       actual: mttrData?.by_priority?.Medium?.actual_mttr_hours ?? null,
-      target: mttrData?.by_priority?.Medium?.target_hours ?? 24.0,
+      target: mttrData?.by_priority?.Medium?.target_hours ?? null,
     },
     {
       priority: 'Low (P4)',
       actual: mttrData?.by_priority?.Low?.actual_mttr_hours ?? null,
-      target: mttrData?.by_priority?.Low?.target_hours ?? 48.0,
+      target: mttrData?.by_priority?.Low?.target_hours ?? null,
     },
   ].filter(d => d.actual !== null);   // hide bars until data arrives
 

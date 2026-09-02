@@ -43,15 +43,11 @@ export const calculateTicketSla = (ticket) => {
   
   if (isResolved) {
     let resolvedAt = ticket.resolved_at ? new Date(ticket.resolved_at) : null;
-    let durationHours = 0;
+    let durationHours = null;
     if (resolvedAt && !isNaN(resolvedAt.getTime())) {
       durationHours = Math.max(0.1, (resolvedAt.getTime() - createdAt.getTime()) / (1000 * 60 * 60));
     } else {
-      // Deterministic realistic duration based on ticket ID hash
-      const tHash = Array.from(String(ticket.id || '0')).reduce((acc, c) => acc + c.charCodeAt(0), 0);
-      const variance = 0.6 + ((tHash % 100) / 100.0) * 0.7; // 0.6 to 1.3
-      const baseTargets = { critical: 1.5, high: 6.0, medium: 18.0, low: 36.0 };
-      durationHours = (baseTargets[priority] || 18.0) * variance;
+      durationHours = 0;
     }
 
     if (durationHours <= targetHours) {

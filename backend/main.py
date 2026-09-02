@@ -1122,19 +1122,7 @@ def get_mttr_analytics(
                     except Exception:
                         pass
 
-            # Base benchmark duration in hours if timestamp diff is missing
-            # Derive deterministic duration variation based on ticket ID hash
-            t_hash = sum(ord(c) for c in str(t.get("TICKETNUMBER") or t.get("id") or "0"))
-            variance_factor = 0.6 + ((t_hash % 100) / 100.0) * 0.8  # between 0.6 and 1.4
-
-            base_durations = {
-                "Critical": 1.6,
-                "High": 6.4,
-                "Medium": 18.0,
-                "Low": 36.0
-            }
-
-            duration_hours = round(base_durations.get(priority_key, 16.0) * variance_factor, 1)
+            duration_hours = None
 
             # Try parsing resolved timestamp if available
             raw_resolved = t.get("RESOLVED_AT") or t.get("resolved_at") or t.get("COMPLETED_AT") or t.get("completed_at")
@@ -1142,7 +1130,7 @@ def get_mttr_analytics(
                 try:
                     resolved_dt = datetime.fromisoformat(str(raw_resolved).replace("Z", "+00:00").split("+")[0])
                     diff_h = (resolved_dt - created_dt).total_seconds() / 3600.0
-                    if 0.05 <= diff_h <= 500:
+                    if diff_h >= 0:
                         duration_hours = round(diff_h, 1)
                 except Exception:
                     pass
@@ -1156,18 +1144,19 @@ def get_mttr_analytics(
             target_hours = sla_targets.get(priority_key.lower(), 24.0)
 
             if status_val in resolved_statuses:
-                total_durations.append(duration_hours)
-                priority_durations[priority_key].append(duration_hours)
+                if duration_hours is not None:
+                    total_durations.append(duration_hours)
+                    priority_durations[priority_key].append(duration_hours)
 
-                if category_val:
-                    category_durations.setdefault(category_val, []).append(duration_hours)
+                    if category_val:
+                        category_durations.setdefault(category_val, []).append(duration_hours)
 
-                if duration_hours <= target_hours:
-                    sla_met_count += 1
-                total_evaluated_sla += 1
+                    if duration_hours <= target_hours:
+                        sla_met_count += 1
+                    total_evaluated_sla += 1
 
-                # Every ticket in target_tickets is already scoped to this tech/user
-                personal_durations.append(duration_hours)
+                    # Every ticket in target_tickets is already scoped to this tech/user
+                    personal_durations.append(duration_hours)
             else:
                 # Active open ticket SLA evaluation
                 total_evaluated_sla += 1
@@ -4435,15 +4424,7 @@ async def get_admin_wider_mttr_report():
 
     # ── Helper: compute a deterministic duration for a single ticket ──────────
     def compute_duration(ticket: dict) -> float:
-        priority_raw = str(ticket.get("PRIORITY") or ticket.get("priority") or "Medium").strip().capitalize()
-        if priority_raw not in base_durations:
-            priority_raw = "Medium"
-
-        # Deterministic variance from ticket id hash (same approach as /analytics/mttr)
-        t_hash = sum(ord(c) for c in str(ticket.get("TICKETNUMBER") or ticket.get("id") or "0"))
-        variance = 0.6 + ((t_hash % 100) / 100.0) * 0.8   # 0.6 – 1.4
-
-        duration = round(base_durations[priority_raw] * variance, 1)
+        duration = None
 
         # Try to parse created timestamp
         created_dt = None
@@ -4469,7 +4450,7 @@ async def get_admin_wider_mttr_report():
             try:
                 resolved_dt = datetime.fromisoformat(str(raw_resolved).replace("Z", "+00:00").split("+")[0])
                 diff_h = (resolved_dt - created_dt).total_seconds() / 3600.0
-                if 0.05 <= diff_h <= 500:
+                if diff_h >= 0:
                     duration = round(diff_h, 1)
             except Exception:
                 pass
@@ -4490,17 +4471,18 @@ async def get_admin_wider_mttr_report():
             p_key = "Medium"
 
         dur = compute_duration(t)
-        global_durations.append(dur)
-        priority_buckets[p_key].append(dur)
-
-        target = sla_targets.get(p_key.lower(), 24.0)
-        if dur <= target:
-            global_sla_met += 1
+        if dur is not None:
+            global_durations.append(dur)
+            priority_buckets[p_key].append(dur)
+    
+            target = sla_targets.get(p_key.lower(), 24.0)
+            if dur <= target:
+                global_sla_met += 1
 
     total_resolved = len(global_durations)
-    global_mttr    = round(sum(global_durations) / total_resolved, 1) if global_durations else 3.8
-    total_audited  = total_resolved if total_resolved > 0 else 284
-    sla_compliance = round((global_sla_met / total_resolved) * 100, 1) if total_resolved > 0 else 95.8
+    global_mttr    = round(sum(global_durations) / total_resolved, 1) if global_durations else None
+    total_audited  = total_resolved
+    sla_compliance = round((global_sla_met / total_resolved) * 100, 1) if total_resolved > 0 else None
 
     # Build by_priority from real data
     by_priority_out = {}
@@ -4512,9 +4494,8 @@ async def get_admin_wider_mttr_report():
             p_met   = sum(1 for d in durs if d <= p_sla_t)
             comp    = round((p_met / len(durs)) * 100, 1)
         else:
-            # Fallback when no tickets of that priority exist yet
-            avg  = {"Critical": 1.2, "High": 4.1, "Medium": 11.5, "Low": 26.4}[p_key]
-            comp = {"Critical": 98.2, "High": 96.0, "Medium": 95.2, "Low": 94.0}[p_key]
+            avg = None
+            comp = None
         by_priority_out[p_key] = {
             "actual_mttr_hours": avg,
             "target_hours":      priority_targets[p_key],
@@ -4588,6 +4569,7 @@ async def get_admin_wider_mttr_report():
             t for t in all_tickets
             if matches_tech_fn(t, tech)
             and str(t.get("STATUS") or t.get("status") or "").strip().lower() in resolved_statuses
+            and compute_duration(t) is not None
         ]
 
         if not tech_resolved:
@@ -4615,12 +4597,7 @@ async def get_admin_wider_mttr_report():
 
     leaderboard.sort(key=lambda x: x["mttr_hours"])
 
-    # Fallback leaderboard when no ticket assignments exist yet
-    fallback_leaderboard = [
-        {"name": "Demo Technician",    "shift": "08:00-16:00", "mttr_hours": 2.3, "resolved": 52, "sla_rate": 98.1, "skills": "Routing, Optics"},
-        {"name": "Support Technician", "shift": "22:00-06:00", "mttr_hours": 3.7, "resolved": 44, "sla_rate": 94.8, "skills": "VoIP, Triage"},
-        {"name": "Alex Smith",         "shift": "14:00-22:00", "mttr_hours": 4.2, "resolved": 38, "sla_rate": 93.2, "skills": "AD, Software Drift"},
-    ]
+
 
     # ── by_shift: use real technician shift data when available ───────────────
     shift_buckets: dict = {}
@@ -4634,9 +4611,12 @@ async def get_admin_wider_mttr_report():
         status = str(t.get("STATUS") or t.get("status") or "").strip().lower()
         if status not in resolved_statuses:
             continue
+        dur = compute_duration(t)
+        if dur is None:
+            continue
         for tech in tech_list:
             if matches_tech_fn(t, tech):
-                shift_buckets.setdefault(tech["shift"], []).append(compute_duration(t))
+                shift_buckets.setdefault(tech["shift"], []).append(dur)
                 break
 
     by_shift_out = []
@@ -4655,28 +4635,15 @@ async def get_admin_wider_mttr_report():
         })
     by_shift_out.sort(key=lambda x: x["mttr_hours"])
 
-    # Fall back to static shift data if nothing computed
-    if not by_shift_out:
-        by_shift_out = [
-            {"shift": "Morning (08:00 - 16:00)",   "active_techs": 4, "mttr_hours": 2.9, "tickets_resolved": 132, "sla_rate": 97.4},
-            {"shift": "Afternoon (14:00 - 22:00)", "active_techs": 3, "mttr_hours": 3.6, "tickets_resolved": 98,  "sla_rate": 95.1},
-            {"shift": "Night (22:00 - 06:00)",     "active_techs": 2, "mttr_hours": 5.4, "tickets_resolved": 54,  "sla_rate": 92.8},
-        ]
-
     return {
         "global_mttr_hours":    global_mttr,
         "target_mttr_hours":    8.0,
-        "sla_compliance_rate":  min(sla_compliance, 99.9),
+        "sla_compliance_rate":  min(sla_compliance, 99.9) if sla_compliance is not None else None,
         "total_audited_tickets": total_audited,
         "by_priority": by_priority_out,
         "by_shift":    by_shift_out,
-        "by_category": [
-            {"category": "Network Routing & EVPN", "mttr_hours": 2.4, "tickets": 88, "sla_compliance": 96.6},
-            {"category": "Optical & Hardware",     "mttr_hours": 4.8, "tickets": 62, "sla_compliance": 93.5},
-            {"category": "Security & Identity",    "mttr_hours": 1.6, "tickets": 74, "sla_compliance": 98.6},
-            {"category": "Software & OS Drift",    "mttr_hours": 6.2, "tickets": 60, "sla_compliance": 91.7},
-        ],
-        "technician_leaderboard": leaderboard if leaderboard else fallback_leaderboard,
+        "by_category": [],
+        "technician_leaderboard": leaderboard,
     }
 
 
