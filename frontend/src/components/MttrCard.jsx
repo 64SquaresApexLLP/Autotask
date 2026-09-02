@@ -1,5 +1,5 @@
 import React from 'react';
-import { Timer, Zap, CheckCircle2, TrendingDown } from 'lucide-react';
+import { Timer, Zap, CheckCircle2 } from 'lucide-react';
 
 /**
  * Priority SLA standard thresholds in hours
@@ -123,8 +123,8 @@ const MttrCard = ({ mttrData, isTechnician = true, className = '' }) => {
   }
 
   const {
-    overall_mttr_hours = 2.8,
-    personal_mttr_hours = 2.4,
+    overall_mttr_hours = null,
+    personal_mttr_hours = null,
     by_priority = {}
   } = mttrData;
 
@@ -172,14 +172,10 @@ const MttrCard = ({ mttrData, isTechnician = true, className = '' }) => {
           </div>
           <div className="flex items-baseline space-x-2">
             <span className="text-3xl font-extrabold text-blue-900">
-              {personal_mttr_hours}
+              {personal_mttr_hours !== null ? personal_mttr_hours : '—'}
             </span>
-            <span className="text-sm font-semibold text-blue-700">hours</span>
+            {personal_mttr_hours !== null && <span className="text-sm font-semibold text-blue-700">hours</span>}
           </div>
-          {/* <p className="text-xs text-blue-600/80 mt-1 flex items-center gap-1">
-            <TrendingDown className="w-3.5 h-3.5 text-emerald-600" />
-            {isTechnician ? `Team avg: ${overall_mttr_hours}h` : 'Average turnaround for your tickets'}
-          </p> */}
         </div>
 
         <div className="p-4 rounded-xl bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-100">
@@ -189,9 +185,9 @@ const MttrCard = ({ mttrData, isTechnician = true, className = '' }) => {
           </div>
           <div className="flex items-baseline space-x-2">
             <span className="text-3xl font-extrabold text-emerald-900">
-              {overall_mttr_hours}
+              {overall_mttr_hours !== null ? overall_mttr_hours : '—'}
             </span>
-            <span className="text-sm font-semibold text-emerald-700">hours</span>
+            {overall_mttr_hours !== null && <span className="text-sm font-semibold text-emerald-700">hours</span>}
           </div>
           <p className="text-xs text-emerald-600/80 mt-1">
             {isTechnician ? 'Average resolution time across all tickets' : 'Average turnaround across all your tickets'}
@@ -205,13 +201,10 @@ const MttrCard = ({ mttrData, isTechnician = true, className = '' }) => {
           </div>
           <div className="flex items-baseline space-x-2">
             <span className="text-3xl font-extrabold text-purple-900">
-              {by_priority.Critical?.mttr_hours || 1.4}
+              {by_priority.Critical?.mttr_hours ?? '—'}
             </span>
-            <span className="text-sm font-semibold text-purple-700">hours</span>
+            {by_priority.Critical?.mttr_hours != null && <span className="text-sm font-semibold text-purple-700">hours</span>}
           </div>
-          {/* <p className="text-xs text-purple-600/80 mt-1">
-            {isTechnician ? 'P1 emergency resolution speed' : 'Expected turnaround for critical requests'}
-          </p> */}
         </div>
       </div>
 
@@ -272,7 +265,7 @@ const MttrCard = ({ mttrData, isTechnician = true, className = '' }) => {
                   {/* Center Text */}
                   <div className="absolute inset-0 flex flex-col items-center justify-center">
                     <span className="text-base font-extrabold text-gray-900 tracking-tight">
-                      {hours > 0 ? `${hours}h` : '1.4h'}
+                      {hours > 0 ? `${hours}h` : '—'}
                     </span>
                     <span className="text-[9px] font-semibold text-gray-400 uppercase">MTTR</span>
                   </div>

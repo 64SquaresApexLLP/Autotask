@@ -150,14 +150,16 @@ const MttrReport = () => {
       t => ['completed', 'resolved', 'closed'].includes((t.status || '').toLowerCase())
     );
 
-    const actualHours = Number(mttrData?.by_priority?.[pKey]?.mttr_hours || (pKey === 'Critical' ? 1.4 : pKey === 'High' ? 5.2 : pKey === 'Medium' ? 14.8 : 32.0));
+    // Only use API value — null means no data yet (bar won't render for that priority)
+    const apiHours = mttrData?.by_priority?.[pKey]?.mttr_hours ?? null;
+    const actualHours = apiHours !== null ? Number(apiHours) : null;
 
     return {
       priority: pKey,
       actual: actualHours,
-      resolved: !isTechnician ? resolvedUserPriority.length : (mttrData?.by_priority?.[pKey]?.resolved_count || 0)
+      resolved: !isTechnician ? resolvedUserPriority.length : (mttrData?.by_priority?.[pKey]?.resolved_count ?? 0)
     };
-  });
+  }).filter(d => d.actual !== null);  // omit priorities with no real data
 
   const getPriorityBadgeClass = (priority) => {
     switch ((priority || '').toLowerCase()) {
@@ -343,6 +345,7 @@ const MttrReport = () => {
                 </div>
 
                 <div className="h-72 w-full mt-2">
+                  {priorityBarData.length > 0 ? (
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={priorityBarData} margin={{ top: 15, right: 15, left: -15, bottom: 5 }}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
@@ -378,6 +381,11 @@ const MttrReport = () => {
                       />
                     </BarChart>
                   </ResponsiveContainer>
+                  ) : (
+                    <div className="h-full flex items-center justify-center text-sm text-gray-400">
+                      No resolution data available yet
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
