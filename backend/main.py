@@ -138,7 +138,7 @@ def load_csv_users_into_demo():
 
     # 1. Load Technicians from CSV
     tech_paths = [
-        os.path.join(base_dir, 'data', 'TECHNICIAN_DUMMY_DATA.csv'),
+        os.path.join(base_dir, 'data', 'CTTC_MOCK_TECHNICIAN_DATA.csv'),
         os.path.join(base_dir, 'data', 'technician_dummy_data.csv')
     ]
     for path in tech_paths:
@@ -173,7 +173,7 @@ def load_csv_users_into_demo():
 
     # 2. Load Users from CSV
     user_paths = [
-        os.path.join(base_dir, 'data', 'USER_DUMMY_DATA.csv'),
+        os.path.join(base_dir, 'data', 'CTTC_MOCK_USER_DATA.csv'),
         os.path.join(base_dir, 'data', 'user_dummy_data.csv')
     ]
     for path in user_paths:
@@ -334,11 +334,11 @@ def authenticate_admin_from_db(username: str, password: str) -> Optional[dict]:
     return None
 
 def authenticate_user_from_db(username: str, password: str) -> Optional[dict]:
-    """Authenticate user from Snowflake USER_DUMMY_DATA table or local storage."""
+    """Authenticate user from Snowflake CTTC_MOCK_USER_DATA table or local storage."""
     try:
         if snowflake_conn and snowflake_conn.is_connected():
             query = f"""
-            SELECT * FROM {SF_DATABASE}.{SF_SCHEMA}.USER_DUMMY_DATA
+            SELECT * FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_USER_DATA
             WHERE UPPER(USER_ID) = UPPER(%s) OR LOWER(USER_EMAIL) = LOWER(%s)
             """
             results = snowflake_conn.execute_query(query, (username, username))
@@ -377,7 +377,7 @@ def authenticate_technician_from_db(username: str, password: str) -> Optional[di
     try:
         if snowflake_conn and snowflake_conn.is_connected():
             query = f"""
-            SELECT * FROM {SF_DATABASE}.{SF_SCHEMA}.TECHNICIAN_DUMMY_DATA
+            SELECT * FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TECHNICIAN_DATA
             WHERE UPPER(TECHNICIAN_ID) = UPPER(%s) OR LOWER(EMAIL) = LOWER(%s)
             """
             results = snowflake_conn.execute_query(query, (username, username))
@@ -884,7 +884,7 @@ def get_all_tickets_realtime() -> List[Dict[str, Any]]:
     if snowflake_conn and snowflake_conn.is_connected():
         try:
             sf_tickets = snowflake_conn.execute_query(
-                f"SELECT * FROM {SF_DATABASE}.{SF_SCHEMA}.TICKETS WHERE TICKETNUMBER != 'TICKETNUMBER' AND TICKETNUMBER IS NOT NULL ORDER BY TICKETNUMBER DESC"
+                f"SELECT * FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS WHERE TICKETNUMBER != 'TICKETNUMBER' AND TICKETNUMBER IS NOT NULL ORDER BY TICKETNUMBER DESC"
             )
             if sf_tickets:
                 valid_sf_tickets = []
@@ -972,7 +972,7 @@ def get_tickets_count():
     try:
         if snowflake_conn and snowflake_conn.is_connected():
             try:
-                query = f"SELECT COUNT(*) as total_tickets FROM {SF_DATABASE}.{SF_SCHEMA}.TICKETS"
+                query = f"SELECT COUNT(*) as total_tickets FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS"
                 result = snowflake_conn.execute_query(query)
                 if result and "TOTAL_TICKETS" in result[0]:
                     return {"total_tickets": result[0]["TOTAL_TICKETS"]}
@@ -992,12 +992,12 @@ def get_ticket_statistics():
             try:
                 status_query = f"""
                     SELECT STATUS, COUNT(*) as count
-                    FROM {SF_DATABASE}.{SF_SCHEMA}.TICKETS
+                    FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS
                     GROUP BY STATUS
                 """
                 priority_query = f"""
                     SELECT PRIORITY, COUNT(*) as count
-                    FROM {SF_DATABASE}.{SF_SCHEMA}.TICKETS
+                    FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS
                     GROUP BY PRIORITY
                 """
                 status_results = snowflake_conn.execute_query(status_query)
@@ -1243,15 +1243,15 @@ def debug_snowflake_tables():
         # Check TICKETS table
         tickets_query = f"""
             SELECT TICKETNUMBER, TITLE, TECHNICIAN_ID, STATUS
-            FROM {SF_DATABASE}.{SF_SCHEMA}.TICKETS
+            FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS
             WHERE TICKETNUMBER LIKE 'T20250804%'
             ORDER BY TICKETNUMBER
         """
 
-        # Check TECHNICIAN_DUMMY_DATA table
+        # Check CTTC_MOCK_TECHNICIAN_DATA table
         technicians_query = f"""
             SELECT TECHNICIAN_ID, NAME, CURRENT_WORKLOAD
-            FROM {SF_DATABASE}.{SF_SCHEMA}.TECHNICIAN_DUMMY_DATA
+            FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TECHNICIAN_DATA
             ORDER BY TECHNICIAN_ID
         """
 
@@ -1276,7 +1276,7 @@ def reset_technician_workloads():
         # Get all technicians
         technicians_query = f"""
             SELECT TECHNICIAN_ID, NAME
-            FROM {SF_DATABASE}.{SF_SCHEMA}.TECHNICIAN_DUMMY_DATA
+            FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TECHNICIAN_DATA
             ORDER BY TECHNICIAN_ID
         """
 
@@ -1290,7 +1290,7 @@ def reset_technician_workloads():
             # Count actual tickets for this technician
             count_query = f"""
                 SELECT COUNT(*) as actual_workload
-                FROM {SF_DATABASE}.{SF_SCHEMA}.TICKETS
+                FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS
                 WHERE TECHNICIAN_ID = %s AND STATUS != 'resolved' AND STATUS != 'closed'
             """
 
@@ -1299,7 +1299,7 @@ def reset_technician_workloads():
 
             # Update the technician's workload to match actual tickets
             update_query = f"""
-                UPDATE {SF_DATABASE}.{SF_SCHEMA}.TECHNICIAN_DUMMY_DATA
+                UPDATE {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TECHNICIAN_DATA
                 SET CURRENT_WORKLOAD = %s
                 WHERE TECHNICIAN_ID = %s
             """
@@ -1332,7 +1332,7 @@ def get_technician_credentials():
         # Get all technician credentials
         query = f"""
             SELECT TECHNICIAN_ID, NAME, EMAIL, TECHNICIAN_PASSWORD
-            FROM {SF_DATABASE}.{SF_SCHEMA}.TECHNICIAN_DUMMY_DATA
+            FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TECHNICIAN_DATA
             ORDER BY TECHNICIAN_ID
         """
 
@@ -1366,7 +1366,7 @@ def fix_workload_data_types():
 
         # Step 1: Reset all workloads to 0 first
         reset_query = f"""
-            UPDATE {SF_DATABASE}.{SF_SCHEMA}.TECHNICIAN_DUMMY_DATA
+            UPDATE {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TECHNICIAN_DATA
             SET CURRENT_WORKLOAD = 0
         """
         snowflake_conn.execute_query(reset_query)
@@ -1377,7 +1377,7 @@ def fix_workload_data_types():
         # Get all technicians
         tech_query = f"""
             SELECT TECHNICIAN_ID, NAME
-            FROM {SF_DATABASE}.{SF_SCHEMA}.TECHNICIAN_DUMMY_DATA
+            FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TECHNICIAN_DATA
             ORDER BY TECHNICIAN_ID
         """
         technicians = snowflake_conn.execute_query(tech_query)
@@ -1388,7 +1388,7 @@ def fix_workload_data_types():
             # Count actual tickets for this technician (only non-resolved/closed)
             count_query = f"""
                 SELECT COUNT(*) as actual_workload
-                FROM {SF_DATABASE}.{SF_SCHEMA}.TICKETS
+                FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS
                 WHERE TECHNICIAN_ID = %s
                 AND STATUS NOT IN ('resolved', 'closed', 'Resolved', 'Closed')
             """
@@ -1398,7 +1398,7 @@ def fix_workload_data_types():
 
             # Update with integer value
             update_query = f"""
-                UPDATE {SF_DATABASE}.{SF_SCHEMA}.TECHNICIAN_DUMMY_DATA
+                UPDATE {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TECHNICIAN_DATA
                 SET CURRENT_WORKLOAD = %s
                 WHERE TECHNICIAN_ID = %s
             """
@@ -1425,17 +1425,17 @@ def fix_workload_data_types():
 
 @app.get("/tickets/closed", response_model=List[dict])
 def get_closed_tickets(limit: int = Query(50, le=100), offset: int = 0):
-    """Get closed/resolved tickets from CLOSED_TICKETS table"""
+    """Get closed/resolved tickets from CTTC_MOCK_CLOSED_TICKETS table"""
     try:
         if not snowflake_conn:
             raise HTTPException(status_code=503, detail="Database connection unavailable")
 
         cursor = snowflake_conn.conn.cursor()
 
-        # Check if CLOSED_TICKETS table exists, if not return empty list
+        # Check if CTTC_MOCK_CLOSED_TICKETS table exists, if not return empty list
         check_table_query = """
         SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
-        WHERE TABLE_SCHEMA = 'PUBLIC' AND TABLE_NAME = 'CLOSED_TICKETS'
+        WHERE TABLE_SCHEMA = 'PUBLIC' AND TABLE_NAME = 'CTTC_MOCK_CLOSED_TICKETS'
         """
         cursor.execute(check_table_query)
         table_exists = cursor.fetchone()[0] > 0
@@ -1450,7 +1450,7 @@ def get_closed_tickets(limit: int = Query(50, le=100), offset: int = 0):
             TICKETNUMBER, TITLE, DESCRIPTION, TICKETTYPE, TICKETCATEGORY,
             ISSUETYPE, SUBISSUETYPE, DUEDATETIME, PRIORITY, STATUS, RESOLUTION,
             TECHNICIANEMAIL, TECHNICIAN_ID, USEREMAIL, USERID, PHONENUMBER, CLOSED_AT, ORIGINAL_CREATED_AT
-        FROM {SF_DATABASE}.{SF_SCHEMA}.CLOSED_TICKETS
+        FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_CLOSED_TICKETS
         ORDER BY CLOSED_AT DESC
         LIMIT %s OFFSET %s
         """
@@ -1497,12 +1497,12 @@ def get_tickets_stats():
             try:
                 status_query = f"""
                     SELECT STATUS, COUNT(*) as count
-                    FROM {SF_DATABASE}.{SF_SCHEMA}.TICKETS
+                    FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS
                     GROUP BY STATUS
                 """
                 priority_query = f"""
                     SELECT PRIORITY, COUNT(*) as count
-                    FROM {SF_DATABASE}.{SF_SCHEMA}.TICKETS
+                    FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS
                     GROUP BY PRIORITY
                 """
 
@@ -1814,7 +1814,7 @@ def get_all_tickets(limit: int = Query(100, le=500), offset: int = 0, status: Op
         results = []
         if snowflake_conn and snowflake_conn.is_connected():
             try:
-                query = f"SELECT * FROM {SF_DATABASE}.{SF_SCHEMA}.TICKETS WHERE TICKETNUMBER != 'TICKETNUMBER' AND TICKETNUMBER IS NOT NULL"
+                query = f"SELECT * FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS WHERE TICKETNUMBER != 'TICKETNUMBER' AND TICKETNUMBER IS NOT NULL"
                 conditions = []
 
                 if status:
@@ -1870,7 +1870,7 @@ def get_ticket(ticket_number: str):
             try:
                 ticket_dot = ticket_number.strip().replace('-', '.')
                 ticket_dash = ticket_number.strip().replace('.', '-')
-                query = f"SELECT * FROM {SF_DATABASE}.{SF_SCHEMA}.TICKETS WHERE TICKETNUMBER = %s OR TICKETNUMBER = %s"
+                query = f"SELECT * FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS WHERE TICKETNUMBER = %s OR TICKETNUMBER = %s"
                 results = snowflake_conn.execute_query(query, (ticket_dot, ticket_dash))
                 if results:
                     return results[0]
@@ -1903,7 +1903,7 @@ def get_technician(ticket_number: str):
         ticket_dash = ticket_number.strip().replace('.', '-')
 
         # Get ticket first to get technician email
-        query = f"SELECT * FROM {SF_DATABASE}.{SF_SCHEMA}.TICKETS WHERE TICKETNUMBER = %s OR TICKETNUMBER = %s"
+        query = f"SELECT * FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS WHERE TICKETNUMBER = %s OR TICKETNUMBER = %s"
         results = snowflake_conn.execute_query(query, (ticket_dot, ticket_dash))
 
         if not results:
@@ -1940,7 +1940,7 @@ def assign_ticket(ticket_number: str, assignment_data: dict):
 
         # Fetch the technician's email dynamically
         get_email_query = f"""
-        SELECT EMAIL FROM {SF_DATABASE}.{SF_SCHEMA}.TECHNICIAN_DUMMY_DATA WHERE TECHNICIAN_ID = %s
+        SELECT EMAIL FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TECHNICIAN_DATA WHERE TECHNICIAN_ID = %s
         """
         email_result = snowflake_conn.execute_query(get_email_query, (backend_tech_id,))
         if not email_result or not email_result[0].get('EMAIL'):
@@ -1952,7 +1952,7 @@ def assign_ticket(ticket_number: str, assignment_data: dict):
 
         # First, get the current ticket data to check if it's already assigned
         get_ticket_query = f"""
-        SELECT TECHNICIAN_ID, STATUS FROM {SF_DATABASE}.{SF_SCHEMA}.TICKETS
+        SELECT TECHNICIAN_ID, STATUS FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS
         WHERE TICKETNUMBER = %s OR TICKETNUMBER = %s
         """
         ticket_result = snowflake_conn.execute_query(get_ticket_query, (ticket_dot, ticket_dash))
@@ -1964,7 +1964,7 @@ def assign_ticket(ticket_number: str, assignment_data: dict):
 
         # Update the ticket with the new assigned technician and email directly in Snowflake
         update_ticket_query = f"""
-        UPDATE {SF_DATABASE}.{SF_SCHEMA}.TICKETS
+        UPDATE {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS
         SET TECHNICIAN_ID = %s, TECHNICIANEMAIL = %s, STATUS = 'Assigned'
         WHERE TICKETNUMBER = %s OR TICKETNUMBER = %s
         """
@@ -1973,14 +1973,14 @@ def assign_ticket(ticket_number: str, assignment_data: dict):
         # Handle workload changes:
         if previous_technician_id and previous_technician_id != backend_tech_id:
             decrement_workload_query = f"""
-            UPDATE {SF_DATABASE}.{SF_SCHEMA}.TECHNICIAN_DUMMY_DATA
+            UPDATE {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TECHNICIAN_DATA
             SET CURRENT_WORKLOAD = GREATEST(CURRENT_WORKLOAD - 1, 0)
             WHERE TECHNICIAN_ID = %s
             """
             snowflake_conn.execute_query(decrement_workload_query, (previous_technician_id,))
 
         increment_workload_query = f"""
-        UPDATE {SF_DATABASE}.{SF_SCHEMA}.TECHNICIAN_DUMMY_DATA
+        UPDATE {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TECHNICIAN_DATA
         SET CURRENT_WORKLOAD = CURRENT_WORKLOAD + 1
         WHERE TECHNICIAN_ID = %s
         """
@@ -2102,21 +2102,21 @@ def update_local_ticket_csv(ticket_number: str, status: Optional[str] = None, pr
     return updated_record or {"ticket_number": ticket_number, "status": status, "priority": priority}
 
 def sync_ticket_to_closed_table_snowflake(ticket_number: str):
-    """Sync a closed/resolved ticket into SF_DATABASE.SF_SCHEMA.CLOSED_TICKETS table in Snowflake"""
+    """Sync a closed/resolved ticket into SF_DATABASE.SF_SCHEMA.CTTC_MOCK_CLOSED_TICKETS table in Snowflake"""
     if not snowflake_conn or not snowflake_conn.is_connected():
         return
     try:
         ticket_dot = ticket_number.strip().replace('-', '.')
         ticket_dash = ticket_number.strip().replace('.', '-')
         sync_sql = f"""
-        MERGE INTO {SF_DATABASE}.{SF_SCHEMA}.CLOSED_TICKETS target
+        MERGE INTO {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_CLOSED_TICKETS target
         USING (
             SELECT 
                 TICKETNUMBER, TITLE, DESCRIPTION, TICKETTYPE, TICKETCATEGORY,
                 ISSUETYPE, SUBISSUETYPE, DUEDATETIME, PRIORITY, STATUS, RESOLUTION,
                 TECHNICIANEMAIL, TECHNICIAN_ID, USEREMAIL, USERID, PHONENUMBER,
                 CURRENT_TIMESTAMP AS CLOSED_AT, CURRENT_TIMESTAMP AS ORIGINAL_CREATED_AT
-            FROM {SF_DATABASE}.{SF_SCHEMA}.TICKETS
+            FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS
             WHERE (TICKETNUMBER = %s OR TICKETNUMBER = %s)
               AND LOWER(STATUS) IN ('closed', 'resolved', 'complete', 'completed')
         ) source
@@ -2154,19 +2154,19 @@ def sync_ticket_to_closed_table_snowflake(ticket_number: str):
         """
         snowflake_conn.execute_query(sync_sql, (ticket_dot, ticket_dash))
     except Exception as e:
-        logger.error(f"Error syncing ticket to CLOSED_TICKETS in Snowflake: {e}")
+        logger.error(f"Error syncing ticket to CTTC_MOCK_CLOSED_TICKETS in Snowflake: {e}")
 
 def remove_from_closed_table_snowflake(ticket_number: str):
-    """Remove ticket from CLOSED_TICKETS if reopened"""
+    """Remove ticket from CTTC_MOCK_CLOSED_TICKETS if reopened"""
     if not snowflake_conn or not snowflake_conn.is_connected():
         return
     try:
         ticket_dot = ticket_number.strip().replace('-', '.')
         ticket_dash = ticket_number.strip().replace('.', '-')
-        del_sql = f"DELETE FROM {SF_DATABASE}.{SF_SCHEMA}.CLOSED_TICKETS WHERE TICKETNUMBER = %s OR TICKETNUMBER = %s"
+        del_sql = f"DELETE FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_CLOSED_TICKETS WHERE TICKETNUMBER = %s OR TICKETNUMBER = %s"
         snowflake_conn.execute_query(del_sql, (ticket_dot, ticket_dash))
     except Exception as e:
-        logger.error(f"Error removing ticket from CLOSED_TICKETS: {e}")
+        logger.error(f"Error removing ticket from CTTC_MOCK_CLOSED_TICKETS: {e}")
 
 @app.patch("/tickets/{ticket_number}/status")
 def update_ticket_status(ticket_number: str, status_data: dict):
@@ -2184,7 +2184,7 @@ def update_ticket_status(ticket_number: str, status_data: dict):
 
                 # Get current ticket data to check technician assignment
                 get_ticket_query = f"""
-                SELECT TECHNICIAN_ID, STATUS FROM {SF_DATABASE}.{SF_SCHEMA}.TICKETS
+                SELECT TECHNICIAN_ID, STATUS FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS
                 WHERE TICKETNUMBER = %s OR TICKETNUMBER = %s
                 """
                 ticket_result = snowflake_conn.execute_query(get_ticket_query, (ticket_dot, ticket_dash))
@@ -2195,13 +2195,13 @@ def update_ticket_status(ticket_number: str, status_data: dict):
 
                     # Update the ticket status directly in Snowflake
                     update_query = f"""
-                    UPDATE {SF_DATABASE}.{SF_SCHEMA}.TICKETS
+                    UPDATE {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS
                     SET STATUS = %s
                     WHERE TICKETNUMBER = %s OR TICKETNUMBER = %s
                     """
                     snowflake_conn.execute_query(update_query, (new_status, ticket_dot, ticket_dash))
 
-                    # Synchronize with SF_DATABASE.SF_SCHEMA.CLOSED_TICKETS table
+                    # Synchronize with SF_DATABASE.SF_SCHEMA.CTTC_MOCK_CLOSED_TICKETS table
                     if new_status.lower() in ['resolved', 'closed', 'complete', 'completed']:
                         sync_ticket_to_closed_table_snowflake(ticket_number)
                     else:
@@ -2213,14 +2213,14 @@ def update_ticket_status(ticket_number: str, status_data: dict):
                         old_st = str(current_status or '').lower()
                         if new_st in ['resolved', 'closed', 'complete', 'completed'] and old_st not in ['resolved', 'closed', 'complete', 'completed']:
                             decrement_workload_query = f"""
-                            UPDATE {SF_DATABASE}.{SF_SCHEMA}.TECHNICIAN_DUMMY_DATA
+                            UPDATE {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TECHNICIAN_DATA
                             SET CURRENT_WORKLOAD = GREATEST(CURRENT_WORKLOAD - 1, 0)
                             WHERE TECHNICIAN_ID = %s
                             """
                             snowflake_conn.execute_query(decrement_workload_query, (technician_id,))
                         elif old_st in ['resolved', 'closed', 'complete', 'completed'] and new_st not in ['resolved', 'closed', 'complete', 'completed']:
                             increment_workload_query = f"""
-                            UPDATE {SF_DATABASE}.{SF_SCHEMA}.TECHNICIAN_DUMMY_DATA
+                            UPDATE {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TECHNICIAN_DATA
                             SET CURRENT_WORKLOAD = CURRENT_WORKLOAD + 1
                             WHERE TECHNICIAN_ID = %s
                             """
@@ -2250,7 +2250,7 @@ def email_customer(ticket_number: str, request: EmailCustomerRequest):
             try:
                 ticket_dot = ticket_number.strip().replace('-', '.')
                 ticket_dash = ticket_number.strip().replace('.', '-')
-                query = f"SELECT * FROM {SF_DATABASE}.{SF_SCHEMA}.TICKETS WHERE TICKETNUMBER = %s OR TICKETNUMBER = %s"
+                query = f"SELECT * FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS WHERE TICKETNUMBER = %s OR TICKETNUMBER = %s"
                 results = snowflake_conn.execute_query(query, (ticket_dot, ticket_dash))
                 if results:
                     ticket = results[0]
@@ -2310,7 +2310,7 @@ def update_ticket_status_priority(ticket_number: str, update_request: TicketUpda
                 ticket_dot = ticket_number.strip().replace('-', '.')
                 ticket_dash = ticket_number.strip().replace('.', '-')
 
-                get_ticket_query = f"SELECT * FROM {SF_DATABASE}.{SF_SCHEMA}.TICKETS WHERE TICKETNUMBER = %s OR TICKETNUMBER = %s"
+                get_ticket_query = f"SELECT * FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS WHERE TICKETNUMBER = %s OR TICKETNUMBER = %s"
                 ticket_result = snowflake_conn.execute_query(get_ticket_query, (ticket_dot, ticket_dash))
 
                 if ticket_result:
@@ -2334,7 +2334,7 @@ def update_ticket_status_priority(ticket_number: str, update_request: TicketUpda
                     if update_request.time_spent:
                         updated_fields['time_spent'] = update_request.time_spent
                         try:
-                            snowflake_conn.execute_query(f"ALTER TABLE {SF_DATABASE}.{SF_SCHEMA}.TICKETS ADD COLUMN IF NOT EXISTS TIME_SPENT VARCHAR(255)")
+                            snowflake_conn.execute_query(f"ALTER TABLE {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS ADD COLUMN IF NOT EXISTS TIME_SPENT VARCHAR(255)")
                             update_parts.append("TIME_SPENT = %s")
                             update_values.append(update_request.time_spent)
                         except Exception as e_col:
@@ -2358,12 +2358,12 @@ def update_ticket_status_priority(ticket_number: str, update_request: TicketUpda
                         updated_fields['work_note'] = work_note_text
 
                     if update_parts:
-                        update_query = f"UPDATE {SF_DATABASE}.{SF_SCHEMA}.TICKETS SET {', '.join(update_parts)} WHERE TICKETNUMBER = %s OR TICKETNUMBER = %s"
+                        update_query = f"UPDATE {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS SET {', '.join(update_parts)} WHERE TICKETNUMBER = %s OR TICKETNUMBER = %s"
                         update_values.extend([ticket_dot, ticket_dash])
                         snowflake_conn.execute_query(update_query, tuple(update_values))
                         sf_updated = True
 
-                    # Synchronize with SF_DATABASE.SF_SCHEMA.CLOSED_TICKETS table if status was updated
+                    # Synchronize with SF_DATABASE.SF_SCHEMA.CTTC_MOCK_CLOSED_TICKETS table if status was updated
                     if update_request.status:
                         if update_request.status.lower() in ['resolved', 'closed', 'complete', 'completed']:
                             sync_ticket_to_closed_table_snowflake(ticket_number)
@@ -2376,7 +2376,7 @@ def update_ticket_status_priority(ticket_number: str, update_request: TicketUpda
                         old_st = str(current_status or '').lower()
                         if new_st in ['resolved', 'closed', 'complete', 'completed'] and old_st not in ['resolved', 'closed', 'complete', 'completed']:
                             decrement_workload_query = f"""
-                            UPDATE {SF_DATABASE}.{SF_SCHEMA}.TECHNICIAN_DUMMY_DATA
+                            UPDATE {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TECHNICIAN_DATA
                             SET CURRENT_WORKLOAD = GREATEST(CURRENT_WORKLOAD - 1, 0)
                             WHERE TECHNICIAN_ID = %s
                             """
@@ -2384,7 +2384,7 @@ def update_ticket_status_priority(ticket_number: str, update_request: TicketUpda
                             workload_updated = True
                         elif old_st in ['resolved', 'closed', 'complete', 'completed'] and new_st not in ['resolved', 'closed', 'complete', 'completed']:
                             increment_workload_query = f"""
-                            UPDATE {SF_DATABASE}.{SF_SCHEMA}.TECHNICIAN_DUMMY_DATA
+                            UPDATE {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TECHNICIAN_DATA
                             SET CURRENT_WORKLOAD = CURRENT_WORKLOAD + 1
                             WHERE TECHNICIAN_ID = %s
                             """
@@ -2457,7 +2457,7 @@ def escalate_ticket(ticket_number: str, escalation_data: EscalationRequest):
 
         # Get current ticket data
         get_ticket_query = f"""
-        SELECT * FROM {SF_DATABASE}.{SF_SCHEMA}.TICKETS WHERE TICKETNUMBER = %s
+        SELECT * FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS WHERE TICKETNUMBER = %s
         """
         cursor = snowflake_conn.conn.cursor()
         cursor.execute(get_ticket_query, (ticket_number,))
@@ -2472,7 +2472,7 @@ def escalate_ticket(ticket_number: str, escalation_data: EscalationRequest):
 
         # Update ticket status to Escalated
         update_query = f"""
-        UPDATE {SF_DATABASE}.{SF_SCHEMA}.TICKETS
+        UPDATE {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS
         SET STATUS = 'Escalated'
         WHERE TICKETNUMBER = %s
         """
@@ -2604,7 +2604,7 @@ def send_due_date_reminder(reminder_data: ReminderRequest):
 
 def get_technician_id_from_email(technician_email: str) -> Optional[str]:
     """
-    Get TECHNICIAN_ID from TECHNICIAN_DUMMY_DATA table or local storage using email
+    Get TECHNICIAN_ID from CTTC_MOCK_TECHNICIAN_DATA table or local storage using email
     """
     if not technician_email:
         return None
@@ -2615,7 +2615,7 @@ def get_technician_id_from_email(technician_email: str) -> Optional[str]:
             cursor = snowflake_conn.conn.cursor()
             query = f"""
             SELECT TECHNICIAN_ID
-            FROM {SF_DATABASE}.{SF_SCHEMA}.TECHNICIAN_DUMMY_DATA
+            FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TECHNICIAN_DATA
             WHERE LOWER(EMAIL) = LOWER(%s)
             """
             cursor.execute(query, (technician_email,))
@@ -2635,7 +2635,7 @@ def get_technician_id_from_email(technician_email: str) -> Optional[str]:
 
     # Check local CSV
     import csv
-    csv_path = os.path.join(parent_dir, "data", "TECHNICIAN_DUMMY_DATA.csv")
+    csv_path = os.path.join(parent_dir, "data", "CTTC_MOCK_TECHNICIAN_DATA.csv")
     if os.path.exists(csv_path):
         try:
             with open(csv_path, "r", encoding="utf-8") as f:
@@ -2650,7 +2650,7 @@ def get_technician_id_from_email(technician_email: str) -> Optional[str]:
 
 def ensure_technician_id_column():
     """
-    Ensure TECHNICIAN_ID column exists in both TICKETS and CLOSED_TICKETS tables
+    Ensure TECHNICIAN_ID column exists in both TICKETS and CTTC_MOCK_CLOSED_TICKETS tables
     """
     if not snowflake_conn or not snowflake_conn.is_connected():
         return False
@@ -2672,7 +2672,7 @@ def ensure_technician_id_column():
         if not tickets_column_exists:
             # Add TECHNICIAN_ID column to TICKETS
             alter_tickets_query = f"""
-            ALTER TABLE {SF_DATABASE}.{SF_SCHEMA}.TICKETS
+            ALTER TABLE {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS
             ADD COLUMN TECHNICIAN_ID VARCHAR(50)
             """
             cursor.execute(alter_tickets_query)
@@ -2680,38 +2680,38 @@ def ensure_technician_id_column():
         else:
             print("✅ TECHNICIAN_ID column already exists in TICKETS table")
 
-        # Check if CLOSED_TICKETS table exists and has TECHNICIAN_ID column
+        # Check if CTTC_MOCK_CLOSED_TICKETS table exists and has TECHNICIAN_ID column
         check_closed_table_query = """
         SELECT COUNT(*)
         FROM INFORMATION_SCHEMA.TABLES
         WHERE TABLE_SCHEMA = 'PUBLIC'
-        AND TABLE_NAME = 'CLOSED_TICKETS'
+        AND TABLE_NAME = 'CTTC_MOCK_CLOSED_TICKETS'
         """
         cursor.execute(check_closed_table_query)
         closed_table_exists = cursor.fetchone()[0] > 0
 
         if closed_table_exists:
-            # Check if TECHNICIAN_ID column exists in CLOSED_TICKETS
+            # Check if TECHNICIAN_ID column exists in CTTC_MOCK_CLOSED_TICKETS
             check_closed_column_query = """
             SELECT COUNT(*)
             FROM INFORMATION_SCHEMA.COLUMNS
             WHERE TABLE_SCHEMA = 'PUBLIC'
-            AND TABLE_NAME = 'CLOSED_TICKETS'
+            AND TABLE_NAME = 'CTTC_MOCK_CLOSED_TICKETS'
             AND COLUMN_NAME = 'TECHNICIAN_ID'
             """
             cursor.execute(check_closed_column_query)
             closed_column_exists = cursor.fetchone()[0] > 0
 
             if not closed_column_exists:
-                # Add TECHNICIAN_ID column to CLOSED_TICKETS
+                # Add TECHNICIAN_ID column to CTTC_MOCK_CLOSED_TICKETS
                 alter_closed_query = f"""
-                ALTER TABLE {SF_DATABASE}.{SF_SCHEMA}.CLOSED_TICKETS
+                ALTER TABLE {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_CLOSED_TICKETS
                 ADD COLUMN TECHNICIAN_ID VARCHAR(50)
                 """
                 cursor.execute(alter_closed_query)
-                print("✅ Added TECHNICIAN_ID column to CLOSED_TICKETS table")
+                print("✅ Added TECHNICIAN_ID column to CTTC_MOCK_CLOSED_TICKETS table")
             else:
-                print("✅ TECHNICIAN_ID column already exists in CLOSED_TICKETS table")
+                print("✅ TECHNICIAN_ID column already exists in CTTC_MOCK_CLOSED_TICKETS table")
 
         cursor.close()
         return True
@@ -2824,7 +2824,7 @@ def create_ticket(request: TicketCreateRequest):
         print(f"🔍 Classified data - Issue Type: '{issue_type}', Sub Issue: '{sub_issue_type}', Category: '{ticket_category}', Type: '{ticket_type}', Priority: '{priority}', Status: '{status}'")
 
         insert_query = f"""
-            INSERT INTO {SF_DATABASE}.{SF_SCHEMA}.TICKETS (
+            INSERT INTO {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS (
                 TICKETNUMBER, TITLE, DESCRIPTION, TICKETTYPE, TICKETCATEGORY,
                 ISSUETYPE, SUBISSUETYPE, DUEDATETIME, PRIORITY, STATUS, RESOLUTION,
                 TECHNICIANEMAIL, TECHNICIAN_ID, USEREMAIL, USERID, PHONENUMBER
@@ -2912,7 +2912,7 @@ def get_all_technicians():
             try:
                 query = f"""
                 SELECT TECHNICIAN_ID, NAME, EMAIL, ROLE, CURRENT_WORKLOAD, SPECIALIZATIONS
-                FROM {SF_DATABASE}.{SF_SCHEMA}.TECHNICIAN_DUMMY_DATA
+                FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TECHNICIAN_DATA
                 ORDER BY NAME
                 """
                 results = snowflake_conn.execute_query(query)
@@ -2945,7 +2945,7 @@ def get_all_technicians():
 
         # CSV fallback
         import csv
-        csv_path = os.path.join(parent_dir, "data", "TECHNICIAN_DUMMY_DATA.csv")
+        csv_path = os.path.join(parent_dir, "data", "CTTC_MOCK_TECHNICIAN_DATA.csv")
         technicians = []
         if os.path.exists(csv_path):
             with open(csv_path, "r", encoding="utf-8") as f:
@@ -2967,14 +2967,14 @@ def get_all_technicians():
 
 @app.get("/users")
 def get_all_users():
-    """Get all available users from Snowflake USER_DUMMY_DATA table or CSV fallback"""
+    """Get all available users from Snowflake CTTC_MOCK_USER_DATA table or CSV fallback"""
     try:
         results = []
         if snowflake_conn and snowflake_conn.is_connected():
             try:
                 query = f"""
                 SELECT USER_ID, NAME, USER_EMAIL, USER_PHONENUMBER
-                FROM {SF_DATABASE}.{SF_SCHEMA}.USER_DUMMY_DATA
+                FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_USER_DATA
                 ORDER BY NAME
                 """
                 results = snowflake_conn.execute_query(query)
@@ -2997,7 +2997,7 @@ def get_all_users():
 
         # CSV fallback
         import csv
-        csv_path = os.path.join(parent_dir, "data", "USER_DUMMY_DATA.csv")
+        csv_path = os.path.join(parent_dir, "data", "CTTC_MOCK_USER_DATA.csv")
         users = []
         if os.path.exists(csv_path):
             with open(csv_path, "r", encoding="utf-8") as f:
@@ -3026,7 +3026,7 @@ def debug_technician_tickets(technician_id: str):
         # First, get all technician IDs to see what's available
         all_tech_query = f"""
         SELECT DISTINCT TECHNICIAN_ID
-        FROM {SF_DATABASE}.{SF_SCHEMA}.TICKETS
+        FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS
         WHERE TECHNICIAN_ID IS NOT NULL AND TECHNICIAN_ID != ''
         ORDER BY TECHNICIAN_ID
         """
@@ -3036,7 +3036,7 @@ def debug_technician_tickets(technician_id: str):
         # Then try to get tickets for the specific technician
         query = f"""
         SELECT TITLE, TECHNICIAN_ID
-        FROM {SF_DATABASE}.{SF_SCHEMA}.TICKETS
+        FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS
         WHERE TECHNICIAN_ID = %s
         LIMIT 5
         """
@@ -3046,7 +3046,7 @@ def debug_technician_tickets(technician_id: str):
         # Also try without parameter binding to see if that works
         direct_query = f"""
         SELECT TITLE, TECHNICIAN_ID
-        FROM {SF_DATABASE}.{SF_SCHEMA}.TICKETS
+        FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS
         WHERE TECHNICIAN_ID = '{technician_id}'
         LIMIT 5
         """
@@ -3056,7 +3056,7 @@ def debug_technician_tickets(technician_id: str):
         # Try a simple count query
         count_query = f"""
         SELECT COUNT(*) as count
-        FROM {SF_DATABASE}.{SF_SCHEMA}.TICKETS
+        FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS
         WHERE TECHNICIAN_ID = '{technician_id}'
         """
 
@@ -3114,7 +3114,7 @@ def get_table_structure():
             return {"error": "Database connection not available"}
 
         # Check if TICKETS table exists and get its structure
-        describe_query = f"DESCRIBE TABLE {SF_DATABASE}.{SF_SCHEMA}.TICKETS"
+        describe_query = f"DESCRIBE TABLE {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS"
         result = snowflake_conn.execute_query(describe_query)
         return {"table_structure": result}
     except Exception as e:
@@ -3124,7 +3124,7 @@ def get_table_structure():
                 return {"error": "Database connection not available for table creation"}
 
             create_table_query = f"""
-                CREATE TABLE IF NOT EXISTS {SF_DATABASE}.{SF_SCHEMA}.TICKETS (
+                CREATE TABLE IF NOT EXISTS {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS (
                     TICKETNUMBER VARCHAR(50) PRIMARY KEY,
                     TITLE VARCHAR(500),
                     DESCRIPTION TEXT,
@@ -3823,7 +3823,7 @@ ADMIN_TECHNICIANS_STORE = [
 
 @app.get("/admin/users")
 async def get_admin_users(role: Optional[str] = None):
-    """Retrieve users directly from Snowflake SF_DATABASE.SF_SCHEMA (USER_DUMMY_DATA / ADMIN_USERS) with live ticket mappings"""
+    """Retrieve users directly from Snowflake SF_DATABASE.SF_SCHEMA (CTTC_MOCK_USER_DATA / ADMIN_USERS) with live ticket mappings"""
     db_users = []
     
     # If explicitly asking for admin role, query ADMIN_USERS first
@@ -3861,10 +3861,10 @@ async def get_admin_users(role: Optional[str] = None):
             except Exception as e:
                 logger.error(f"Error querying {SF_DATABASE}.{SF_SCHEMA}.ADMIN_USERS: {e}")
 
-    # 1. Direct query from Snowflake SF_DATABASE.SF_SCHEMA.USER_DUMMY_DATA
+    # 1. Direct query from Snowflake SF_DATABASE.SF_SCHEMA.CTTC_MOCK_USER_DATA
     if not db_users and snowflake_conn and snowflake_conn.is_connected():
         try:
-            sf_users = snowflake_conn.execute_query(f"SELECT * FROM {SF_DATABASE}.{SF_SCHEMA}.USER_DUMMY_DATA")
+            sf_users = snowflake_conn.execute_query(f"SELECT * FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_USER_DATA")
             if sf_users:
                 for row in sf_users:
                     u_id = row.get("USER_ID") or row.get("ID") or ""
@@ -3891,7 +3891,7 @@ async def get_admin_users(role: Optional[str] = None):
                             "last_ticket_date": None
                         })
         except Exception as e:
-            logger.error(f"Error querying {SF_DATABASE}.{SF_SCHEMA}.USER_DUMMY_DATA: {e}")
+            logger.error(f"Error querying {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_USER_DATA: {e}")
 
     # Fallback to ADMIN_USERS_STORE if Snowflake returned empty
     if not db_users:
@@ -3901,7 +3901,7 @@ async def get_admin_users(role: Optional[str] = None):
     all_tickets = []
     if snowflake_conn and snowflake_conn.is_connected():
         try:
-            all_tickets = snowflake_conn.execute_query(f"SELECT TICKETNUMBER, USEREMAIL, USER_ID, STATUS, CREATED_AT FROM {SF_DATABASE}.{SF_SCHEMA}.TICKETS WHERE TICKETNUMBER IS NOT NULL") or []
+            all_tickets = snowflake_conn.execute_query(f"SELECT TICKETNUMBER, USEREMAIL, USER_ID, STATUS, CREATED_AT FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS WHERE TICKETNUMBER IS NOT NULL") or []
         except Exception as e:
             logger.warning(f"Could not load tickets for user mapping: {e}")
 
@@ -4066,7 +4066,7 @@ async def delete_enterprise_admin_user(admin_id: str):
 
 @app.post("/admin/users")
 async def create_admin_user(user_data: dict):
-    """Add a new user into Snowflake SF_DATABASE.SF_SCHEMA.USER_DUMMY_DATA and local store"""
+    """Add a new user into Snowflake SF_DATABASE.SF_SCHEMA.CTTC_MOCK_USER_DATA and local store"""
     username = user_data.get("username", "").strip()
     if not username:
         raise HTTPException(status_code=400, detail="Username is required")
@@ -4083,20 +4083,19 @@ async def create_admin_user(user_data: dict):
         "created_at": datetime.now().isoformat()
     }
 
-    # Insert into Snowflake SF_DATABASE.SF_SCHEMA.USER_DUMMY_DATA if connected
+    # Insert into Snowflake SF_DATABASE.SF_SCHEMA.CTTC_MOCK_USER_DATA if connected
     if snowflake_conn and snowflake_conn.is_connected():
         try:
             ins_sql = f"""
-                INSERT INTO {SF_DATABASE}.{SF_SCHEMA}.USER_DUMMY_DATA (USER_ID, NAME, USER_EMAIL, USER_PHONENUMBER, ROLE, DEPARTMENT)
-                VALUES (%s, %s, %s, %s, %s, %s)
+                INSERT INTO {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_USER_DATA (USER_ID, NAME, USER_EMAIL, USER_PHONENUMBER, PASSWORD)
+                VALUES (%s, %s, %s, %s, %s)
             """
             snowflake_conn.execute_query(ins_sql, (
                 new_user["username"],
                 new_user["full_name"],
                 new_user["email"],
                 new_user["phone_number"],
-                new_user["role"],
-                new_user["department"]
+                user_data.get("password", "password123")
             ))
         except Exception as e:
             logger.warning(f"Could not persist user to Snowflake: {e}")
@@ -4114,11 +4113,11 @@ async def create_admin_user(user_data: dict):
 
 @app.delete("/admin/users/{user_id}")
 async def delete_admin_user(user_id: str):
-    """Remove a user from Snowflake SF_DATABASE.SF_SCHEMA.USER_DUMMY_DATA and store"""
+    """Remove a user from Snowflake SF_DATABASE.SF_SCHEMA.CTTC_MOCK_USER_DATA and store"""
     global ADMIN_USERS_STORE
     if snowflake_conn and snowflake_conn.is_connected():
         try:
-            del_sql = f"DELETE FROM {SF_DATABASE}.{SF_SCHEMA}.USER_DUMMY_DATA WHERE USER_ID = %s OR USER_EMAIL = %s"
+            del_sql = f"DELETE FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_USER_DATA WHERE USER_ID = %s OR USER_EMAIL = %s"
             snowflake_conn.execute_query(del_sql, (user_id, user_id))
         except Exception as e:
             logger.warning(f"Error removing user from Snowflake: {e}")
@@ -4130,13 +4129,13 @@ async def delete_admin_user(user_id: str):
 
 @app.get("/admin/technicians")
 async def get_admin_technicians():
-    """Retrieve all technicians directly from Snowflake SF_DATABASE.SF_SCHEMA.TECHNICIAN_DUMMY_DATA with live workload and shift mapping"""
+    """Retrieve all technicians directly from Snowflake SF_DATABASE.SF_SCHEMA.CTTC_MOCK_TECHNICIAN_DATA with live workload and shift mapping"""
     db_techs = []
     
-    # 1. Query Snowflake SF_DATABASE.SF_SCHEMA.TECHNICIAN_DUMMY_DATA
+    # 1. Query Snowflake SF_DATABASE.SF_SCHEMA.CTTC_MOCK_TECHNICIAN_DATA
     if snowflake_conn and snowflake_conn.is_connected():
         try:
-            sf_techs = snowflake_conn.execute_query(f"SELECT * FROM {SF_DATABASE}.{SF_SCHEMA}.TECHNICIAN_DUMMY_DATA")
+            sf_techs = snowflake_conn.execute_query(f"SELECT * FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TECHNICIAN_DATA")
             if sf_techs:
                 for row in sf_techs:
                     t_id = row.get("TECHNICIAN_ID") or row.get("ID") or ""
@@ -4144,9 +4143,11 @@ async def get_admin_technicians():
                     t_email = row.get("EMAIL") or row.get("TECHNICIAN_EMAIL") or ""
                     t_phone = row.get("PHONE") or row.get("PHONENUMBER") or "+1-555-0199"
                     t_role = row.get("ROLE") or "L2 Specialist"
-                    t_shift = row.get("SHIFT") or "Morning (08:00 - 16:00)"
-                    t_oncall = row.get("ON_CALL_STATUS") or "Active"
-                    t_skills = row.get("SPECIALIZATION") or row.get("SKILLS") or "Network Routing & EVPN, Optical & Fiber Trunks, Hardware Diagnostics"
+                    shift_s = row.get("SHIFT_START") or "08:00"
+                    shift_e = row.get("SHIFT_END") or "16:00"
+                    t_shift = row.get("SHIFT") or f"Custom ({shift_s} - {shift_e})"
+                    t_oncall = "Active" if row.get("IS_ON_CALL") else "Standby"
+                    t_skills = row.get("SPECIALIZATIONS") or row.get("SKILLS") or "Network Routing & EVPN, Optical & Fiber Trunks, Hardware Diagnostics"
                     if isinstance(t_skills, str):
                         skill_list = [s.strip() for s in t_skills.split(",") if s.strip()]
                     else:
@@ -4170,7 +4171,7 @@ async def get_admin_technicians():
                             "max_capacity": 10
                         })
         except Exception as e:
-            logger.error(f"Error querying {SF_DATABASE}.{SF_SCHEMA}.TECHNICIAN_DUMMY_DATA: {e}")
+            logger.error(f"Error querying {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TECHNICIAN_DATA: {e}")
 
     if not db_techs:
         db_techs = [dict(t) for t in ADMIN_TECHNICIANS_STORE]
@@ -4179,7 +4180,7 @@ async def get_admin_technicians():
     all_tickets = []
     if snowflake_conn and snowflake_conn.is_connected():
         try:
-            all_tickets = snowflake_conn.execute_query(f"SELECT TICKETNUMBER, TITLE, PRIORITY, CATEGORY, STATUS, TECHNICIAN_ID, ASSIGNED_TECHNICIAN FROM {SF_DATABASE}.{SF_SCHEMA}.TICKETS WHERE TICKETNUMBER IS NOT NULL") or []
+            all_tickets = snowflake_conn.execute_query(f"SELECT TICKETNUMBER, TITLE, PRIORITY, CATEGORY, STATUS, TECHNICIAN_ID, ASSIGNED_TECHNICIAN FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS WHERE TICKETNUMBER IS NOT NULL") or []
         except Exception as e:
             logger.warning(f"Could not load tickets for technician workload: {e}")
 
@@ -4222,7 +4223,7 @@ async def get_admin_technicians():
 
 @app.post("/admin/technicians")
 async def create_admin_technician(tech_data: dict):
-    """Add a new technician into Snowflake SF_DATABASE.SF_SCHEMA.TECHNICIAN_DUMMY_DATA"""
+    """Add a new technician into Snowflake SF_DATABASE.SF_SCHEMA.CTTC_MOCK_TECHNICIAN_DATA"""
     username = tech_data.get("username", "").strip()
     if not username:
         raise HTTPException(status_code=400, detail="Username is required")
@@ -4247,12 +4248,25 @@ async def create_admin_technician(tech_data: dict):
         "max_capacity": int(tech_data.get("max_capacity", 10))
     }
 
-    # Insert into Snowflake SF_DATABASE.SF_SCHEMA.TECHNICIAN_DUMMY_DATA if connected
+    # Insert into Snowflake SF_DATABASE.SF_SCHEMA.CTTC_MOCK_TECHNICIAN_DATA if connected
     if snowflake_conn and snowflake_conn.is_connected():
         try:
+            # Parse shift
+            shift_str = new_tech["primary_shift"]
+            shift_start = "09:00"
+            shift_end = "17:00"
+            if "(" in shift_str and "-" in shift_str:
+                parts = shift_str.split("(")[1].replace(")", "").split("-")
+                if len(parts) == 2:
+                    shift_start = parts[0].strip()
+                    shift_end = parts[1].strip()
+
+            is_on_call = True if new_tech["on_call_status"].lower() == "active" else False
+            
             ins_sql = f"""
-                INSERT INTO {SF_DATABASE}.{SF_SCHEMA}.TECHNICIAN_DUMMY_DATA (TECHNICIAN_ID, NAME, EMAIL, ROLE, SPECIALIZATION, SHIFT, ON_CALL_STATUS)
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                INSERT INTO {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TECHNICIAN_DATA 
+                (TECHNICIAN_ID, NAME, EMAIL, ROLE, SPECIALIZATIONS, SHIFT_START, SHIFT_END, IS_ON_CALL, SKILLS, CURRENT_WORKLOAD)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 0)
             """
             snowflake_conn.execute_query(ins_sql, (
                 new_tech["username"],
@@ -4260,8 +4274,10 @@ async def create_admin_technician(tech_data: dict):
                 new_tech["email"],
                 new_tech["technician_role"],
                 ", ".join(new_tech["skill_sets"]),
-                new_tech["primary_shift"],
-                new_tech["on_call_status"]
+                shift_start,
+                shift_end,
+                is_on_call,
+                ", ".join(new_tech["skill_sets"])
             ))
         except Exception as e:
             logger.warning(f"Could not persist technician to Snowflake: {e}")
@@ -4279,11 +4295,11 @@ async def create_admin_technician(tech_data: dict):
 
 @app.delete("/admin/technicians/{tech_id}")
 async def delete_admin_technician(tech_id: str):
-    """Remove a technician from Snowflake SF_DATABASE.SF_SCHEMA.TECHNICIAN_DUMMY_DATA"""
+    """Remove a technician from Snowflake SF_DATABASE.SF_SCHEMA.CTTC_MOCK_TECHNICIAN_DATA"""
     global ADMIN_TECHNICIANS_STORE
     if snowflake_conn and snowflake_conn.is_connected():
         try:
-            del_sql = f"DELETE FROM {SF_DATABASE}.{SF_SCHEMA}.TECHNICIAN_DUMMY_DATA WHERE TECHNICIAN_ID = %s OR EMAIL = %s"
+            del_sql = f"DELETE FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TECHNICIAN_DATA WHERE TECHNICIAN_ID = %s OR EMAIL = %s"
             snowflake_conn.execute_query(del_sql, (tech_id, tech_id))
         except Exception as e:
             logger.warning(f"Error removing technician from Snowflake: {e}")
@@ -4321,17 +4337,31 @@ async def update_technician_schedule_and_skills(tech_id: str, update_data: dict)
     if "status" in update_data:
         target["status"] = update_data["status"]
 
-    # Update Snowflake SF_DATABASE.SF_SCHEMA.TECHNICIAN_DUMMY_DATA
+    # Update Snowflake SF_DATABASE.SF_SCHEMA.CTTC_MOCK_TECHNICIAN_DATA
     if snowflake_conn and snowflake_conn.is_connected():
         try:
+            # Parse shift
+            shift_str = target["primary_shift"]
+            shift_start = "09:00"
+            shift_end = "17:00"
+            if "(" in shift_str and "-" in shift_str:
+                parts = shift_str.split("(")[1].replace(")", "").split("-")
+                if len(parts) == 2:
+                    shift_start = parts[0].strip()
+                    shift_end = parts[1].strip()
+            
+            is_on_call = True if target["on_call_status"].lower() == "active" else False
+
             upd_sql = f"""
-                UPDATE {SF_DATABASE}.{SF_SCHEMA}.TECHNICIAN_DUMMY_DATA
-                SET SHIFT = %s, ON_CALL_STATUS = %s, SPECIALIZATION = %s
+                UPDATE {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TECHNICIAN_DATA
+                SET SHIFT_START = %s, SHIFT_END = %s, IS_ON_CALL = %s, SPECIALIZATIONS = %s, SKILLS = %s
                 WHERE TECHNICIAN_ID = %s
             """
             snowflake_conn.execute_query(upd_sql, (
-                target["primary_shift"],
-                target["on_call_status"],
+                shift_start,
+                shift_end,
+                is_on_call,
+                ", ".join(target["skill_sets"]),
                 ", ".join(target["skill_sets"]),
                 tech_id
             ))
@@ -4342,15 +4372,15 @@ async def update_technician_schedule_and_skills(tech_id: str, update_data: dict)
 
 @app.get("/admin/reports/master-tickets")
 async def get_admin_master_tickets_report():
-    """Master tickets report querying directly from Snowflake SF_DATABASE.SF_SCHEMA.TICKETS and CLOSED_TICKETS"""
+    """Master tickets report querying directly from Snowflake SF_DATABASE.SF_SCHEMA.TICKETS and CTTC_MOCK_CLOSED_TICKETS"""
     try:
         results = []
         if snowflake_conn and snowflake_conn.is_connected():
             try:
-                query = f"SELECT * FROM {SF_DATABASE}.{SF_SCHEMA}.TICKETS WHERE TICKETNUMBER != 'TICKETNUMBER' AND TICKETNUMBER IS NOT NULL ORDER BY TICKETNUMBER DESC LIMIT 500"
+                query = f"SELECT * FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS WHERE TICKETNUMBER != 'TICKETNUMBER' AND TICKETNUMBER IS NOT NULL ORDER BY TICKETNUMBER DESC LIMIT 500"
                 results = snowflake_conn.execute_query(query)
             except Exception as e_sf:
-                logger.error(f"Error querying Snowflake {SF_DATABASE}.{SF_SCHEMA}.TICKETS: {e_sf}")
+                logger.error(f"Error querying Snowflake {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS: {e_sf}")
                 results = []
 
         if not results:

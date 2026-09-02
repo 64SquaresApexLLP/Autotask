@@ -48,7 +48,7 @@
 
 # @dataclass
 # class TechnicianData:
-#     """Data class for technician information from SF_DATABASE.SF_SCHEMA.TECHNICIAN_DUMMY_DATA
+#     """Data class for technician information from SF_DATABASE.SF_SCHEMA.CTTC_MOCK_TECHNICIAN_DATA
 #     (max_workload and availability_status removed - availability checked via Google Calendar)"""
 #     technician_id: str
 #     name: str
@@ -199,7 +199,7 @@
 
 #     def get_technician_data(self) -> List[Dict]:
 #         """
-#         Query Snowflake SF_DATABASE.SF_SCHEMA.TECHNICIAN_DUMMY_DATA for technician metadata
+#         Query Snowflake SF_DATABASE.SF_SCHEMA.CTTC_MOCK_TECHNICIAN_DATA for technician metadata
 
 #         Returns:
 #             List[Dict]: List of technician data with all required fields
@@ -223,7 +223,7 @@
 #                 SKILLS,
 #                 CURRENT_WORKLOAD,
 #                 SPECIALIZATIONS
-#             FROM SF_DATABASE.SF_SCHEMA.TECHNICIAN_DUMMY_DATA
+#             FROM SF_DATABASE.SF_SCHEMA.CTTC_MOCK_TECHNICIAN_DATA
 #             ORDER BY CURRENT_WORKLOAD ASC, NAME ASC
 #             """
 
@@ -268,7 +268,7 @@
 #                     print(f"Error parsing technician data for row {row}: {str(e)}")
 #                     continue
 
-#             print(f"Retrieved {len(technicians)} technicians from SF_DATABASE.SF_SCHEMA.TECHNICIAN_DUMMY_DATA")
+#             print(f"Retrieved {len(technicians)} technicians from SF_DATABASE.SF_SCHEMA.CTTC_MOCK_TECHNICIAN_DATA")
 #             return technicians
 
 #         except Exception as e:
@@ -495,7 +495,7 @@
 
 #             # Update the current workload by incrementing it (cast to integer)
 #             update_query = """
-#             UPDATE SF_DATABASE.SF_SCHEMA.TECHNICIAN_DUMMY_DATA
+#             UPDATE SF_DATABASE.SF_SCHEMA.CTTC_MOCK_TECHNICIAN_DATA
 #             SET CURRENT_WORKLOAD = CAST(CURRENT_WORKLOAD + %s AS INTEGER)
 #             WHERE TECHNICIAN_ID = %s
 #             """
@@ -537,7 +537,7 @@
 #             SELECT
 #                 t.EMAIL,
 #                 COUNT(tk.TICKETNUMBER) as active_tickets
-#             FROM SF_DATABASE.SF_SCHEMA.TECHNICIAN_DUMMY_DATA t
+#             FROM SF_DATABASE.SF_SCHEMA.CTTC_MOCK_TECHNICIAN_DATA t
 #             LEFT JOIN SF_DATABASE.SF_SCHEMA.TICKETS tk ON t.EMAIL = tk.TECHNICIANEMAIL
 #             WHERE tk.STATUS IS NULL OR tk.STATUS NOT IN ('Closed', 'Resolved', 'Cancelled')
 #             GROUP BY t.EMAIL
@@ -556,7 +556,7 @@
 
 #                 # Update the technician's current workload in the database (cast to integer)
 #                 update_query = """
-#                 UPDATE SF_DATABASE.SF_SCHEMA.TECHNICIAN_DUMMY_DATA
+#                 UPDATE SF_DATABASE.SF_SCHEMA.CTTC_MOCK_TECHNICIAN_DATA
 #                 SET CURRENT_WORKLOAD = CAST(%s AS INTEGER)
 #                 WHERE EMAIL = %s
 #                 """
@@ -592,7 +592,7 @@
 
 #             query = """
 #             SELECT CURRENT_WORKLOAD
-#             FROM SF_DATABASE.SF_SCHEMA.TECHNICIAN_DUMMY_DATA
+#             FROM SF_DATABASE.SF_SCHEMA.CTTC_MOCK_TECHNICIAN_DATA
 #             WHERE TECHNICIAN_ID = %s
 #             """
 
@@ -634,7 +634,7 @@
 #             # Get technician ID from email
 #             tech_query = """
 #             SELECT TECHNICIAN_ID
-#             FROM SF_DATABASE.SF_SCHEMA.TECHNICIAN_DUMMY_DATA
+#             FROM SF_DATABASE.SF_SCHEMA.CTTC_MOCK_TECHNICIAN_DATA
 #             WHERE EMAIL = %s
 #             """
 
@@ -649,7 +649,7 @@
 
 #             # Decrement workload (ensure it doesn't go below 0, cast to integer)
 #             update_query = """
-#             UPDATE SF_DATABASE.SF_SCHEMA.TECHNICIAN_DUMMY_DATA
+#             UPDATE SF_DATABASE.SF_SCHEMA.CTTC_MOCK_TECHNICIAN_DATA
 #             SET CURRENT_WORKLOAD = CAST(GREATEST(CURRENT_WORKLOAD - 1, 0) AS INTEGER)
 #             WHERE TECHNICIAN_ID = %s
 #             """
@@ -1151,7 +1151,7 @@
 #         # Get technician ID from email
 #         tech_query = """
 #         SELECT TECHNICIAN_ID
-#         FROM SF_DATABASE.SF_SCHEMA.TECHNICIAN_DUMMY_DATA
+#         FROM SF_DATABASE.SF_SCHEMA.CTTC_MOCK_TECHNICIAN_DATA
 #         WHERE EMAIL = %s
 #         """
 
@@ -1363,7 +1363,7 @@ class TicketData:
 
 @dataclass
 class TechnicianData:
-    """Data class for technician information from SF_DATABASE.SF_SCHEMA.TECHNICIAN_DUMMY_DATA"""
+    """Data class for technician information from SF_DATABASE.SF_SCHEMA.CTTC_MOCK_TECHNICIAN_DATA"""
     technician_id: str
     name: str
     email: str
@@ -1548,7 +1548,7 @@ class AssignmentAgentIntegration:
 
     def get_technician_data(self) -> List[Dict]:
         """
-        Query Snowflake SF_DATABASE.SF_SCHEMA.TECHNICIAN_DUMMY_DATA for technician metadata
+        Query Snowflake SF_DATABASE.SF_SCHEMA.CTTC_MOCK_TECHNICIAN_DATA for technician metadata
 
         Returns:
             List[Dict]: List of technician data with all required fields
@@ -1577,7 +1577,7 @@ class AssignmentAgentIntegration:
                 COALESCE(WORKING_DAYS, '["Monday","Tuesday","Wednesday","Thursday","Friday"]') as WORKING_DAYS,
                 COALESCE(IS_ON_CALL, FALSE) as IS_ON_CALL,
                 COALESCE(IS_ON_LEAVE, FALSE) as IS_ON_LEAVE
-            FROM {SF_DATABASE}.{SF_SCHEMA}.TECHNICIAN_DUMMY_DATA
+            FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TECHNICIAN_DATA
             ORDER BY CURRENT_WORKLOAD ASC, NAME ASC
             """
 
@@ -1639,7 +1639,7 @@ class AssignmentAgentIntegration:
                     continue
 
             if technicians:
-                logger.info(f"Retrieved {len(technicians)} technicians from {SF_DATABASE}.{SF_SCHEMA}.TECHNICIAN_DUMMY_DATA with schedules")
+                logger.info(f"Retrieved {len(technicians)} technicians from {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TECHNICIAN_DATA with schedules")
                 return technicians
             else:
                 return self._get_fallback_technicians_from_csv()
@@ -1656,8 +1656,8 @@ class AssignmentAgentIntegration:
         import csv
         base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         csv_candidates = [
-            os.path.join(base_dir, 'data', 'TECHNICIAN_DUMMY_DATA.csv'),
-            os.path.join(base_dir, 'data', 'snowflake_export', 'TECHNICIAN_DUMMY_DATA.csv'),
+            os.path.join(base_dir, 'data', 'CTTC_MOCK_TECHNICIAN_DATA.csv'),
+            os.path.join(base_dir, 'data', 'snowflake_export', 'CTTC_MOCK_TECHNICIAN_DATA.csv'),
             os.path.join(base_dir, 'data', 'technician_dummy_data.csv')
         ]
         technicians = []
@@ -2094,7 +2094,7 @@ class AssignmentAgentIntegration:
 
             # Update the current workload by incrementing it (cast to integer)
             update_query = f"""
-            UPDATE {SF_DATABASE}.{SF_SCHEMA}.TECHNICIAN_DUMMY_DATA
+            UPDATE {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TECHNICIAN_DATA
             SET CURRENT_WORKLOAD = CAST(CURRENT_WORKLOAD + %s AS INTEGER)
             WHERE TECHNICIAN_ID = %s
             """
@@ -2136,8 +2136,8 @@ class AssignmentAgentIntegration:
             SELECT
                 t.EMAIL,
                 COUNT(tk.TICKETNUMBER) as active_tickets
-            FROM {SF_DATABASE}.{SF_SCHEMA}.TECHNICIAN_DUMMY_DATA t
-            LEFT JOIN {SF_DATABASE}.{SF_SCHEMA}.TICKETS tk ON t.EMAIL = tk.TECHNICIANEMAIL
+            FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TECHNICIAN_DATA t
+            LEFT JOIN {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS tk ON t.EMAIL = tk.TECHNICIANEMAIL
             WHERE tk.STATUS IS NULL OR tk.STATUS NOT IN ('Closed', 'Resolved', 'Cancelled')
             GROUP BY t.EMAIL
             """
@@ -2155,7 +2155,7 @@ class AssignmentAgentIntegration:
 
                 # Update the technician's current workload in the database (cast to integer)
                 update_query = f"""
-                UPDATE {SF_DATABASE}.{SF_SCHEMA}.TECHNICIAN_DUMMY_DATA
+                UPDATE {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TECHNICIAN_DATA
                 SET CURRENT_WORKLOAD = CAST(%s AS INTEGER)
                 WHERE EMAIL = %s
                 """
@@ -2191,7 +2191,7 @@ class AssignmentAgentIntegration:
 
             query = f"""
             SELECT CURRENT_WORKLOAD
-            FROM {SF_DATABASE}.{SF_SCHEMA}.TECHNICIAN_DUMMY_DATA
+            FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TECHNICIAN_DATA
             WHERE TECHNICIAN_ID = %s
             """
 
@@ -2233,7 +2233,7 @@ class AssignmentAgentIntegration:
             # Get technician ID from email
             tech_query = f"""
             SELECT TECHNICIAN_ID
-            FROM {SF_DATABASE}.{SF_SCHEMA}.TECHNICIAN_DUMMY_DATA
+            FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TECHNICIAN_DATA
             WHERE EMAIL = %s
             """
 
@@ -2248,7 +2248,7 @@ class AssignmentAgentIntegration:
 
             # Decrement workload (ensure it doesn't go below 0, cast to integer)
             update_query = f"""
-            UPDATE {SF_DATABASE}.{SF_SCHEMA}.TECHNICIAN_DUMMY_DATA
+            UPDATE {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TECHNICIAN_DATA
             SET CURRENT_WORKLOAD = CAST(GREATEST(CURRENT_WORKLOAD - 1, 0) AS INTEGER)
             WHERE TECHNICIAN_ID = %s
             """
@@ -3019,7 +3019,7 @@ def update_technician_workload_by_email(technician_email: str, increment: int, d
         # Get technician ID from email
         tech_query = f"""
         SELECT TECHNICIAN_ID
-        FROM {SF_DATABASE}.{SF_SCHEMA}.TECHNICIAN_DUMMY_DATA
+        FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TECHNICIAN_DATA
         WHERE EMAIL = %s
         """
 

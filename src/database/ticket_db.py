@@ -25,7 +25,7 @@ class TicketDB:
         mapped_data = self._map_ticket_data_for_db(ticket_data)
 
         query = f'''
-        INSERT INTO {SF_DATABASE}.{SF_SCHEMA}.TICKETS (
+        INSERT INTO {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS (
             TITLE, DESCRIPTION, TICKETTYPE, TICKETNUMBER, TICKETCATEGORY,
             ISSUETYPE, SUBISSUETYPE, DUEDATETIME, RESOLUTION, USERID,
             USEREMAIL, TECHNICIANEMAIL, PHONENUMBER
@@ -83,7 +83,7 @@ class TicketDB:
     def get_tickets_for_technician(self, technician_email: str):
         """Get all tickets assigned to a specific technician."""
         query = f'''
-        SELECT * FROM {SF_DATABASE}.{SF_SCHEMA}.TICKETS
+        SELECT * FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS
         WHERE TECHNICIANEMAIL = %s
         ORDER BY TICKETNUMBER DESC
         '''
@@ -92,7 +92,7 @@ class TicketDB:
     def get_all_tickets(self):
         """Get all tickets from the database."""
         query = f'''
-        SELECT * FROM {SF_DATABASE}.{SF_SCHEMA}.TICKETS
+        SELECT * FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS
         ORDER BY TICKETNUMBER DESC
         '''
         return self.conn.execute_query(query)
@@ -101,46 +101,46 @@ class TicketDB:
         """Get tickets by status (if status column exists)."""
         # Note: Status is not in the required schema, but keeping for compatibility
         query = f'''
-        SELECT * FROM {SF_DATABASE}.{SF_SCHEMA}.TICKETS
+        SELECT * FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS
         ORDER BY TICKETNUMBER DESC
         '''
         return self.conn.execute_query(query)
 
     def update_ticket_assignment(self, ticket_number: str, technician_email: str):
         query = f'''
-        UPDATE {SF_DATABASE}.{SF_SCHEMA}.TICKETS SET TECHNICIANEMAIL = %s WHERE TICKETNUMBER = %s
+        UPDATE {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS SET TECHNICIANEMAIL = %s WHERE TICKETNUMBER = %s
         '''
         self.conn.execute_query(query, (technician_email, ticket_number))
 
     def get_tickets_for_user(self, user_id: str):
         query = f'''
-        SELECT * FROM {SF_DATABASE}.{SF_SCHEMA}.TICKETS WHERE USERID = %s
+        SELECT * FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS WHERE USERID = %s
         '''
         return self.conn.execute_query(query, (user_id,))
 
     def get_tickets_for_technician(self, technician_email: str):
         query = f'''
-        SELECT * FROM {SF_DATABASE}.{SF_SCHEMA}.TICKETS WHERE TECHNICIANEMAIL = %s
+        SELECT * FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS WHERE TECHNICIANEMAIL = %s
         '''
         return self.conn.execute_query(query, (technician_email,))
 
     def get_technician_by_email(self, email: str):
         query = f'''
-        SELECT * FROM {SF_DATABASE}.{SF_SCHEMA}.TECHNICIAN_DUMMY_DATA WHERE EMAIL = %s
+        SELECT * FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TECHNICIAN_DATA WHERE EMAIL = %s
         '''
         results = self.conn.execute_query(query, (email,))
         return results[0] if results else None
 
     def update_ticket_status(self, ticket_number: str, status: str):
         query = f'''
-        UPDATE {SF_DATABASE}.{SF_SCHEMA}.TICKETS SET STATUS = %s WHERE TICKETNUMBER = %s
+        UPDATE {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS SET STATUS = %s WHERE TICKETNUMBER = %s
         '''
         self.conn.execute_query(query, (status, ticket_number))
 
     def add_work_note(self, ticket_number: str, note: str):
         # Fetch current notes
         query_select = f'''
-        SELECT WORK_NOTES FROM {SF_DATABASE}.{SF_SCHEMA}.TICKETS WHERE TICKETNUMBER = %s
+        SELECT WORK_NOTES FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS WHERE TICKETNUMBER = %s
         '''
         result = self.conn.execute_query(query_select, (ticket_number,))
         notes = []
@@ -153,6 +153,6 @@ class TicketDB:
         notes.append({'note': note, 'time': datetime.now().isoformat()})
         notes_json = json.dumps(notes)
         query_update = f'''
-        UPDATE {SF_DATABASE}.{SF_SCHEMA}.TICKETS SET WORK_NOTES = %s WHERE TICKETNUMBER = %s
+        UPDATE {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS SET WORK_NOTES = %s WHERE TICKETNUMBER = %s
         '''
         self.conn.execute_query(query_update, (notes_json, ticket_number)) 

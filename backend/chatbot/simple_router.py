@@ -163,7 +163,7 @@ def _fetch_my_tickets(current_user: str, limit: int = 5) -> List[Dict[str, Any]]
     try:
         query = f"""
             SELECT TICKETNUMBER, TITLE, DESCRIPTION, STATUS, PRIORITY
-            FROM {SF_DATABASE}.{SF_SCHEMA}.TICKETS
+            FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS
             WHERE TECHNICIAN_ID = %s
             ORDER BY TICKETNUMBER DESC
             LIMIT {int(limit)}
@@ -262,7 +262,7 @@ def _semantic_search(
 
 def _fetch_similar_tickets(search_text: str, limit: int = 3) -> List[Dict[str, Any]]:
     """Fetch tickets similar to `search_text` (vector similarity + keyword fallback)."""
-    return _semantic_search(f"{SF_DATABASE}.{SF_SCHEMA}.TICKETS", search_text, limit=limit)
+    return _semantic_search(f"{SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS", search_text, limit=limit)
 
 
 def _gather_ticket_context(user_message: str, current_user: str) -> Dict[str, Any]:
@@ -312,7 +312,7 @@ async def get_my_tickets(request: Request):
         # Query real tickets from database assigned to current user
         query = f"""
             SELECT TICKETNUMBER, TITLE, DESCRIPTION, STATUS, PRIORITY, TECHNICIAN_ID
-            FROM {SF_DATABASE}.{SF_SCHEMA}.TICKETS
+            FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS
             WHERE TECHNICIAN_ID = %s
             ORDER BY TICKETNUMBER DESC
             LIMIT 20
@@ -353,7 +353,7 @@ async def search_tickets(
         search_term = f"%{q}%"
         query = f"""
             SELECT TICKETNUMBER, TITLE, DESCRIPTION, STATUS, PRIORITY, TECHNICIANEMAIL
-            FROM {SF_DATABASE}.{SF_SCHEMA}.TICKETS
+            FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS
             WHERE UPPER(TITLE) LIKE UPPER(%s)
                OR UPPER(DESCRIPTION) LIKE UPPER(%s)
             ORDER BY TICKETNUMBER DESC
@@ -391,7 +391,7 @@ async def get_ticket(ticket_id: str, request: Request = None):
         # Query specific ticket from database
         query = f"""
             SELECT TICKETNUMBER, TITLE, DESCRIPTION, STATUS, PRIORITY, TECHNICIANEMAIL
-            FROM {SF_DATABASE}.{SF_SCHEMA}.TICKETS
+            FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS
             WHERE TICKETNUMBER = %s
         """
         results = snowflake_conn.execute_query(query, (ticket_id,))
@@ -428,7 +428,7 @@ async def find_similar_tickets(ticket_number: str, request: Request = None):
         # First, get the original ticket to find similar ones
         original_query = f"""
             SELECT TITLE, DESCRIPTION, STATUS, PRIORITY, ISSUETYPE, SUBISSUETYPE
-            FROM {SF_DATABASE}.{SF_SCHEMA}.TICKETS
+            FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS
             WHERE TICKETNUMBER = %s
         """
         original_results = snowflake_conn.execute_query(original_query, (ticket_number,))
@@ -449,7 +449,7 @@ async def find_similar_tickets(ticket_number: str, request: Request = None):
 
         # Semantic similarity search in TICKETS table (Cortex embeddings + keyword fallback)
         tickets_results = _semantic_search(
-            f"{SF_DATABASE}.{SF_SCHEMA}.TICKETS",
+            f"{SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS",
             search_text,
             exclude_ticket=ticket_number,
             limit=5,

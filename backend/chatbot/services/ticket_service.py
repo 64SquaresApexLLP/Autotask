@@ -179,7 +179,7 @@ class TicketService:
                         COALESCE(TITLE, '') || ' ' || COALESCE(DESCRIPTION, ''),
                         '{issue_description.replace("'", "''")}'
                     ) AS SIMILARITY_SCORE
-                FROM {SF_DATABASE}.{SF_SCHEMA}.TICKETS
+                FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS
                 WHERE TITLE IS NOT NULL
                 AND DESCRIPTION IS NOT NULL
                 AND TRIM(TITLE) != ''

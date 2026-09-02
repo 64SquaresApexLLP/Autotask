@@ -346,7 +346,7 @@ class PageControllers:
         st.title("Technician Dashboard - All Tickets")
         all_tickets = []
         try:
-            query = f'SELECT * FROM {SF_DATABASE}.{SF_SCHEMA}.TICKETS'
+            query = f'SELECT * FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS'
             all_tickets = ticket_db.conn.execute_query(query)
         except Exception as e:
             st.error(f"Error fetching tickets: {e}")
