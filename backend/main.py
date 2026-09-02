@@ -1202,7 +1202,7 @@ def get_mttr_analytics(
                 "resolved_count": len(durs)
             }
 
-        sla_compliance_rate = round((sla_met_count / total_evaluated_sla * 100), 1) if total_evaluated_sla else 91.5
+        sla_compliance_rate = round((sla_met_count / total_evaluated_sla * 100), 1) if total_evaluated_sla else None
 
         return {
             "overall_mttr_hours": overall_mttr,

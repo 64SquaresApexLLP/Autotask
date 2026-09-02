@@ -135,9 +135,9 @@ const MttrCard = ({ mttrData, isTechnician = true, className = '' }) => {
     { key: 'Low', label: 'Low', color: 'bg-blue-500', text: 'text-blue-600', border: 'border-blue-200' }
   ];
 
-  // Max MTTR across tiers — scales the gauge rings (MTTR-only, no SLA targets)
+  // Max MTTR across tiers — scales the gauge rings. Only use real values (not null).
   const maxMttrHours = Math.max(
-    ...priorities.map(p => Number(by_priority[p.key]?.mttr_hours || 0)),
+    ...priorities.map(p => Number(by_priority[p.key]?.mttr_hours ?? 0)),
     1
   );
 
@@ -219,9 +219,10 @@ const MttrCard = ({ mttrData, isTechnician = true, className = '' }) => {
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {priorities.map(({ key, label, text, border }) => {
-            const data = by_priority[key] || { mttr_hours: 0, resolved_count: 0 };
-            const hours = Number(data.mttr_hours || 0);
-            const percentage = Math.min(Math.round((hours / maxMttrHours) * 100), 100);
+            const data = by_priority[key] || {};
+            // null means no resolved tickets yet — show "no data" state
+            const hours = data.mttr_hours != null ? Number(data.mttr_hours) : null;
+            const percentage = hours !== null ? Math.min(Math.round((hours / maxMttrHours) * 100), 100) : 0;
             
             // SVG circular progress calculation
             const radius = 32;
@@ -265,7 +266,7 @@ const MttrCard = ({ mttrData, isTechnician = true, className = '' }) => {
                   {/* Center Text */}
                   <div className="absolute inset-0 flex flex-col items-center justify-center">
                     <span className="text-base font-extrabold text-gray-900 tracking-tight">
-                      {hours > 0 ? `${hours}h` : '—'}
+                      {hours !== null ? `${hours}h` : '—'}
                     </span>
                     <span className="text-[9px] font-semibold text-gray-400 uppercase">MTTR</span>
                   </div>
@@ -273,10 +274,10 @@ const MttrCard = ({ mttrData, isTechnician = true, className = '' }) => {
 
                 {/* Resolved Count Badge */}
                 <div className="mt-2 w-full">
-                  {hours > 0 ? (
+                  {hours !== null ? (
                     <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full w-full justify-center">
                       <CheckCircle2 className="w-3 h-3" />
-                      <span>{data.resolved_count || 0} resolved</span>
+                      <span>{data.resolved_count ?? 0} resolved</span>
                     </span>
                   ) : (
                     <span className="inline-flex items-center text-[11px] font-medium text-gray-500 bg-gray-50 px-2 py-0.5 rounded-full w-full justify-center">
