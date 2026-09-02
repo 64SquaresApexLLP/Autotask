@@ -234,8 +234,21 @@ incident = {
 payload = {
     "meta": {"generated_at": raw["generated_at"], "source": raw["source"],
              "counts": raw["summary"]["by_label"]},
-    "sites": {i: {"name": P(i)["name"], "type": P(i)["type"]}
-              for i, n in N.items() if n["labels"][0] == "Site"},
+    "sites": {i: {
+        "name": P(i)["name"],
+        "type": P(i)["type"],
+        "town": P(i).get("town"),
+        "county": P(i).get("county"),
+        "state": P(i).get("state", "Texas"),
+        "lat": P(i).get("lat"),
+        "lon": P(i).get("lon"),
+        "latitude": P(i).get("latitude"),
+        "longitude": P(i).get("longitude"),
+        "alt_m": P(i).get("alt_m"),
+        "alt_ft": P(i).get("alt_ft"),
+        "altitude_meters": P(i).get("altitude_meters"),
+        "altitude_feet": P(i).get("altitude_feet")
+    } for i, n in N.items() if n["labels"][0] == "Site"},
     "devices": devices, "deviceLinks": device_links, "ports": ports,
     "portLinks": port_links, "pons": pons, "onts": onts, "subs": subs,
     "services": services, "alarms": alarms,

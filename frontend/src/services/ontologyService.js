@@ -40,8 +40,12 @@ function unifyDatasets(cttcData, vizData) {
     }
 
     if (vizSites[nodeId]) {
-      props.site_details = vizSites[nodeId];
-      if (!props.name) props.name = vizSites[nodeId].name;
+      const site = vizSites[nodeId];
+      props.site_details = site;
+      if (!props.name) props.name = site.name;
+      ['town', 'county', 'state', 'lat', 'lon', 'latitude', 'longitude', 'alt_m', 'alt_ft', 'altitude_meters', 'altitude_feet'].forEach(k => {
+        if (site[k] !== undefined && site[k] !== null) props[k] = site[k];
+      });
     }
 
     return {
@@ -69,15 +73,18 @@ export const ontologyService = {
   /**
    * Get complete unified graph dataset (cttc.json + viz.json)
    */
-  getFullGraph: async () => {
-    if (cachedUnifiedGraph) {
+  getFullGraph: async (forceRefresh = false) => {
+    if (forceRefresh) {
+      cachedUnifiedGraph = null;
+    } else if (cachedUnifiedGraph) {
       return cachedUnifiedGraph;
     }
 
     // 1. Attempt API fetch from backend
     try {
+      const url = forceRefresh ? `${API_ENDPOINTS.ONTOLOGY.FULL_GRAPH}?refresh=true&_t=${Date.now()}` : API_ENDPOINTS.ONTOLOGY.FULL_GRAPH;
       const res = await Promise.race([
-        apiService.get(API_ENDPOINTS.ONTOLOGY.FULL_GRAPH),
+        apiService.get(url),
         new Promise((_, reject) => setTimeout(() => reject(new Error('API Timeout')), 4000))
       ]);
       if (res && res.nodes && res.nodes.length > 0) {
@@ -90,9 +97,10 @@ export const ontologyService = {
 
     // 2. Direct static bundle fallback (Guarantees 100% reliable load)
     try {
+      const ts = forceRefresh ? `?_t=${Date.now()}` : '';
       const [cttcRes, vizRes] = await Promise.all([
-        fetch('/data/cttc.json').then(r => r.json()),
-        fetch('/data/viz.json').then(r => r.json())
+        fetch(`/data/cttc.json${ts}`).then(r => r.json()),
+        fetch(`/data/viz.json${ts}`).then(r => r.json())
       ]);
 
       const unified = unifyDatasets(cttcRes, vizRes);

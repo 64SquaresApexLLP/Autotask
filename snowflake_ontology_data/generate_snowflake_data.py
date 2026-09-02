@@ -45,8 +45,12 @@ for s_id, s_info in viz_sites.items():
         "SITE_ID": s_id,
         "SITE_NAME": s_info.get("name", ""),
         "SITE_TYPE": s_info.get("type", "central_office"),
+        "COUNTY": s_info.get("county", "Mills County"),
+        "STATE": s_info.get("state", "Texas"),
         "LATITUDE": s_info.get("lat"),
         "LONGITUDE": s_info.get("lon"),
+        "ALTITUDE_METERS": s_info.get("alt_m") or s_info.get("altitude_meters"),
+        "ALTITUDE_FEET": s_info.get("alt_ft") or s_info.get("altitude_feet"),
         "REGION": "Texas, USA",
         "STATUS": "ACTIVE",
         "CREATED_AT": datetime.utcnow().isoformat()
@@ -62,8 +66,12 @@ for n in nodes:
                 "SITE_ID": s_id,
                 "SITE_NAME": p.get("name", s_id.replace("site:", "").upper()),
                 "SITE_TYPE": p.get("type", "aggregation_site"),
+                "COUNTY": p.get("county", "Mills County"),
+                "STATE": p.get("state", "Texas"),
                 "LATITUDE": p.get("lat"),
                 "LONGITUDE": p.get("lon"),
+                "ALTITUDE_METERS": p.get("alt_m") or p.get("altitude_meters"),
+                "ALTITUDE_FEET": p.get("alt_ft") or p.get("altitude_feet"),
                 "REGION": "Texas, USA",
                 "STATUS": "ACTIVE",
                 "CREATED_AT": datetime.utcnow().isoformat()
@@ -424,7 +432,7 @@ def write_csv(filename, fieldnames, data):
         writer.writerows(data)
     print(f"✅ Generated {filename} ({len(data)} rows)")
 
-write_csv("DIM_SITES.csv", ["SITE_ID", "SITE_NAME", "SITE_TYPE", "LATITUDE", "LONGITUDE", "REGION", "STATUS", "CREATED_AT"], sites_rows)
+write_csv("DIM_SITES.csv", ["SITE_ID", "SITE_NAME", "SITE_TYPE", "COUNTY", "STATE", "LATITUDE", "LONGITUDE", "ALTITUDE_METERS", "ALTITUDE_FEET", "REGION", "STATUS", "CREATED_AT"], sites_rows)
 write_csv("DIM_NETWORK_DEVICES.csv", ["DEVICE_ID", "DEVICE_NAME", "VENDOR", "MODEL", "ROLE", "SITE_ID", "MANAGEMENT_IP", "SOFTWARE_RELEASE", "IS_APPROVED_TRAIN", "IS_VERSION_DRIFT_OUTLIER", "ACTIVE_DEFECTS_COUNT", "DEFECTS_JSON", "SERVICES_COUNT", "SUBSCRIBERS_COUNT", "OPER_STATUS", "LAST_AUDITED_AT"], devices_rows)
 write_csv("DIM_PORTS.csv", ["PORT_ID", "DEVICE_ID", "PORT_NAME", "SPEED_GBPS", "OPER_STATE", "ADMIN_STATE", "OPTIC_TYPE", "OPTIC_TEMP_C"], ports_rows)
 write_csv("FACT_TOPOLOGY_LINKS.csv", ["LINK_ID", "SOURCE_NODE_ID", "TARGET_NODE_ID", "RELATIONSHIP_TYPE", "SPEED_GBPS", "PROTECTION_ROLE", "IS_SPOF_RISK", "LINK_STATUS", "PROPERTIES_JSON"], links_rows)
@@ -464,8 +472,12 @@ CREATE OR REPLACE TABLE DIM_SITES (
     SITE_ID VARCHAR(64) PRIMARY KEY,
     SITE_NAME VARCHAR(128) NOT NULL,
     SITE_TYPE VARCHAR(64),
+    COUNTY VARCHAR(64),
+    STATE VARCHAR(32) DEFAULT 'Texas',
     LATITUDE FLOAT,
     LONGITUDE FLOAT,
+    ALTITUDE_METERS FLOAT,
+    ALTITUDE_FEET FLOAT,
     REGION VARCHAR(64),
     STATUS VARCHAR(32) DEFAULT 'ACTIVE',
     CREATED_AT TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP()

@@ -21,13 +21,13 @@ CTTC_JSON_PATH = os.path.join(CTTC_DATA_DIR, "cttc.json")
 _CACHED_UNIFIED_GRAPH: Optional[Dict[str, Any]] = None
 
 
-def load_full_graph() -> Dict[str, Any]:
+def load_full_graph(reload: bool = False) -> Dict[str, Any]:
     """
     Load and unify BOTH cttc.json (1,190 nodes & 1,511 relationships) 
     and viz.json (rich metadata, defect blast radii, SPOF findings, and device analytics).
     """
     global _CACHED_UNIFIED_GRAPH
-    if _CACHED_UNIFIED_GRAPH is not None:
+    if _CACHED_UNIFIED_GRAPH is not None and not reload:
         return _CACHED_UNIFIED_GRAPH
 
     try:
@@ -78,8 +78,9 @@ def load_full_graph() -> Dict[str, Any]:
             if node_id in viz_sites:
                 site_info = viz_sites[node_id]
                 props["site_details"] = site_info
-                if "name" not in props:
-                    props["name"] = site_info.get("name")
+                for geo_key in ["name", "town", "county", "state", "lat", "lon", "latitude", "longitude", "alt_m", "alt_ft", "altitude_meters", "altitude_feet"]:
+                    if geo_key in site_info and site_info[geo_key] is not None:
+                        props[geo_key] = site_info[geo_key]
 
             enriched_nodes.append({
                 "id": node_id,

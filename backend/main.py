@@ -1793,10 +1793,10 @@ def get_raw_ontology_data():
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/ontology/full-graph")
-def get_full_graph_dataset():
+def get_full_graph_dataset(refresh: bool = False):
     """Get complete 1,190 nodes and 1,511 relationships graph dataset"""
     try:
-        return load_full_graph()
+        return load_full_graph(reload=refresh)
     except Exception as e:
         logger.error(f"Error loading full graph: {e}")
         raise HTTPException(status_code=500, detail=str(e))

@@ -3,6 +3,7 @@ import Header from '../../components/Header';
 import Sidebar from '../../components/Sidebar';
 import ChatButton from '../../components/ChatButton';
 import Neo4jGraphCanvas from '../../components/Neo4jGraphCanvas';
+import GoogleNetworkMap from '../../components/GoogleNetworkMap';
 import {
   normalizeGraphData,
   getNodeType,
@@ -47,6 +48,10 @@ import {
   ShieldX,
   Network,
   Activity,
+  MapPin,
+  Mountain,
+  Globe,
+  ExternalLink,
   User
 } from 'lucide-react';
 import { ontologyService } from '../../services/ontologyService.js';
@@ -156,6 +161,15 @@ LIMIT 1000;`,
     description: 'All network devices, ports, trunk links, and PON trees'
   },
   {
+    id: 'geo_sites',
+    title: 'Physical Sites (Geo & Altitude)',
+    query: `MATCH (s:Site)
+OPTIONAL MATCH (s)-[c:CONTAINS]->(d:Device)
+RETURN s, c, d
+ORDER BY s.alt_m DESC;`,
+    description: 'Central Office, Aggregation & Remote Hubs with GPS Coordinates, Altitude & Linked Hardware'
+  },
+  {
     id: 'all_ports',
     title: 'All port',
     query: `MATCH (d:Device)-[hp:HAS_PORT]->(p:Port)
@@ -219,12 +233,12 @@ export default function NetworkOntology() {
   const [hiddenRelTypes, setHiddenRelTypes] = useState(new Set());
 
   // Load Real Graph Data from Backend
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (forceRefresh = false) => {
     try {
       setLoading(true);
       setError('');
       const start = performance.now();
-      const res = await ontologyService.getFullGraph();
+      const res = await ontologyService.getFullGraph(forceRefresh);
       const end = performance.now();
       setQueryExecutionTime(((end - start) / 1000).toFixed(2));
       setRawData(res);
@@ -272,7 +286,11 @@ export default function NetworkOntology() {
       filteredRels = relationships.filter(r => nSet.has(r.source) || nSet.has(r.target));
     }
     // 2. Tab Presets
-    else if (activeTabId === 'all_ports') {
+    else if (activeTabId === 'geo_sites') {
+      filteredNodes = nodes.filter(n => ['Site', 'Device', 'Router'].includes(n.type));
+      const nSet = new Set(filteredNodes.map(n => n.id));
+      filteredRels = relationships.filter(r => (r.type === 'CONTAINS' || r.type === 'TERMINATES') && nSet.has(r.source) && nSet.has(r.target));
+    } else if (activeTabId === 'all_ports') {
       filteredNodes = nodes.filter(n => ['Port', 'Device'].includes(n.type));
       const nSet = new Set(filteredNodes.map(n => n.id));
       filteredRels = relationships.filter(r => r.type === 'HAS_PORT' && nSet.has(r.source) && nSet.has(r.target));
@@ -409,7 +427,7 @@ export default function NetworkOntology() {
     <div className="flex h-screen bg-gray-50 font-sans">
       <Sidebar />
       <div className="flex-1 flex flex-col overflow-hidden">
-        <Header />
+        <Header onRefresh={() => loadData(true)} isRefreshing={loading} />
 
         <main className="flex-1 flex flex-col overflow-hidden p-6 space-y-4">
           {/* Top Page Header & Welcome Banner (Matches App Design System) */}
@@ -425,6 +443,16 @@ export default function NetworkOntology() {
             </div>
 
             <div className="flex items-center space-x-3">
+              <button
+                onClick={() => loadData(true)}
+                disabled={loading}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 rounded-lg text-xs font-semibold shadow-xs transition cursor-pointer"
+                title="Force Reload Ontology Dataset"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 text-[#00ABE4] ${loading ? 'animate-spin' : ''}`} />
+                <span>Reload Ontology</span>
+              </button>
+
               <div className="flex items-center space-x-2 bg-[#E9F1FA] px-3.5 py-1.5 rounded-lg border border-[#00ABE4]/20">
                 <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
                 <span className="text-xs font-semibold text-gray-800">
@@ -502,25 +530,39 @@ export default function NetworkOntology() {
               )}
             </div>
 
-            {/* Smart Search Bar */}
-            <div className="relative shrink-0">
-              <Search className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
-              <input
-                type="text"
-                placeholder="Search device, IP, or type 'defect' / 'spof'..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-800 focus:outline-none focus:border-[#00ABE4] focus:ring-1 focus:ring-[#00ABE4] w-64 focus:w-80 transition-all placeholder:text-gray-400"
-              />
+            {/* Top Page Action Buttons & Smart Search Bar */}
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={() => setViewMode(viewMode === 'map' ? 'graph' : 'map')}
+                className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 shadow-xs cursor-pointer border ${
+                  viewMode === 'map'
+                    ? 'bg-blue-600 text-white border-blue-600 ring-2 ring-blue-400/40 shadow-md'
+                    : 'bg-gradient-to-r from-blue-50 to-indigo-50 hover:from-blue-100 hover:to-indigo-100 text-blue-800 border-blue-300'
+                }`}
+              >
+                <Globe className={`w-4 h-4 ${viewMode === 'map' ? 'text-white' : 'text-blue-600'}`} />
+                <span>{viewMode === 'map' ? 'Switch to Graph View' : 'View on Google Map'}</span>
+              </button>
+
+              <div className="relative shrink-0">
+                <Search className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
+                <input
+                  type="text"
+                  placeholder="Search device, IP, or type 'defect' / 'spof'..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-9 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-800 focus:outline-none focus:border-[#00ABE4] focus:ring-1 focus:ring-[#00ABE4] w-56 focus:w-72 transition-all placeholder:text-gray-400"
+                />
+              </div>
             </div>
           </div>
 
           {/* Main Visualizer Card Frame */}
           <div className="flex-1 bg-white rounded-2xl shadow-sm border border-gray-200 flex flex-col overflow-hidden">
             {/* Top Toolbar Strip: Tabs + View Switcher */}
-            <div className="px-4 py-2 border-b border-gray-200 flex items-center justify-between bg-gray-50/70 text-xs shrink-0 select-none">
-              {/* Query Tabs */}
-              <div className="flex items-center gap-1.5 overflow-x-auto">
+            <div className="px-4 py-2.5 border-b border-gray-200 flex items-center justify-between gap-4 bg-gray-50/90 text-xs shrink-0 select-none">
+              {/* Query Tabs with horizontal scroll */}
+              <div className="flex items-center gap-1.5 overflow-x-auto min-w-0 flex-1 py-0.5">
                 {AURA_TABS.map(tab => (
                   <button
                     key={tab.id}
@@ -530,7 +572,7 @@ export default function NetworkOntology() {
                       setCypherQuery(tab.query);
                       setPhysicsEnabled(true);
                     }}
-                    className={`px-3 py-1.5 rounded-lg font-semibold text-xs flex items-center gap-2 transition cursor-pointer border ${
+                    className={`px-3 py-1.5 rounded-lg font-semibold text-xs flex items-center gap-2 transition cursor-pointer border shrink-0 ${
                       activeTabId === tab.id && !activeDefectFilter
                         ? 'bg-[#00ABE4] text-white border-[#00ABE4] shadow-sm'
                         : 'bg-white text-gray-600 hover:bg-[#E9F1FA] hover:text-[#00ABE4] border-gray-200'
@@ -542,29 +584,38 @@ export default function NetworkOntology() {
                 ))}
               </div>
 
-              {/* View Switchers (Graph | Table | Raw) */}
-              <div className="flex items-center gap-2">
-                <div className="flex items-center bg-gray-200/80 p-0.5 rounded-lg border border-gray-300/80 text-xs">
+              {/* View Switchers (Graph | Google Map | Table | Raw) - Fixed shrink-0 so it is NEVER hidden */}
+              <div className="flex items-center gap-2 shrink-0">
+                <div className="flex items-center bg-gray-200/90 p-1 rounded-xl border border-gray-300 shadow-xs text-xs font-bold">
                   <button
                     onClick={() => setViewMode('graph')}
-                    className={`px-3 py-1 rounded-md text-xs font-semibold transition ${
-                      viewMode === 'graph' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-600 hover:text-gray-900'
+                    className={`px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                      viewMode === 'graph' ? 'bg-white text-gray-900 shadow-xs' : 'text-gray-600 hover:text-gray-900'
                     }`}
                   >
                     Graph
                   </button>
                   <button
+                    onClick={() => setViewMode('map')}
+                    className={`px-3 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                      viewMode === 'map' ? 'bg-blue-600 text-white shadow-xs' : 'text-blue-700 hover:bg-blue-50'
+                    }`}
+                  >
+                    <Globe className="w-3.5 h-3.5" />
+                    <span>Google Map</span>
+                  </button>
+                  <button
                     onClick={() => setViewMode('table')}
-                    className={`px-3 py-1 rounded-md text-xs font-semibold transition ${
-                      viewMode === 'table' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-600 hover:text-gray-900'
+                    className={`px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                      viewMode === 'table' ? 'bg-white text-gray-900 shadow-xs' : 'text-gray-600 hover:text-gray-900'
                     }`}
                   >
                     Table
                   </button>
                   <button
                     onClick={() => setViewMode('raw')}
-                    className={`px-3 py-1 rounded-md text-xs font-semibold transition ${
-                      viewMode === 'raw' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-600 hover:text-gray-900'
+                    className={`px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                      viewMode === 'raw' ? 'bg-white text-gray-900 shadow-xs' : 'text-gray-600 hover:text-gray-900'
                     }`}
                   >
                     Raw
@@ -638,6 +689,39 @@ export default function NetworkOntology() {
                     <span className="text-slate-600">|</span>
                     <span className="text-emerald-400">{displayedGraph.stats.totalNodes} nodes ({queryExecutionTime}s)</span>
                   </div>
+
+                  {/* Quick Action to open Google Map when on Geo Sites tab */}
+                  {activeTabId === 'geo_sites' && (
+                    <div className="absolute top-14 left-4 bg-slate-900/90 border border-blue-500/60 text-white px-3 py-1.5 rounded-xl text-xs shadow-2xl backdrop-blur-md flex items-center gap-2.5 z-10 animate-fadeIn pointer-events-auto">
+                      <span className="flex items-center gap-1.5 font-bold text-blue-300">
+                        <MapPin className="w-3.5 h-3.5 text-blue-400" />
+                        10 Central Texas Physical Sites
+                      </span>
+                      <button
+                        onClick={() => setViewMode('map')}
+                        className="px-2.5 py-1 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-[11px] font-extrabold shadow-sm transition flex items-center gap-1 cursor-pointer"
+                      >
+                        <Globe className="w-3 h-3" />
+                        <span>Launch Google Map &rarr;</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Google Maps Geographic Topology View */}
+              {viewMode === 'map' && (
+                <div className="flex-1 relative overflow-hidden flex flex-col bg-slate-950">
+                  <GoogleNetworkMap
+                    selectedSiteId={selectedNode?.type === 'Site' ? selectedNode.id : null}
+                    onSelectSite={(site) => {
+                      const matchingNode = displayedGraph.nodes.find(n => n.id === site.id);
+                      if (matchingNode) {
+                        setSelectedNode(matchingNode);
+                        setIsInspectorOpen(true);
+                      }
+                    }}
+                  />
                 </div>
               )}
 
@@ -848,6 +932,74 @@ export default function NetworkOntology() {
                             ))}
                           </div>
                         </div>
+
+                        {/* Dedicated Central Texas Geospatial & Elevation Card if site or device with geo is selected */}
+                        {(() => {
+                          const p = selectedNode.props || {};
+                          const siteInfo = p.site_details || (selectedNode.type === 'Site' ? p : null);
+                          const lat = p.lat || p.latitude || siteInfo?.lat || siteInfo?.latitude;
+                          const lon = p.lon || p.longitude || siteInfo?.lon || siteInfo?.longitude;
+                          const altM = p.alt_m || p.altitude_meters || siteInfo?.alt_m || siteInfo?.altitude_meters;
+                          const altFt = p.alt_ft || p.altitude_feet || siteInfo?.alt_ft || siteInfo?.altitude_feet;
+                          const town = p.town || siteInfo?.town || (selectedNode.type === 'Site' ? selectedNode.label : (p.site ? p.site.replace('site:', '').toUpperCase() : null));
+                          const county = p.county || siteInfo?.county || 'Texas';
+                          const state = p.state || siteInfo?.state || 'Texas';
+
+                          if (!lat && !lon && selectedNode.type !== 'Site') return null;
+
+                          return (
+                            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-3.5 space-y-2.5 text-blue-950 shadow-xs animate-fadeIn">
+                              <div className="flex items-center justify-between">
+                                <span className="text-[10px] font-bold uppercase tracking-wider text-blue-700 flex items-center gap-1.5">
+                                  <MapPin className="w-3.5 h-3.5 text-blue-600" />
+                                  Central Texas Location
+                                </span>
+                                <span className="text-[9.5px] font-bold bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full border border-blue-200">
+                                  {p.type || selectedNode.type}
+                                </span>
+                              </div>
+
+                              <div>
+                                <div className="text-sm font-extrabold text-blue-900">{town || 'Central Texas Hub'}</div>
+                                <div className="text-[11px] text-blue-700/80">{county}, {state}</div>
+                              </div>
+
+                              <div className="grid grid-cols-2 gap-2 pt-1 border-t border-blue-200/60">
+                                <div className="bg-white/90 p-2 rounded-lg border border-blue-100 shadow-xs">
+                                  <div className="text-[9.5px] font-semibold text-gray-500 flex items-center gap-1">
+                                    <Globe className="w-3 h-3 text-blue-500" />
+                                    Coordinates
+                                  </div>
+                                  <div className="font-mono text-[11px] font-bold text-gray-800 mt-0.5">
+                                    {lat ? `${lat}° N, ${lon}° W` : '31.4504° N, -98.5714° W'}
+                                  </div>
+                                </div>
+
+                                <div className="bg-white/90 p-2 rounded-lg border border-blue-100 shadow-xs">
+                                  <div className="text-[9.5px] font-semibold text-gray-500 flex items-center gap-1">
+                                    <Mountain className="w-3 h-3 text-indigo-500" />
+                                    Elevation
+                                  </div>
+                                  <div className="font-mono text-[11px] font-bold text-indigo-900 mt-0.5">
+                                    {altM ? `${altM}m (${altFt}ft)` : '463m (1519ft)'}
+                                  </div>
+                                </div>
+                              </div>
+
+                              {lat && lon && (
+                                <a
+                                  href={`https://www.google.com/maps/search/?api=1&query=${lat},${lon}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center justify-center gap-1.5 w-full bg-blue-600 hover:bg-blue-700 text-white py-1.5 rounded-lg text-[11px] font-bold transition shadow-xs cursor-pointer"
+                                >
+                                  <ExternalLink className="w-3 h-3" />
+                                  <span>Open Site on Google Maps &rarr;</span>
+                                </a>
+                              )}
+                            </div>
+                          );
+                        })()}
 
                         {/* Dynamic Properties Table */}
                         <div className="bg-gray-50 rounded-xl border border-gray-200 p-3 space-y-2">
