@@ -112,7 +112,7 @@ const Login = () => {
                   <ShieldCheck className="w-5 h-5" />
                 </div>
                 <span className={`font-medium text-sm ${role === 'admin' ? 'text-[#00ABE4] font-semibold' : 'text-gray-600'
-                  }`}>Admin 👑</span>
+                  }`}>Admin </span>
               </button>
             </div>
           </div>

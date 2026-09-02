@@ -23,7 +23,7 @@ const Sidebar = () => {
     { icon: CheckSquare, label: 'Executive Dashboard', path: '/admin/tickets-report' },
     { icon: Wrench, label: 'Technicians & Shifts', path: '/admin/technicians' },
     { icon: Users, label: 'User Management', path: '/admin/users' },
-    { icon: Timer, label: 'Wider MTTR Analytics', path: '/admin/wider-mttr' },
+    { icon: Timer, label: 'Reports', path: '/admin/wider-mttr' },
     { icon: Network, label: 'Network Ontology', path: '/technician/ontology' }
   ];
 
