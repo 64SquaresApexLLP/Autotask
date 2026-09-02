@@ -259,14 +259,14 @@ const TrackStatus = () => {
 
                       {(ticket.issue_type || ticket.sub_issue_type || ticket.resolution) && (
                         <div className="mt-2 pt-3 border-t border-gray-100">
-                          <button
+                          {/* <button
                             onClick={() => setExpandedTicketId(expandedTicketId === ticket.id ? null : ticket.id)}
                             className="flex items-center gap-1 text-sm text-[#00ABE4] hover:text-blue-600 font-medium"
                           >
                             <Sparkles className="w-4 h-4" />
                             AI Analysis & Resolution
                             {expandedTicketId === ticket.id ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                          </button>
+                          </button> */}
 
                           {expandedTicketId === ticket.id && (
                             <div className="mt-3 space-y-3">

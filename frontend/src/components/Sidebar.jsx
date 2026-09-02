@@ -9,23 +9,18 @@ const Sidebar = () => {
   const userMenuItems = [
     { icon: FileText, label: 'Submit Request', path: '/user' },
     { icon: BarChart3, label: 'Track Status', path: '/user/track-status' },
-    { icon: Timer, label: 'Resolution Report', path: '/user/mttr-report' },
     { icon: Settings, label: 'My Profile', path: '/user/profile' }
   ];
 
   const technicianMenuItems = [
     { icon: Wrench, label: 'Dashboard', path: '/technician/dashboard' },
     { icon: List, label: 'My Tickets', path: '/technician/my-tickets' },
-    { icon: AlertCircle, label: 'Urgent Tickets', path: '/technician/urgent-tickets' },
     { icon: Network, label: 'Network Ontology', path: '/technician/ontology' },
     { icon: Timer, label: 'MTTR & SLA Report', path: '/technician/mttr-report' },
-    { icon: BarChart3, label: 'Workload Analytics', path: '/technician/analytics' },
-    { icon: CheckSquare, label: 'All Tickets', path: '/technician/all-tickets' }
   ];
 
   const adminMenuItems = [
-    { icon: ShieldCheck, label: 'Executive Dashboard', path: '/admin/dashboard' },
-    { icon: CheckSquare, label: 'Master Tickets Report', path: '/admin/tickets-report' },
+    { icon: CheckSquare, label: 'Executive Dashboard', path: '/admin/tickets-report' },
     { icon: Wrench, label: 'Technicians & Shifts', path: '/admin/technicians' },
     { icon: Users, label: 'User Management', path: '/admin/users' },
     { icon: Timer, label: 'Wider MTTR Analytics', path: '/admin/wider-mttr' },

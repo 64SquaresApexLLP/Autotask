@@ -326,7 +326,7 @@ const AllTickets = () => {
             </div>
 
             {/* Table */}
-            <div className="overflow-auto bg-white rounded-lg shadow">
+            <div className="w-full bg-white rounded-lg shadow">
               {loading && tickets.length === 0 ? (
                 <div className="p-8 text-center">
                   <Loader2 className="w-8 h-8 animate-spin text-[#00ABE4] mx-auto mb-4" />
@@ -354,7 +354,7 @@ const AllTickets = () => {
                   )}
                 </div>
               ) : (
-                <table className="min-w-full text-sm text-left">
+                <table className="w-full table-fixed text-sm text-left">
                   <thead className="bg-gray-100 border-b">
                     <tr>
                       <th className="p-3">#</th>

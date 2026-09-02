@@ -10,6 +10,13 @@ from fastapi import APIRouter, HTTPException, status, Query, Depends, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
 
+# Env-driven Snowflake database/schema (no hardcoded DB name in queries)
+try:
+    from config import SF_DATABASE, SF_SCHEMA
+except ImportError:  # project root not on sys.path
+    SF_DATABASE = os.getenv('SF_DATABASE') or os.getenv('SNOWFLAKE_DATABASE') or 'TEST_DB'
+    SF_SCHEMA = os.getenv('SF_SCHEMA') or os.getenv('SNOWFLAKE_SCHEMA') or 'PUBLIC'
+
 # Same secret/algorithm the main app uses to sign tokens (backend/main.py) so that
 # a real logged-in technician can be identified here instead of always defaulting.
 JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-secret-key-change-in-production")
@@ -156,7 +163,7 @@ def _fetch_my_tickets(current_user: str, limit: int = 5) -> List[Dict[str, Any]]
     try:
         query = f"""
             SELECT TICKETNUMBER, TITLE, DESCRIPTION, STATUS, PRIORITY
-            FROM TEST_DB.PUBLIC.TICKETS
+            FROM {SF_DATABASE}.{SF_SCHEMA}.TICKETS
             WHERE TECHNICIAN_ID = %s
             ORDER BY TICKETNUMBER DESC
             LIMIT {int(limit)}
@@ -255,7 +262,7 @@ def _semantic_search(
 
 def _fetch_similar_tickets(search_text: str, limit: int = 3) -> List[Dict[str, Any]]:
     """Fetch tickets similar to `search_text` (vector similarity + keyword fallback)."""
-    return _semantic_search("TEST_DB.PUBLIC.TICKETS", search_text, limit=limit)
+    return _semantic_search(f"{SF_DATABASE}.{SF_SCHEMA}.TICKETS", search_text, limit=limit)
 
 
 def _gather_ticket_context(user_message: str, current_user: str) -> Dict[str, Any]:
@@ -305,7 +312,7 @@ async def get_my_tickets(request: Request):
         # Query real tickets from database assigned to current user
         query = f"""
             SELECT TICKETNUMBER, TITLE, DESCRIPTION, STATUS, PRIORITY, TECHNICIAN_ID
-            FROM TEST_DB.PUBLIC.TICKETS
+            FROM {SF_DATABASE}.{SF_SCHEMA}.TICKETS
             WHERE TECHNICIAN_ID = %s
             ORDER BY TICKETNUMBER DESC
             LIMIT 20
@@ -344,9 +351,9 @@ async def search_tickets(
 
         # Search real tickets from database
         search_term = f"%{q}%"
-        query = """
+        query = f"""
             SELECT TICKETNUMBER, TITLE, DESCRIPTION, STATUS, PRIORITY, TECHNICIANEMAIL
-            FROM TEST_DB.PUBLIC.TICKETS
+            FROM {SF_DATABASE}.{SF_SCHEMA}.TICKETS
             WHERE UPPER(TITLE) LIKE UPPER(%s)
                OR UPPER(DESCRIPTION) LIKE UPPER(%s)
             ORDER BY TICKETNUMBER DESC
@@ -382,9 +389,9 @@ async def get_ticket(ticket_id: str, request: Request = None):
             raise HTTPException(status_code=503, detail="Database connection not available. Please ensure Snowflake connection is properly configured.")
 
         # Query specific ticket from database
-        query = """
+        query = f"""
             SELECT TICKETNUMBER, TITLE, DESCRIPTION, STATUS, PRIORITY, TECHNICIANEMAIL
-            FROM TEST_DB.PUBLIC.TICKETS
+            FROM {SF_DATABASE}.{SF_SCHEMA}.TICKETS
             WHERE TICKETNUMBER = %s
         """
         results = snowflake_conn.execute_query(query, (ticket_id,))
@@ -419,9 +426,9 @@ async def find_similar_tickets(ticket_number: str, request: Request = None):
             raise HTTPException(status_code=503, detail="Database connection not available. Please ensure Snowflake connection is properly configured.")
 
         # First, get the original ticket to find similar ones
-        original_query = """
+        original_query = f"""
             SELECT TITLE, DESCRIPTION, STATUS, PRIORITY, ISSUETYPE, SUBISSUETYPE
-            FROM TEST_DB.PUBLIC.TICKETS
+            FROM {SF_DATABASE}.{SF_SCHEMA}.TICKETS
             WHERE TICKETNUMBER = %s
         """
         original_results = snowflake_conn.execute_query(original_query, (ticket_number,))
@@ -442,7 +449,7 @@ async def find_similar_tickets(ticket_number: str, request: Request = None):
 
         # Semantic similarity search in TICKETS table (Cortex embeddings + keyword fallback)
         tickets_results = _semantic_search(
-            "TEST_DB.PUBLIC.TICKETS",
+            f"{SF_DATABASE}.{SF_SCHEMA}.TICKETS",
             search_text,
             exclude_ticket=ticket_number,
             limit=5,
@@ -454,7 +461,7 @@ async def find_similar_tickets(ticket_number: str, request: Request = None):
 
         # Semantic similarity search in COMPANY_4130_DATA table
         company_results = _semantic_search(
-            "TEST_DB.PUBLIC.COMPANY_4130_DATA",
+            f"{SF_DATABASE}.{SF_SCHEMA}.COMPANY_4130_DATA",
             search_text,
             limit=5,
             select_columns=(

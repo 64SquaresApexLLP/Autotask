@@ -9,7 +9,7 @@ import TrackStatus from './pages/TrackStatus';
 import UserProfile from './pages/UserProfile';
 import MttrReport from './pages/MttrReport';
 import MyTickets from './pages/techPages/MyTickets';
-import UrgentTickets from './pages/techPages/UrgentTickets';
+// import UrgentTickets from './pages/techPages/UrgentTickets'; // Removed: urgent tickets are shown on My Tickets page
 import Analytics from './pages/techPages/Analytics';
 import AllTickets from './pages/techPages/AllTickets';
 import ViewTicket from './pages/techPages/ViewTicket';
@@ -109,14 +109,15 @@ function App() {
               </ProtectedRoute>
             }
           />
-          <Route
+          {/* Urgent Tickets page removed — urgent (High/Critical) tickets are viewable via My Tickets priority filters */}
+          {/* <Route
             path="/technician/urgent-tickets"
             element={
               <ProtectedRoute>
                 <UrgentTickets />
               </ProtectedRoute>
             }
-          />
+          /> */}
           <Route
             path="/technician/mttr-report"
             element={

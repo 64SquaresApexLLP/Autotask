@@ -85,7 +85,7 @@ const Header = ({ onRefresh, isRefreshing = false }) => {
               status,
               time: ticket.created_at || 'Just now',
               read: false,
-              link: userRole === 'technician' ? `/technician/my-tickets/view/${ticketId}` : '/technician/urgent-tickets'
+              link: userRole === 'technician' ? `/technician/my-tickets/view/${ticketId}` : '/technician/all-tickets'
             });
           } else if (isAssignedToMe) {
             notifList.push({
@@ -373,7 +373,7 @@ const Header = ({ onRefresh, isRefreshing = false }) => {
                   <button
                     onClick={() => {
                       setShowNotifications(false);
-                      navigate(user?.role === 'technician' ? '/technician/urgent-tickets' : '/technician/all-tickets');
+                      navigate(user?.role === 'technician' ? '/technician/my-tickets' : '/technician/all-tickets');
                     }}
                     className="text-[#00ABE4] hover:text-blue-700 font-bold transition-colors"
                   >

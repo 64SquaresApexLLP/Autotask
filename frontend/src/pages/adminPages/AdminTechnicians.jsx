@@ -254,14 +254,14 @@ const AdminTechnicians = () => {
                 <div className="w-12 h-12 rounded-xl bg-gradient-to-tr from-amber-500 to-amber-600 text-white flex items-center justify-center shadow-md flex-shrink-0">
                   <Wrench className="w-6 h-6" />
                 </div>
-                <div>
+                {/* <div>
                   <h1 className="text-xl lg:text-2xl font-bold text-gray-800 tracking-tight">
                     Technician Shifts & Skillsets
                   </h1>
                   <p className="text-gray-600 text-sm mt-0.5">
                     Schedule working shifts, on-call rotations, skill credentials, and maximum workload capacities.
                   </p>
-                </div>
+                </div> */}
               </div>
 
               <div className="flex items-center space-x-3">

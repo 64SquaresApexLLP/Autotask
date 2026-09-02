@@ -85,11 +85,21 @@ const TechnicianDashboard = () => {
   const getStatistics = () => {
     const { myTickets, allTickets } = dashboardData;
 
+    // Mutually exclusive buckets so that: myActive + myUrgent + myCompleted = myTotal
+    const DONE_STATUSES = ['completed', 'resolved', 'closed'];
+    const isCompleted = (t) => DONE_STATUSES.includes((t.status || '').toLowerCase());
+    const isUrgentPriority = (t) => ['high', 'critical'].includes((t.priority || '').toLowerCase());
+
     return {
       myTotal: myTickets.length,
-      myOpen: myTickets.filter(t => !['completed', 'resolved'].includes(t.status?.toLowerCase())).length,
-      myCompleted: myTickets.filter(t => ['completed', 'resolved'].includes(t.status?.toLowerCase())).length,
-      myUrgent: myTickets.filter(t => ['high', 'critical'].includes(t.priority?.toLowerCase())).length,
+      // All open tickets (myActive + myUrgent) — used for the banner & workload gauge
+      myOpen: myTickets.filter((t) => !isCompleted(t)).length,
+      // Open AND NOT high/critical priority (does not double-count with Urgent)
+      myActive: myTickets.filter((t) => !isCompleted(t) && !isUrgentPriority(t)).length,
+      // Open AND high/critical priority
+      myUrgent: myTickets.filter((t) => !isCompleted(t) && isUrgentPriority(t)).length,
+      // Completed = resolved / completed / closed
+      myCompleted: myTickets.filter(isCompleted).length,
       totalUnassigned: allTickets.filter(t => !t.assigned_technician).length,
       totalCritical: allTickets.filter(t => t.priority?.toLowerCase() === 'critical').length
     };
@@ -197,7 +207,24 @@ const TechnicianDashboard = () => {
             </div>
 
             {/* Stats Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 lg:gap-6">
+              {/* Total Assigned Tickets */}
+              <div
+                onClick={() => navigate('/technician/my-tickets')}
+                className="bg-white rounded-xl shadow-sm border border-gray-200 hover:border-indigo-300 hover:shadow-md p-4 lg:p-6 transition-all cursor-pointer group"
+                title="Click to view all your assigned tickets"
+              >
+                <div className="flex items-center justify-between mb-3">
+                  <div className="text-2xl">📊</div>
+                  <ArrowRight className="w-4 h-4 text-indigo-400 opacity-0 group-hover:opacity-100 transition-all -translate-x-1 group-hover:translate-x-0" />
+                </div>
+                <h3 className="text-lg font-semibold text-gray-800 mb-1 group-hover:text-indigo-600 transition-colors">Total Tickets</h3>
+                <div className="text-3xl font-bold text-gray-900 mb-2">
+                  {loading ? <Loader2 className="w-8 h-8 animate-spin" /> : stats.myTotal}
+                </div>
+                <p className="text-sm text-gray-600">All tickets assigned to you &rarr;</p>
+              </div>
+
               {/* My Active Tickets */}
               <div
                 onClick={() => navigate('/technician/my-tickets')}
@@ -210,14 +237,14 @@ const TechnicianDashboard = () => {
                 </div>
                 <h3 className="text-lg font-semibold text-gray-800 mb-1 group-hover:text-blue-600 transition-colors">My Active Tickets</h3>
                 <div className="text-3xl font-bold text-gray-900 mb-2">
-                  {loading ? <Loader2 className="w-8 h-8 animate-spin" /> : stats.myOpen}
+                  {loading ? <Loader2 className="w-8 h-8 animate-spin" /> : stats.myActive}
                 </div>
-                <p className="text-sm text-gray-600">Total assigned: {stats.myTotal} &rarr;</p>
+                <p className="text-sm text-gray-600">Open, normal priority &rarr;</p>
               </div>
 
               {/* Urgent Tickets */}
               <div
-                onClick={() => navigate('/technician/urgent-tickets')}
+                onClick={() => navigate('/technician/my-tickets')}
                 className="bg-white rounded-xl shadow-sm border border-gray-200 hover:border-red-300 hover:shadow-md p-4 lg:p-6 transition-all cursor-pointer group"
                 title="Click to view critical & high priority tickets"
               >
@@ -251,148 +278,17 @@ const TechnicianDashboard = () => {
                   <div className="text-2xl">✅</div>
                   <ArrowRight className="w-4 h-4 text-green-400 opacity-0 group-hover:opacity-100 transition-all -translate-x-1 group-hover:translate-x-0" />
                 </div>
-                <h3 className="text-lg font-semibold text-gray-800 mb-1 group-hover:text-green-600 transition-colors">Completed Today</h3>
+                <h3 className="text-lg font-semibold text-gray-800 mb-1 group-hover:text-green-600 transition-colors">Completed</h3>
                 <div className="text-3xl font-bold text-green-600 mb-2">
                   {loading ? <Loader2 className="w-8 h-8 animate-spin" /> : stats.myCompleted}
                 </div>
                 <p className="text-sm text-green-600">View resolution queue &rarr;</p>
               </div>
 
-              {/* Unassigned Tickets */}
-              <div
-                onClick={() => navigate('/technician/all-tickets')}
-                className="bg-white rounded-xl shadow-sm border border-gray-200 hover:border-orange-300 hover:shadow-md p-4 lg:p-6 transition-all cursor-pointer group"
-                title="Click to claim unassigned tickets"
-              >
-                <div className="flex items-center justify-between mb-3">
-                  <div className="text-2xl">📅</div>
-                  <ArrowRight className="w-4 h-4 text-orange-400 opacity-0 group-hover:opacity-100 transition-all -translate-x-1 group-hover:translate-x-0" />
-                </div>
-                <h3 className="text-lg font-semibold text-gray-800 mb-1 group-hover:text-orange-600 transition-colors">Unassigned Tickets</h3>
-                <div className="text-3xl font-bold text-orange-600 mb-2">
-                  {loading ? <Loader2 className="w-8 h-8 animate-spin" /> : stats.totalUnassigned}
-                </div>
-                <p className="text-sm text-gray-600">Available for assignment &rarr;</p>
-              </div>
+              
             </div>
 
-            {/* Performance Section */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Performance Metrics */}
-              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 lg:p-6">
-                <div className="flex items-center justify-between mb-6">
-                  <div className="flex items-center space-x-2">
-                    <TrendingUp className="w-5 h-5 text-yellow-500" />
-                    <h2 className="text-xl font-semibold text-gray-800">Performance Metrics</h2>
-                  </div>
-                  <button
-                    onClick={() => navigate('/technician/analytics')}
-                    className="text-xs font-semibold text-blue-600 hover:underline flex items-center gap-1"
-                  >
-                    Deep Analytics &rarr;
-                  </button>
-                </div>
-                <p className="text-gray-600 mb-6">Your current performance indicators</p>
 
-                <div className="space-y-6">
-                  <div
-                    onClick={() => navigate('/technician/all-tickets')}
-                    className="p-2.5 rounded-lg hover:bg-slate-50 transition cursor-pointer group"
-                    title="Click to view resolved tickets"
-                  >
-                    <div className="flex justify-between items-center mb-2">
-                      <span className="text-gray-700 font-medium group-hover:text-blue-600">Ticket Completion Rate</span>
-                      <span className="text-gray-900 font-semibold">
-                        {stats.myTotal > 0 ? Math.round((stats.myCompleted / stats.myTotal) * 100) : 0}%
-                      </span>
-                    </div>
-                    <ProgressBar
-                      percentage={stats.myTotal > 0 ? (stats.myCompleted / stats.myTotal) * 100 : 0}
-                      color="bg-blue-500"
-                    />
-                  </div>
-
-                  <div
-                    onClick={() => navigate('/technician/my-tickets')}
-                    className="p-2.5 rounded-lg hover:bg-slate-50 transition cursor-pointer group"
-                    title="Click to view assigned workload"
-                  >
-                    <div className="flex justify-between items-center mb-2">
-                      <span className="text-gray-700 font-medium group-hover:text-indigo-600">Active Workload</span>
-                      <span className="text-gray-900 font-semibold">{stats.myOpen} tickets</span>
-                    </div>
-                    <ProgressBar
-                      percentage={Math.min((stats.myOpen / 10) * 100, 100)}
-                      color={stats.myOpen > 7 ? "bg-red-500" : stats.myOpen > 4 ? "bg-yellow-500" : "bg-green-500"}
-                    />
-                  </div>
-
-                  <div
-                    onClick={() => navigate('/technician/urgent-tickets')}
-                    className="p-2.5 rounded-lg hover:bg-slate-50 transition cursor-pointer group"
-                    title="Click to view urgent priority tickets"
-                  >
-                    <div className="flex justify-between items-center mb-2">
-                      <span className="text-gray-700 font-medium group-hover:text-red-600">Priority Distribution</span>
-                      <span className="text-gray-900 font-semibold">{stats.myUrgent} urgent</span>
-                    </div>
-                    <ProgressBar
-                      percentage={stats.myTotal > 0 ? (stats.myUrgent / stats.myTotal) * 100 : 0}
-                      color={stats.myUrgent > 0 ? "bg-red-500" : "bg-green-500"}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Team Status */}
-              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 lg:p-6">
-                <div className="flex items-center space-x-2 mb-6">
-                  <Users className="w-5 h-5 text-blue-500" />
-                  <h2 className="text-xl font-semibold text-gray-800">Team Status</h2>
-                </div>
-                <p className="text-gray-600 mb-6">Current workload across the team</p>
-
-                <div className="space-y-4 max-h-64 overflow-y-auto pr-2">
-                  {/* Dynamic technician data from Snowflake */}
-                  {dashboardData.technicians
-                    .filter(tech => tech.current_workload > 0) // Only show technicians with assigned tickets
-                    .map((tech, index) => {
-                      const colors = [
-                        { bg: 'bg-green-50', dot: 'bg-green-500', tag: 'bg-blue-100 text-blue-800' },
-                        { bg: 'bg-yellow-50', dot: 'bg-yellow-500', tag: 'bg-green-100 text-green-800' },
-                        { bg: 'bg-blue-50', dot: 'bg-blue-500', tag: 'bg-purple-100 text-purple-800' },
-                        { bg: 'bg-purple-50', dot: 'bg-purple-500', tag: 'bg-indigo-100 text-indigo-800' },
-                        { bg: 'bg-pink-50', dot: 'bg-pink-500', tag: 'bg-red-100 text-red-800' },
-                        { bg: 'bg-indigo-50', dot: 'bg-indigo-500', tag: 'bg-blue-100 text-blue-800' }
-                      ];
-                      const colorScheme = colors[index % colors.length];
-
-                      return (
-                        <div key={tech.id} className={`flex items-center justify-between p-3 ${colorScheme.bg} rounded-lg`}>
-                          <div className="flex items-center space-x-3">
-                            <div className={`w-3 h-3 ${colorScheme.dot} rounded-full`}></div>
-                            <div>
-                              <div className="font-semibold text-gray-800">{tech.id}</div>
-                              <div className="flex space-x-2 text-xs">
-                                <span className={`${colorScheme.tag} px-2 py-1 rounded`}>{tech.role || 'Technician'}</span>
-                              </div>
-                            </div>
-                          </div>
-                          <span className="text-sm font-medium text-gray-600">
-                            {tech.current_workload} tickets
-                          </span>
-                        </div>
-                      );
-                    })}
-
-                  {dashboardData.technicians.filter(tech => tech.current_workload > 0).length === 0 && (
-                    <div className="text-center py-4 text-gray-500">
-                      No technicians with assigned tickets
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
 
             {/* Recent Assignments */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 lg:p-6">
@@ -495,12 +391,7 @@ const TechnicianDashboard = () => {
                               </button>
                             )}
 
-                            <button
-                              onClick={() => setSelectedTicket(ticket)}
-                              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-gray-700 bg-white hover:bg-gray-100 border border-gray-200 rounded-lg shadow-sm transition-colors"
-                            >
-                              Details
-                            </button>
+                            
                           </div>
                         </div>
                       </div>
@@ -521,221 +412,14 @@ const TechnicianDashboard = () => {
               )}
             </div>
 
-            {/* Bottom Section */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Pending Actions */}
-              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 lg:p-6">
-                <div className="flex items-center space-x-2 mb-6">
-                  <AlertTriangle className="w-5 h-5 text-orange-500" />
-                  <h2 className="text-xl font-semibold text-gray-800">Pending Actions</h2>
-                </div>
-                <p className="text-gray-600 mb-6">Tickets requiring your attention or updates</p>
 
-                <div className="space-y-4">
-                  {/* Show real tickets that need attention (In Progress or Assigned status) */}
-                  {dashboardData.myTickets
-                    .filter(ticket => ticket.status === 'In Progress' || ticket.status === 'Assigned')
-                    .slice(0, 3)
-                    .map((ticket, index) => (
-                      <div key={ticket.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-4 border border-orange-200 bg-orange-50 rounded-lg">
-                        <div>
-                          <div className="font-semibold text-gray-800 mb-1">{ticket.title}</div>
-                          <div className="text-sm text-gray-600 mb-2">{ticket.id} • {ticket.requester_name}</div>
-                          <div className="flex items-center space-x-1 text-sm text-orange-600">
-                            <AlertTriangle className="w-4 h-4" />
-                            <span>Status: {ticket.status}</span>
-                          </div>
-                        </div>
-                        <button
-                          onClick={() => setSelectedTicket(ticket)}
-                          className="mt-3 sm:mt-0 bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg font-medium text-sm"
-                        >
-                          Take Action
-                        </button>
-                      </div>
-                    ))}
-
-                  {/* Show message if no pending actions */}
-                  {dashboardData.myTickets.filter(ticket => ticket.status === 'In Progress' || ticket.status === 'Assigned').length === 0 && (
-                    <div className="text-center py-8">
-                      <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-4" />
-                      <p className="text-gray-600">No pending actions required!</p>
-                      <p className="text-sm text-gray-500">All your tickets are up to date.</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* System Status */}
-              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 lg:p-6">
-                <div className="flex items-center space-x-2 mb-6">
-                  <Bell className="w-5 h-5 text-blue-500" />
-                  <h2 className="text-xl font-semibold text-gray-800">System Status</h2>
-                </div>
-
-                <div className="space-y-4">
-                  {/* Real system status */}
-                  <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                    <div className="flex items-start space-x-3">
-                      <div className="text-xl">✅</div>
-                      <div>
-                        <div className="flex items-center space-x-2 mb-2">
-                          <span className="bg-green-100 text-green-800 px-2 py-1 rounded text-xs font-medium">Operational</span>
-                        </div>
-                        <div className="font-semibold text-gray-800 mb-2">All Systems Operational</div>
-                        <p className="text-sm text-gray-600">
-                          Ticket system, database, and AI agents are running normally.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                    <div className="flex items-start space-x-3">
-                      <div className="text-xl">📊</div>
-                      <div>
-                        <div className="flex items-center space-x-2 mb-2">
-                          <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs font-medium">Statistics</span>
-                        </div>
-                        <div className="font-semibold text-gray-800 mb-2">Total Tickets in System</div>
-                        <p className="text-sm text-gray-600">
-                          {dashboardData.allTickets.length} tickets currently in the system across all technicians.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
+          
           </div>
         </main>
       </div>
       <ChatButton />
 
-      {/* Ticket Detail Modal */}
-      {selectedTicket && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-            <div className="p-6 space-y-6">
-              <div className="flex justify-between items-start">
-                <div>
-                  <h2 className="text-2xl font-bold text-gray-800">
-                    🎫 {selectedTicket.ticketnumber || selectedTicket.id} - {selectedTicket.title}
-                  </h2>
-                  <p className="text-gray-600">{selectedTicket.ticketcategory || 'General'} • {selectedTicket.tickettype || 'Support'}</p>
-                </div>
-                <button
-                  onClick={() => setSelectedTicket(null)}
-                  className="text-gray-500 hover:text-gray-700 text-xl font-bold"
-                >
-                  ✕
-                </button>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Left Column */}
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
-                    <div className="bg-gray-50 p-4 rounded-lg">
-                      <p className="text-gray-800">{selectedTicket.description || 'No description provided'}</p>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${selectedTicket.status === 'resolved' ? 'bg-green-100 text-green-800' :
-                        selectedTicket.status === 'Assigned' ? 'bg-blue-100 text-blue-800' :
-                          selectedTicket.status === 'In Progress' ? 'bg-yellow-100 text-yellow-800' :
-                            'bg-gray-100 text-gray-800'
-                        }`}>
-                        {selectedTicket.status || 'Unknown'}
-                      </span>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Priority</label>
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${selectedTicket.priority === 'Critical' ? 'bg-red-100 text-red-800' :
-                        selectedTicket.priority === 'High' ? 'bg-orange-100 text-orange-800' :
-                          selectedTicket.priority === 'Medium' ? 'bg-yellow-100 text-yellow-800' :
-                            'bg-green-100 text-green-800'
-                        }`}>
-                        {selectedTicket.priority || 'Medium'}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Requester</label>
-                    <p className="text-gray-800">{selectedTicket.requester_name || selectedTicket.useremail || 'Unknown'}</p>
-                  </div>
-                </div>
-
-                {/* Right Column */}
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Created</label>
-                    <p className="text-gray-800">{selectedTicket.created_at ? new Date(selectedTicket.created_at).toLocaleDateString() : 'Unknown'}</p>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Due Date</label>
-                    <p className="text-gray-800">{selectedTicket.duedatetime || 'Not set'}</p>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Issue Type</label>
-                    <p className="text-gray-800">{selectedTicket.issuetype || 'General'}</p>
-                  </div>
-
-                  {selectedTicket.resolution && (
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Resolution</label>
-                      <div className="bg-green-50 p-4 rounded-lg border border-green-200">
-                        <p className="text-gray-800">{selectedTicket.resolution}</p>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex justify-between items-center pt-4 border-t">
-                <div className="flex space-x-3">
-                  {/* Show action buttons for tickets that need action */}
-                  {(selectedTicket.status === 'Assigned' || selectedTicket.status === 'In Progress') && (
-                    <>
-                      <button
-                        onClick={() => {
-                          // Navigate to My Tickets page where they can manage the ticket
-                          window.location.href = '/technician/my-tickets';
-                        }}
-                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                      >
-                        Manage Ticket
-                      </button>
-                      <button
-                        onClick={() => {
-                          // Navigate to My Tickets page
-                          window.location.href = '/technician/my-tickets';
-                        }}
-                        className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
-                      >
-                        Update Status
-                      </button>
-                    </>
-                  )}
-                </div>
-                <button
-                  onClick={() => setSelectedTicket(null)}
-                  className="px-4 py-2 text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200"
-                >
-                  Close
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      
     </div>
   );
 };

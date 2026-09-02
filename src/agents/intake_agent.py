@@ -16,6 +16,7 @@ from src.agents.notification_agent import NotificationAgent
 from src.agents.assignment_agent import AssignmentAgentIntegration
 from src.agents.resolution_agent import ResolutionAgent
 from src.services.email_listener import EmailListenerService
+from config import SF_DATABASE, SF_SCHEMA  # env-driven db/schema used to qualify SQL
 
 # Cross-platform file locking mechanism
 try:
@@ -165,9 +166,9 @@ class IntakeClassificationAgent:
             try:
                 query = f"""
                 WITH all_tickets AS (
-                    SELECT TICKETNUMBER FROM TEST_DB.PUBLIC.TICKETS WHERE TICKETNUMBER LIKE 'T{date_part}.%'
+                    SELECT TICKETNUMBER FROM {SF_DATABASE}.{SF_SCHEMA}.TICKETS WHERE TICKETNUMBER LIKE 'T{date_part}.%'
                     UNION ALL
-                    SELECT TICKETNUMBER FROM TEST_DB.PUBLIC.CLOSED_TICKETS WHERE TICKETNUMBER LIKE 'T{date_part}.%'
+                    SELECT TICKETNUMBER FROM {SF_DATABASE}.{SF_SCHEMA}.CLOSED_TICKETS WHERE TICKETNUMBER LIKE 'T{date_part}.%'
                 )
                 SELECT MAX(CAST(SUBSTRING(TICKETNUMBER, 11, 4) AS INTEGER)) as max_sequence
                 FROM all_tickets
@@ -303,12 +304,12 @@ class IntakeClassificationAgent:
 
         try:
             # Check both TICKETS and CLOSED_TICKETS tables
-            query = """
+            query = f"""
             SELECT COUNT(*) as count
             FROM (
-                SELECT TICKETNUMBER FROM TEST_DB.PUBLIC.TICKETS WHERE TICKETNUMBER = %s
+                SELECT TICKETNUMBER FROM {SF_DATABASE}.{SF_SCHEMA}.TICKETS WHERE TICKETNUMBER = %s
                 UNION ALL
-                SELECT TICKETNUMBER FROM TEST_DB.PUBLIC.CLOSED_TICKETS WHERE TICKETNUMBER = %s
+                SELECT TICKETNUMBER FROM {SF_DATABASE}.{SF_SCHEMA}.CLOSED_TICKETS WHERE TICKETNUMBER = %s
             ) combined
             """
 
@@ -404,7 +405,7 @@ class IntakeClassificationAgent:
                 ),
                 SNOWFLAKE.CORTEX.EMBED_TEXT_768('e5-base-v2', '{escaped_ticket_text}')
             ) AS SIMILARITY_SCORE
-        FROM TEST_DB.PUBLIC.TICKETS
+        FROM {SF_DATABASE}.{SF_SCHEMA}.TICKETS
         WHERE TITLE IS NOT NULL
         AND DESCRIPTION IS NOT NULL
         AND TRIM(TITLE) != ''
@@ -483,7 +484,7 @@ class IntakeClassificationAgent:
         )
         query = f"""
         SELECT TICKETNUMBER, TITLE, DESCRIPTION, ISSUETYPE, SUBISSUETYPE, PRIORITY, STATUS, RESOLUTION
-        FROM TEST_DB.PUBLIC.TICKETS
+        FROM {SF_DATABASE}.{SF_SCHEMA}.TICKETS
         WHERE TITLE IS NOT NULL AND DESCRIPTION IS NOT NULL
         AND ({conditions})
         LIMIT {min(top_n, 10)}

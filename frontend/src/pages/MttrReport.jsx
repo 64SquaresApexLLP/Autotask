@@ -1,24 +1,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Timer, 
-  Zap, 
   ShieldCheck, 
-  TrendingDown, 
-  AlertTriangle, 
   CheckCircle2, 
   Clock, 
   Search, 
-  Filter, 
   RefreshCw, 
   Loader2, 
-  ArrowUpRight,
-  TrendingUp,
   BarChart3,
-  Calendar,
-  User as UserIcon,
-  Tag,
   AlertCircle,
-  PieChart as PieChartIcon,
   Eye,
   Lock,
   FileText
@@ -31,16 +21,12 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
-  Legend
+  ResponsiveContainer
 } from 'recharts';
 import Header from '../components/Header';
 import Sidebar from '../components/Sidebar';
 import ChatButton from '../components/ChatButton';
-import MttrCard, { calculateTicketSla, SLA_TARGETS } from '../components/MttrCard';
+import MttrCard from '../components/MttrCard';
 import { ticketService } from '../services/ticketService.js';
 import useAuth from '../hooks/useAuth';
 
@@ -57,10 +43,8 @@ const MttrReport = () => {
   const [lastUpdated, setLastUpdated] = useState(null);
 
   // Filters
-  const [techScope, setTechScope] = useState('team'); // 'team' | 'personal'
   const [searchTerm, setSearchTerm] = useState('');
   const [priorityFilter, setPriorityFilter] = useState('all');
-  const [slaStatusFilter, setSlaStatusFilter] = useState('all');
 
   const loadMttrReportData = useCallback(async (isSilent = false) => {
     try {
@@ -122,15 +106,6 @@ const MttrReport = () => {
     return () => clearInterval(interval);
   }, [loadMttrReportData]);
 
-  // Compute calculated ticket items with SLA info
-  const processedTickets = tickets.map(ticket => {
-    const slaInfo = calculateTicketSla(ticket);
-    return {
-      ...ticket,
-      slaInfo
-    };
-  });
-
   const currentUserId = (user?.username || '').trim().toLowerCase();
   const currentUserEmail = (user?.email || '').trim().toLowerCase();
   const currentFullName = (user?.name || user?.full_name || '').trim().toLowerCase();
@@ -147,12 +122,11 @@ const MttrReport = () => {
     );
   };
 
-  const myAssignedCount = processedTickets.filter(isTicketAssignedToMe).length;
+  // Tickets rendered on this report — technicians see only their own assigned tickets (MTTR-only, no SLA tracking)
+  const processedTickets = isTechnician ? tickets.filter(isTicketAssignedToMe) : tickets;
 
-  // Filtered tickets based on search, scope, and filters
+  // Filtered tickets based on search and filters
   const displayedTickets = processedTickets.filter(ticket => {
-    const matchesScope = !isTechnician || techScope === 'team' || isTicketAssignedToMe(ticket);
-
     const matchesSearch = 
       (ticket.title || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (ticket.id || '').toString().toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -163,16 +137,12 @@ const MttrReport = () => {
       priorityFilter === 'all' || 
       (ticket.priority || '').toLowerCase() === priorityFilter.toLowerCase();
 
-    const matchesSlaStatus = 
-      slaStatusFilter === 'all' || 
-      ticket.slaInfo?.status === slaStatusFilter;
 
-    return matchesScope && matchesSearch && matchesPriority && matchesSlaStatus;
+    return matchesSearch && matchesPriority;
   });
 
-  // Chart 1: Priority Comparison Bar Chart Data (Actual MTTR vs SLA Target)
+  // Chart 1: MTTR by Priority Bar Chart Data
   const priorityBarData = ['Critical', 'High', 'Medium', 'Low'].map(pKey => {
-    const targetHours = SLA_TARGETS[pKey.toLowerCase()] || 24;
     const userPriorityTickets = processedTickets.filter(
       t => (t.priority || 'medium').toLowerCase() === pKey.toLowerCase()
     );
@@ -185,104 +155,9 @@ const MttrReport = () => {
     return {
       priority: pKey,
       actual: actualHours,
-      target: targetHours,
-      resolved: !isTechnician ? resolvedUserPriority.length : (mttrData?.by_priority?.[pKey]?.resolved_count || 0),
-      totalCount: userPriorityTickets.length
+      resolved: !isTechnician ? resolvedUserPriority.length : (mttrData?.by_priority?.[pKey]?.resolved_count || 0)
     };
   });
-
-  // Chart 2: SLA Status Distribution Pie Chart Data
-  const slaStatusCounts = processedTickets.reduce((acc, t) => {
-    const status = t.slaInfo?.status || 'on_track';
-    acc[status] = (acc[status] || 0) + 1;
-    return acc;
-  }, {});
-
-  const totalProcessed = processedTickets.length;
-  const resolvedCount = slaStatusCounts['resolved'] || 0;
-  const onTrackCount = slaStatusCounts['on_track'] || 0;
-  const approachingCount = slaStatusCounts['approaching'] || 0;
-  const breachedCount = slaStatusCounts['breached'] || 0;
-
-  const rawPieData = [
-    { 
-      name: 'SLA Met (Resolved)', 
-      value: resolvedCount, 
-      color: '#10B981' 
-    },
-    { 
-      name: 'On Track', 
-      value: onTrackCount, 
-      color: '#00ABE4' 
-    },
-    { 
-      name: 'Near SLA Warning', 
-      value: approachingCount, 
-      color: '#F59E0B' 
-    },
-    { 
-      name: 'SLA Breached', 
-      value: breachedCount, 
-      color: '#EF4444' 
-    }
-  ].filter(item => item.value > 0);
-
-  // Fallback default distribution if ticket set is empty or not yet loaded
-  const displayPieData = rawPieData.length > 0 ? rawPieData : [
-    { name: 'SLA Met', value: 8, color: '#10B981' },
-    { name: 'On Track', value: 4, color: '#00ABE4' },
-    { name: 'Near SLA Warning', value: 1, color: '#F59E0B' }
-  ];
-
-  // User tailored MTTR card data
-  const userMetTicketsCount = processedTickets.filter(t => t.slaInfo?.isMet || ['resolved', 'closed'].includes((t.status || '').toLowerCase())).length;
-  const userComplianceRate = totalProcessed > 0
-    ? Math.round((userMetTicketsCount / totalProcessed) * 100)
-    : (mttrData?.sla_compliance_rate || 95.8);
-
-  const userTailoredMttrData = mttrData ? {
-    ...mttrData,
-    active_sla_status: !isTechnician ? {
-      on_track: slaStatusCounts['on_track'] || 0,
-      approaching: slaStatusCounts['approaching'] || 0,
-      breached: slaStatusCounts['breached'] || 0
-    } : mttrData.active_sla_status,
-    sla_compliance_rate: !isTechnician ? userComplianceRate : (mttrData.sla_compliance_rate || 91.5)
-  } : null;
-
-  const getSlaBadge = (slaInfo) => {
-    switch (slaInfo?.status) {
-      case 'resolved':
-        return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
-            <CheckCircle2 className="w-3.5 h-3.5 text-blue-600" />
-            {slaInfo.text}
-          </span>
-        );
-      case 'breached':
-        return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-red-50 text-red-700 border border-red-200 animate-pulse">
-            <AlertTriangle className="w-3.5 h-3.5 text-red-600" />
-            {slaInfo.text}
-          </span>
-        );
-      case 'approaching':
-        return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
-            <Clock className="w-3.5 h-3.5 text-amber-600" />
-            {slaInfo.text}
-          </span>
-        );
-      case 'on_track':
-      default:
-        return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-            <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-            {slaInfo.text}
-          </span>
-        );
-    }
-  };
 
   const getPriorityBadgeClass = (priority) => {
     switch ((priority || '').toLowerCase()) {
@@ -316,16 +191,16 @@ const MttrReport = () => {
                 <div>
                   <div className="flex items-center flex-wrap gap-2">
                     <h1 className="text-xl lg:text-2xl font-bold text-gray-800 tracking-tight">
-                      {isTechnician ? 'MTTR & SLA Governance Report' : 'My Support & Resolution Report'}
+                      {isTechnician ? 'MTTR Report' : 'My Support & Resolution Report'}
                     </h1>
                     <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-[#E9F1FA] text-[#00ABE4] border border-[#00ABE4]/30">
                       <ShieldCheck className="w-3.5 h-3.5 text-[#00ABE4]" />
-                      {isTechnician ? 'Resolution Speed & SLA Governance' : 'Service Turnaround & Delivery'}
+                      {isTechnician ? 'Resolution Speed' : 'Service Turnaround & Delivery'}
                     </span>
                   </div>
                   <p className="text-gray-600 text-sm mt-0.5">
                     {isTechnician 
-                      ? 'Monitors Mean Time to Resolution (MTTR in hours), priority SLA compliance targets (<2h, <8h, <24h, <48h), and live ticket countdowns.'
+                      ? 'Monitors Mean Time to Resolution (MTTR in hours) and live ticket turnaround.'
                       : 'Comprehensive summary of your submitted tickets, resolved requests, resolution success rate, and turnaround performance.'}
                   </p>
                 </div>
@@ -428,42 +303,42 @@ const MttrReport = () => {
               </div>
             )}
 
-            {/* MTTR Metrics and SLA Overview Card (For Technicians) */}
+            {/* MTTR Metrics Card (For Technicians) */}
             {isTechnician && (
               <>
                 {loading && !mttrData ? (
                   <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 flex flex-col items-center justify-center space-y-3">
                     <Loader2 className="w-8 h-8 animate-spin text-[#00ABE4]" />
-                    <p className="text-sm font-medium text-gray-600">Calculating MTTR & SLA Analytics...</p>
+                    <p className="text-sm font-medium text-gray-600">Calculating MTTR Analytics...</p>
                   </div>
                 ) : (
                   <MttrCard
-                    mttrData={userTailoredMttrData}
+                    mttrData={mttrData}
                     isTechnician={isTechnician}
                   />
                 )}
               </>
             )}
 
-            {/* MTTR Visual Analytics: Bar Chart & Pie Chart Grid */}
+            {/* MTTR Visual Analytics: Bar Chart Grid */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
               
-              {/* Bar Chart: MTTR vs SLA Target by Priority */}
-              <div className="lg:col-span-7 bg-white rounded-xl shadow-sm border border-gray-200 p-5 lg:p-6 flex flex-col justify-between">
+              {/* Bar Chart: MTTR by Priority */}
+              <div className="lg:col-span-12 bg-white rounded-xl shadow-sm border border-gray-200 p-5 lg:p-6 flex flex-col justify-between">
                 <div>
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2">
                       <BarChart3 className="w-5 h-5 text-[#00ABE4]" />
                       <h3 className="text-base font-bold text-gray-900">
-                        {isTechnician ? 'MTTR vs SLA Target by Priority' : 'SLA Turnaround Estimates by Priority'}
+                        {isTechnician ? 'MTTR by Priority' : 'Turnaround Time by Priority'}
                       </h3>
                     </div>
                     <span className="text-xs text-gray-500 font-medium">Hours</span>
                   </div>
                   <p className="text-xs text-gray-500 mb-4">
                     {isTechnician 
-                      ? 'Comparison of team resolution speed against guaranteed SLA limits' 
-                      : 'Expected resolution hours and guaranteed SLA target turnaround times for each priority tier'}
+                      ? 'Average resolution time (hours) by priority tier' 
+                      : 'Average resolution hours for each priority tier'}
                   </p>
                 </div>
 
@@ -494,12 +369,6 @@ const MttrReport = () => {
                         itemStyle={{ color: '#fff', fontSize: '12px' }}
                         formatter={(value, name) => [`${value} hours`, name]}
                       />
-                      <Legend 
-                        verticalAlign="top" 
-                        align="right" 
-                        iconType="circle"
-                        wrapperStyle={{ fontSize: '12px', paddingBottom: '10px' }}
-                      />
                       <Bar 
                         dataKey="actual" 
                         name={isTechnician ? "Actual MTTR" : "Est. Resolution Speed"} 
@@ -507,147 +376,34 @@ const MttrReport = () => {
                         radius={[6, 6, 0, 0]} 
                         maxBarSize={38} 
                       />
-                      <Bar 
-                        dataKey="target" 
-                        name="SLA Target" 
-                        fill="#cbd5e1" 
-                        radius={[6, 6, 0, 0]} 
-                        maxBarSize={38} 
-                      />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
               </div>
-
-              {/* Pie / Donut Chart: SLA Compliance Distribution */}
-              <div className="lg:col-span-5 bg-white rounded-xl shadow-sm border border-gray-200 p-5 lg:p-6 flex flex-col justify-between">
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <PieChartIcon className="w-5 h-5 text-indigo-600" />
-                      <h3 className="text-base font-bold text-gray-900">
-                        {isTechnician ? 'SLA Compliance Distribution' : 'Personal SLA Health'}
-                      </h3>
-                    </div>
-                  </div>
-                  <p className="text-xs text-gray-500 mb-2">
-                    {isTechnician
-                      ? 'Proportion of tickets meeting SLA targets vs approaching or breached'
-                      : 'Proportion of your created tickets that met or are on track for SLA'}
-                  </p>
-                </div>
-
-                <div className="h-64 w-full flex items-center justify-center relative">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={displayPieData}
-                        dataKey="value"
-                        nameKey="name"
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={55}
-                        outerRadius={85}
-                        paddingAngle={3}
-                      >
-                        {displayPieData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.color} />
-                        ))}
-                      </Pie>
-                      <Tooltip
-                        contentStyle={{ 
-                          backgroundColor: '#0f172a', 
-                          borderRadius: '10px', 
-                          border: 'none', 
-                          color: '#fff',
-                          fontSize: '12px'
-                        }}
-                        formatter={(val) => [`${val} tickets`, 'Count']}
-                      />
-                    </PieChart>
-                  </ResponsiveContainer>
-                  <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                    <span className="text-2xl font-extrabold text-gray-900">
-                      {userTailoredMttrData?.sla_compliance_rate || 100}%
-                    </span>
-                    <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">
-                      SLA Met / On Track
-                    </span>
-                  </div>
-                </div>
-
-                {/* Legend List */}
-                <div className="grid grid-cols-2 gap-2 pt-2 border-t border-gray-100">
-                  {displayPieData.map((item, index) => (
-                    <div key={index} className="flex items-center gap-2">
-                      <span 
-                        className="w-2.5 h-2.5 rounded-full flex-shrink-0" 
-                        style={{ backgroundColor: item.color }} 
-                      />
-                      <span className="text-xs text-gray-600 truncate" title={item.name}>
-                        {item.name}: <strong className="text-gray-900">{item.value}</strong>
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
             </div>
 
-            {/* SLA Ticket Tracker Table */}
+            {/* Ticket Turnaround Table */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 lg:p-6 space-y-4">
               <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                 <div>
                   <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
                     <Clock className="w-5 h-5 text-[#00ABE4]" />
-                    {isTechnician ? 'Live Ticket SLA & Turnaround Tracker' : 'Ticket SLA Tracker (My Requests)'}
+                    {isTechnician ? 'Live Ticket Turnaround Tracker' : 'My Requests Tracker'}
                   </h2>
                   <p className="text-xs text-gray-500">
                     {isTechnician 
-                      ? 'Real-time SLA status and turnaround countdown for active and recent tickets' 
-                      : 'Status and live SLA turnaround countdown for your active and completed requests'}
+                      ? 'Real-time status and turnaround overview for active and recent tickets' 
+                      : 'Status and turnaround overview for your active and completed requests'}
                   </p>
                 </div>
 
                 {/* Filters */}
                 <div className="flex flex-wrap items-center gap-2.5">
-                  {/* Technician Scope Toggle: Team vs Personal */}
-                  {isTechnician && (
-                    <div className="flex items-center bg-gray-100 p-0.5 rounded-lg border border-gray-200 text-xs font-semibold">
-                      <button
-                        onClick={() => setTechScope('team')}
-                        className={`px-3 py-1.5 rounded-md transition-all flex items-center gap-1.5 ${
-                          techScope === 'team'
-                            ? 'bg-white text-[#00ABE4] shadow-sm font-bold'
-                            : 'text-gray-600 hover:text-gray-900'
-                        }`}
-                      >
-                        <span>👥 Team Queue</span>
-                        <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${techScope === 'team' ? 'bg-blue-100 text-blue-800' : 'bg-gray-200 text-gray-700'}`}>
-                          {processedTickets.length}
-                        </span>
-                      </button>
-                      <button
-                        onClick={() => setTechScope('personal')}
-                        className={`px-3 py-1.5 rounded-md transition-all flex items-center gap-1.5 ${
-                          techScope === 'personal'
-                            ? 'bg-white text-[#00ABE4] shadow-sm font-bold'
-                            : 'text-gray-600 hover:text-gray-900'
-                        }`}
-                      >
-                        <span>👤 My Assigned</span>
-                        <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${techScope === 'personal' ? 'bg-blue-100 text-blue-800' : 'bg-gray-200 text-gray-700'}`}>
-                          {myAssignedCount}
-                        </span>
-                      </button>
-                    </div>
-                  )}
-
                   <div className="relative min-w-[200px]">
                     <Search className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
                     <input
                       type="text"
-                      placeholder={isTechnician && techScope === 'personal' ? "Search my tickets..." : "Search tickets..."}
+                      placeholder={isTechnician ? "Search my tickets..." : "Search tickets..."}
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
                       className="w-full pl-9 pr-3 py-1.5 text-xs bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
@@ -660,52 +416,37 @@ const MttrReport = () => {
                     className="text-xs bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="all">All Priorities</option>
-                    <option value="critical">Critical (2h)</option>
-                    <option value="high">High (8h)</option>
-                    <option value="medium">Medium (24h)</option>
-                    <option value="low">Low (48h)</option>
-                  </select>
-
-                  <select
-                    value={slaStatusFilter}
-                    onChange={(e) => setSlaStatusFilter(e.target.value)}
-                    className="text-xs bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="all">All SLA Statuses</option>
-                    <option value="on_track">On Track</option>
-                    <option value="approaching">Near SLA</option>
-                    <option value="breached">Breached</option>
-                    <option value="resolved">SLA Met</option>
+                    <option value="critical">Critical</option>
+                    <option value="high">High</option>
+                    <option value="medium">Medium</option>
+                    <option value="low">Low</option>
                   </select>
                 </div>
               </div>
 
               {/* Table Container */}
-              <div className="overflow-x-auto border border-gray-100 rounded-lg">
-                <table className="w-full text-left text-xs">
+              <div className="w-full border border-gray-100 rounded-lg">
+                <table className="w-full table-fixed text-left text-xs">
                   <thead className="bg-gray-50/80 text-gray-600 font-semibold uppercase tracking-wider border-b border-gray-200">
                     <tr>
                       <th className="py-3 px-4">Ticket</th>
-                      <th className="py-3 px-4">Priority & SLA Target</th>
+                      <th className="py-3 px-4">Priority</th>
                       <th className="py-3 px-4">Status</th>
                       <th className="py-3 px-4">{isTechnician ? 'Requester / Assignee' : 'Assignee'}</th>
-                      <th className="py-3 px-4">SLA Compliance</th>
                       {isTechnician && <th className="py-3 px-4 text-center">Action</th>}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {displayedTickets.length === 0 ? (
                       <tr>
-                        <td colSpan={isTechnician ? 6 : 5} className="text-center py-8 text-gray-500">
+                        <td colSpan={isTechnician ? 5 : 4} className="text-center py-8 text-gray-500">
                           {isTechnician
-                            ? (techScope === 'personal' ? 'You have no assigned tickets matching the selected filters.' : 'No tickets match the selected filters.')
+                            ? 'You have no assigned tickets matching the selected filters.'
                             : 'You have not submitted any tickets matching these filters.'}
                         </td>
                       </tr>
                     ) : (
                       displayedTickets.slice(0, 50).map((ticket) => {
-                        const priorityLower = (ticket.priority || 'medium').toLowerCase();
-                        const targetHours = SLA_TARGETS[priorityLower] || 24;
                         const targetId = String(ticket.id || '').replace('.', '-');
                         const isAssigned = isTicketAssignedToMe(ticket);
 
@@ -739,9 +480,6 @@ const MttrReport = () => {
                                 <span className={`px-2 py-0.5 rounded text-[11px] font-bold border ${getPriorityBadgeClass(ticket.priority)}`}>
                                   {ticket.priority || 'Medium'}
                                 </span>
-                                <span className="text-[11px] text-gray-500">
-                                  &lt;{targetHours}h
-                                </span>
                               </div>
                             </td>
 
@@ -760,26 +498,6 @@ const MttrReport = () => {
                                   From: {ticket.requester_name}
                                 </div>
                               )}
-                            </td>
-
-                            <td className="py-3 px-4">
-                              <div className="space-y-1.5 min-w-[150px]">
-                                {getSlaBadge(ticket.slaInfo)}
-                                {!['resolved', 'closed', 'completed'].includes((ticket.status || '').toLowerCase()) && (
-                                  <div className="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
-                                    <div 
-                                      className={`h-1.5 rounded-full transition-all duration-500 ${
-                                        ticket.slaInfo?.status === 'breached' 
-                                          ? 'bg-red-500 w-full animate-pulse' 
-                                          : ticket.slaInfo?.status === 'approaching'
-                                            ? 'bg-amber-500'
-                                            : 'bg-emerald-500'
-                                      }`}
-                                      style={{ width: `${Math.max(10, Math.min(ticket.slaInfo?.elapsedPercent || 30, 100))}%` }}
-                                    />
-                                  </div>
-                                )}
-                              </div>
                             </td>
 
                             {isTechnician && (

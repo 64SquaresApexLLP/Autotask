@@ -4,6 +4,10 @@ import json
 import csv
 from datetime import datetime
 
+# Env-driven Snowflake database/schema used in the generated DDL script
+SF_DATABASE = os.getenv('SF_DATABASE') or os.getenv('SNOWFLAKE_DATABASE') or 'TEST_DB'
+SF_SCHEMA = os.getenv('SF_SCHEMA') or os.getenv('SNOWFLAKE_SCHEMA') or 'PUBLIC'
+
 # Windows console encoding fix
 if sys.platform == "win32":
     for stream in (sys.stdout, sys.stderr):
@@ -447,14 +451,14 @@ write_csv("DIM_TECHNICIAN_SHIFTS_SKILLS.csv", ["TECHNICIAN_ID", "USERNAME", "FUL
 # ----------------------------------------------------
 # 10. GENERATE SNOWFLAKE DDL SCRIPT
 # ----------------------------------------------------
-ddl_content = """-- ==============================================================================
+ddl_content = f"""-- ==============================================================================
 -- TEAMLOGIC AUTOTASK & CTTC NETWORK ONTOLOGY SNOWFLAKE DDL & INGESTION SCRIPT
--- Database: TEST_DB / AUTOTASK_DB
+-- Database: {SF_DATABASE} / AUTOTASK_DB
 -- Schema: PUBLIC / NETWORK_ONTOLOGY
 -- ==============================================================================
 
-USE DATABASE TEST_DB;
-USE SCHEMA PUBLIC;
+USE DATABASE {SF_DATABASE};
+USE SCHEMA {SF_SCHEMA};
 
 -- 1. Create File Format for CSV Ingestion
 CREATE OR REPLACE FILE FORMAT CSV_ONTOLOGY_FORMAT

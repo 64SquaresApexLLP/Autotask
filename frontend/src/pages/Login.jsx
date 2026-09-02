@@ -80,7 +80,7 @@ const Login = () => {
                   <User className="w-5 h-5" />
                 </div>
                 <span className={`font-medium text-sm ${role === 'user' ? 'text-[#00ABE4] font-semibold' : 'text-gray-600'
-                  }`}>User</span>
+                  }`}>Subscriber</span>
               </button>
 
               <button
