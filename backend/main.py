@@ -1081,17 +1081,13 @@ def get_mttr_analytics(
         else:
             target_tickets = all_tickets
 
-        # Overall team tickets for benchmark comparison
+        # Overall team tickets for benchmark comparison (kept for SLA compliance base)
         all_resolved_durations = []
 
         for t in all_tickets:
             s_val = str(t.get("STATUS") or t.get("status") or "").strip().lower()
             if s_val in resolved_statuses:
-                p_val = str(t.get("PRIORITY") or t.get("priority") or "Medium").strip().capitalize()
-                d_bench = {"Critical": 1.4, "High": 5.2, "Medium": 14.8, "Low": 32.0}.get(p_val, 12.0)
-                all_resolved_durations.append(d_bench)
-
-        team_overall_mttr = round(sum(all_resolved_durations) / len(all_resolved_durations), 1) if all_resolved_durations else 2.8
+                all_resolved_durations.append(1)  # just count resolved tickets
 
         for t in target_tickets:
             status_val = str(t.get("STATUS") or t.get("status") or "").strip().lower()
@@ -1188,14 +1184,13 @@ def get_mttr_analytics(
                     active_on_track += 1
                     sla_met_count += 1
 
-        overall_mttr = round(sum(total_durations) / len(total_durations), 1) if total_durations else (team_overall_mttr if not user_filter else 2.4)
-        personal_mttr = round(sum(personal_durations) / len(personal_durations), 1) if personal_durations else overall_mttr
+        overall_mttr = round(sum(total_durations) / len(total_durations), 1) if total_durations else None
+        personal_mttr = round(sum(personal_durations) / len(personal_durations), 1) if personal_durations else None
 
         by_priority_out = {}
         for p, durs in priority_durations.items():
-            avg_p = round(sum(durs) / len(durs), 1) if durs else round(base_durations.get(p, 10.0), 1)
             by_priority_out[p] = {
-                "mttr_hours": avg_p,
+                "mttr_hours": round(sum(durs) / len(durs), 1) if durs else None,
                 "sla_target_hours": sla_targets.get(p.lower(), 24.0),
                 "resolved_count": len(durs)
             }

@@ -1,23 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Header from '../components/Header';
 import Sidebar from '../components/Sidebar';
 import ChatButton from '../components/ChatButton';
-import { Wrench, Bell, Clock, AlertTriangle, Settings, Users, FileText, Calendar, TrendingUp, Loader2, CheckCircle, ArrowRight } from 'lucide-react';
+import { Wrench, Clock, Loader2, CheckCircle, ArrowRight } from 'lucide-react';
 import useAuth from '../hooks/useAuth';
 import { ticketService } from '../services/ticketService.js';
 import { technicianService } from '../services/technicianService.js';
-import { ApiError } from '../services/api.js';
 import { calculateTicketSla } from '../components/MttrCard';
 
-const ProgressBar = ({ percentage, color = "bg-blue-500" }) => (
-  <div className="w-full bg-gray-200 rounded-full h-3">
-    <div
-      className={`${color} h-3 rounded-full transition-all duration-300`}
-      style={{ width: `${percentage}%` }}
-    ></div>
-  </div>
-);
 
 const TechnicianDashboard = () => {
   const { user } = useAuth();
@@ -30,7 +21,6 @@ const TechnicianDashboard = () => {
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [selectedTicket, setSelectedTicket] = useState(null);
 
   // Load dashboard data on component mount
   useEffect(() => {
@@ -125,10 +115,6 @@ const TechnicianDashboard = () => {
       setUpdatingTicketId(null);
     }
   };
-
-  const handleClick = () => {
-    window.location.href = "https://console.neo4j.io/projects/94f8ebd5-c05b-4276-b2b5-bc691e076bc3/studio/queryNeo4j Aura"
-  }
 
   return (
     <div className="flex min-h-screen bg-gray-50">
