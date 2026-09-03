@@ -25,14 +25,12 @@ const WEATHER_MATCH_COLORS = {
 const TABS = [
   { key: 'overview', label: 'Executive Overview', icon: LayoutGrid },
   { key: 'details', label: 'Truck Roll Details', icon: Table2 },
-  { key: 'solution', label: 'Solution Analysis', icon: PieChartIcon },
   { key: 'trends', label: 'Time Trends', icon: TrendingUp },
   { key: 'location', label: 'Location / Service Area', icon: MapPin },
   { key: 'repeat', label: 'Repeat Addresses', icon: RotateCcw },
   { key: 'technician', label: 'Technician Analysis', icon: Wrench },
   { key: 'weather', label: 'Weather Analysis', icon: Cloud },
-  { key: 'dataquality', label: 'Data Quality', icon: ShieldAlert },
-  { key: 'cortex', label: 'Cortex AI Summaries', icon: Sparkles },
+  { key: 'cortex', label: 'AI Summaries', icon: Sparkles },
 ];
 
 const fmtNum = (n) => (n === null || n === undefined ? '—' : Number(n).toLocaleString());
@@ -47,7 +45,7 @@ const WeatherMatchBadge = ({ status }) => {
   const color = WEATHER_MATCH_COLORS[status] || '#94a3b8';
   return (
     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border"
-          style={{ color, borderColor: color + '55', backgroundColor: color + '15' }}>
+      style={{ color, borderColor: color + '55', backgroundColor: color + '15' }}>
       {labels[status] || status || '—'}
     </span>
   );
@@ -165,6 +163,8 @@ const AdminOntTruckRoll = () => {
   const [errors, setErrors] = useState({});
   const [data, setData] = useState({});
   const [selectedRecord, setSelectedRecord] = useState(null);
+  const [exportingCSV, setExportingCSV] = useState(false);
+  const [exportError, setExportError] = useState('');
 
   // Truck Roll Details tab state
   const [filters, setFilters] = useState({
@@ -203,12 +203,7 @@ const AdminOntTruckRoll = () => {
     } finally { setLoad('details', false); }
   }, [filters, page]);
 
-  const loadSolution = useCallback(async () => {
-    setLoad('solution', true); setErr('solution', '');
-    try { setD('solution', (await ontTruckRollService.getSolutionBreakdown()).rows || []); }
-    catch (e) { setErr('solution', e.message || 'Failed to load solution breakdown.'); }
-    finally { setLoad('solution', false); }
-  }, []);
+
 
   const loadTrends = useCallback(async () => {
     setLoad('trends', true); setErr('trends', '');
@@ -245,12 +240,7 @@ const AdminOntTruckRoll = () => {
     finally { setLoad('weather', false); }
   }, []);
 
-  const loadDataQuality = useCallback(async () => {
-    setLoad('dataquality', true); setErr('dataquality', '');
-    try { setD('dataquality', await ontTruckRollService.getDataQuality()); }
-    catch (e) { setErr('dataquality', e.message || 'Failed to load data quality.'); }
-    finally { setLoad('dataquality', false); }
-  }, []);
+
 
   const loadCortex = useCallback(async () => {
     setLoad('cortex', true); setErr('cortex', '');
@@ -264,13 +254,11 @@ const AdminOntTruckRoll = () => {
   useEffect(() => {
     if (activeTab === 'overview' && !data.kpi) loadOverview();
     if (activeTab === 'details' && !data.records) loadRecords();
-    if (activeTab === 'solution' && !data.solution) loadSolution();
     if (activeTab === 'trends' && !data.trends) loadTrends();
     if (activeTab === 'location' && !data.location) loadLocation();
     if (activeTab === 'repeat' && !data.repeat) loadRepeat();
     if (activeTab === 'technician' && !data.technician) loadTechnician();
     if (activeTab === 'weather' && !data.weather) loadWeather();
-    if (activeTab === 'dataquality' && !data.dataquality) loadDataQuality();
     if (activeTab === 'cortex' && !data.cortexFull) loadCortex();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
@@ -303,19 +291,22 @@ const AdminOntTruckRoll = () => {
     catch (e) { console.error(e); }
   };
 
-  const handleExportCSV = () => {
-    const rows = data.records?.records || [];
-    if (rows.length === 0) return;
-    const headers = Object.keys(rows[0]);
-    const csvRows = [headers.join(',')];
-    rows.forEach((r) => {
-      csvRows.push(headers.map((h) => `"${String(r[h] ?? '').replace(/"/g, '""')}"`).join(','));
-    });
-    const csvContent = 'data:text/csv;charset=utf-8,' + csvRows.join('\n');
-    const link = document.createElement('a');
-    link.setAttribute('href', encodeURI(csvContent));
-    link.setAttribute('download', `ONT_Truck_Roll_Export_${new Date().toISOString().slice(0, 10)}.csv`);
-    document.body.appendChild(link); link.click(); document.body.removeChild(link);
+  /**
+   * Server-side CSV export — calls the backend /export endpoint.
+   * Downloads all records matching the current filters (not just the current page).
+   * Admin JWT is sent in the Authorization header; Snowflake credentials stay on the server.
+   */
+  const handleExportCSV = async () => {
+    setExportingCSV(true);
+    setExportError('');
+    try {
+      const cleanFilters = Object.fromEntries(Object.entries(filters).filter(([, v]) => v));
+      await ontTruckRollService.exportCSV(cleanFilters);
+    } catch (e) {
+      setExportError(e.message || 'Export failed. Please try again.');
+    } finally {
+      setExportingCSV(false);
+    }
   };
 
   const kpi = data.kpi;
@@ -357,9 +348,8 @@ const AdminOntTruckRoll = () => {
                     <button
                       key={t.key}
                       onClick={() => setActiveTab(t.key)}
-                      className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap ${
-                        isActive ? 'bg-[#00ABE4] text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100'
-                      }`}
+                      className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap ${isActive ? 'bg-[#00ABE4] text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100'
+                        }`}
                     >
                       <Icon className="w-3.5 h-3.5" /> {t.label}
                     </button>
@@ -412,9 +402,19 @@ const AdminOntTruckRoll = () => {
                 subtitle={data.records ? `${fmtNum(data.records.total_count)} matching record(s)` : ''}
                 icon={Table2}
                 right={
-                  <button onClick={handleExportCSV} className="flex items-center gap-1.5 bg-[#00ABE4] hover:bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium">
-                    <Download className="w-3.5 h-3.5" /> Export Page (CSV)
-                  </button>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {exportError && <span className="text-xs text-red-500">{exportError}</span>}
+                    <button
+                      onClick={handleExportCSV}
+                      disabled={exportingCSV}
+                      className="flex items-center gap-1.5 bg-[#00ABE4] hover:bg-blue-600 disabled:opacity-60 text-white px-3 py-1.5 rounded-lg text-xs font-medium"
+                      title={`Export all ${data.records?.total_count ?? ''} filtered records to CSV`}
+                    >
+                      {exportingCSV
+                        ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Exporting…</>
+                        : <><Download className="w-3.5 h-3.5" /> Export All (CSV)</>}
+                    </button>
+                  </div>
                 }
               >
                 {/* Filters */}
@@ -513,64 +513,7 @@ const AdminOntTruckRoll = () => {
               </SectionCard>
             )}
 
-            {/* ============ SOLUTION ANALYSIS ============ */}
-            {activeTab === 'solution' && (
-              <>
-                {loading.solution && <LoadingBlock />}
-                {errors.solution && <ErrorBlock message={errors.solution} />}
-                {!loading.solution && data.solution && (
-                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                    <div className="lg:col-span-6 bg-white rounded-xl shadow-sm border border-gray-200 p-5 lg:p-6">
-                      <h3 className="text-base font-bold text-gray-900 mb-4">Truck Rolls by Solution</h3>
-                      <div className="h-72">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <PieChart>
-                            <Pie data={data.solution} dataKey="TRUCK_ROLL_COUNT" nameKey="SOLUTION" innerRadius={55} outerRadius={90} paddingAngle={2}
-                                 onClick={(d) => drillToSolution(d.SOLUTION)} cursor="pointer">
-                              {data.solution.map((s, i) => <Cell key={i} fill={SOLUTION_COLORS[s.SOLUTION] || '#94a3b8'} />)}
-                            </Pie>
-                            <Tooltip formatter={(v, n, p) => [`${v} (${p.payload.PCT_OF_TOTAL}%)`, p.payload.SOLUTION]} />
-                            <Legend />
-                          </PieChart>
-                        </ResponsiveContainer>
-                      </div>
-                    </div>
-                    <div className="lg:col-span-6 bg-white rounded-xl shadow-sm border border-gray-200 p-5 lg:p-6">
-                      <h3 className="text-base font-bold text-gray-900 mb-4">Avg Resolution Time by Solution</h3>
-                      <div className="h-72">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <BarChart data={data.solution} margin={{ top: 10, right: 10, left: -15, bottom: 5 }}>
-                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                            <XAxis dataKey="SOLUTION" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
-                            <YAxis axisLine={false} tickLine={false} unit="h" />
-                            <Tooltip contentStyle={{ backgroundColor: '#0f172a', borderRadius: '10px', border: 'none', color: '#fff' }} />
-                            <Bar dataKey="AVG_RESOLUTION_HOURS" fill="#00ABE4" radius={[6, 6, 0, 0]} onClick={(d) => drillToSolution(d.SOLUTION)} cursor="pointer" />
-                          </BarChart>
-                        </ResponsiveContainer>
-                      </div>
-                    </div>
-                    <div className="lg:col-span-12 bg-white rounded-xl shadow-sm border border-gray-200 p-5 lg:p-6">
-                      <table className="w-full text-left text-sm text-gray-600">
-                        <thead className="bg-gray-50 text-xs uppercase font-semibold text-gray-500">
-                          <tr><th className="py-2.5 px-3">Solution</th><th className="py-2.5 px-3">Count</th><th className="py-2.5 px-3">% of Total</th><th className="py-2.5 px-3">Avg Resolution (h)</th><th className="py-2.5 px-3"></th></tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-100">
-                          {data.solution.map((s, i) => (
-                            <tr key={i} className="hover:bg-gray-50/80 cursor-pointer" onClick={() => drillToSolution(s.SOLUTION)}>
-                              <td className="py-3 px-3 font-semibold text-gray-900">{s.SOLUTION}</td>
-                              <td className="py-3 px-3">{fmtNum(s.TRUCK_ROLL_COUNT)}</td>
-                              <td className="py-3 px-3">{fmtPct(s.PCT_OF_TOTAL)}</td>
-                              <td className="py-3 px-3">{s.AVG_RESOLUTION_HOURS}</td>
-                              <td className="py-3 px-3"><ChevronRight className="w-4 h-4 text-gray-300" /></td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
-              </>
-            )}
+
 
             {/* ============ TIME TRENDS ============ */}
             {activeTab === 'trends' && (
@@ -801,52 +744,7 @@ const AdminOntTruckRoll = () => {
               </>
             )}
 
-            {/* ============ DATA QUALITY ============ */}
-            {activeTab === 'dataquality' && (
-              <>
-                {loading.dataquality && <LoadingBlock />}
-                {errors.dataquality && <ErrorBlock message={errors.dataquality} />}
-                {!loading.dataquality && data.dataquality && (
-                  <div className="space-y-6">
-                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                      <KpiCard label="Total Records" value={fmtNum(data.dataquality.total_records)} icon={Table2} color="blue" />
-                      <KpiCard label="Duplicate Order # Rows" value={fmtNum(data.dataquality.duplicate_order_number_row_count)} icon={AlertTriangle} color="red" hint="Order 586374 — both preserved" />
-                      <KpiCard label="Date Anomalies" value={fmtNum(data.dataquality.date_anomaly_row_count)} icon={AlertTriangle} color="amber" hint="Solution before Entered date" />
-                      <KpiCard label="No Weather Match" value={fmtNum(data.dataquality.geocode_failed_count + data.dataquality.no_weather_data_count)} icon={Cloud} color="red" />
-                    </div>
-                    <div className="bg-amber-50 border border-amber-200 text-amber-700 text-xs px-4 py-3 rounded-lg flex items-start gap-2">
-                      <Info className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                      <span>These records are flagged, not deleted or altered — the source dataset is preserved as-is. Click a row to view the affected record.</span>
-                    </div>
-                    <SectionCard title="Flagged Records" icon={ShieldAlert}>
-                      {(data.dataquality.issues || []).length === 0 ? <EmptyState message="No data-quality issues found." /> : (
-                        <div className="overflow-x-auto">
-                          <table className="w-full text-left text-xs text-gray-600">
-                            <thead className="bg-gray-50 text-[11px] uppercase font-semibold text-gray-500">
-                              <tr><th className="py-2 px-3">ID</th><th className="py-2 px-3">Account</th><th className="py-2 px-3">Order #</th><th className="py-2 px-3">Entered</th><th className="py-2 px-3">Solution Date</th><th className="py-2 px-3">Duplicate?</th><th className="py-2 px-3">Date Anomaly?</th><th></th></tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-100">
-                              {data.dataquality.issues.map((iss, i) => (
-                                <tr key={i} className="hover:bg-gray-50/80 cursor-pointer" onClick={() => openRecord(iss.ONT_TRUCK_ROLL_ID)}>
-                                  <td className="py-2.5 px-3 font-mono">{iss.ONT_TRUCK_ROLL_ID}</td>
-                                  <td className="py-2.5 px-3">{iss.ACCOUNT}</td>
-                                  <td className="py-2.5 px-3">{iss.ORDER_NUMBER}</td>
-                                  <td className="py-2.5 px-3">{fmtDate(iss.ENTERED_DATE)}</td>
-                                  <td className="py-2.5 px-3">{fmtDate(iss.SOLUTION_DATE)}</td>
-                                  <td className="py-2.5 px-3">{iss.IS_DUPLICATE_ORDER_NUMBER ? <span className="text-red-600 font-semibold">Yes</span> : 'No'}</td>
-                                  <td className="py-2.5 px-3">{iss.IS_DATE_ANOMALY ? <span className="text-amber-600 font-semibold">Yes</span> : 'No'}</td>
-                                  <td className="py-2.5 px-3"><ChevronRight className="w-3.5 h-3.5 text-gray-300" /></td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      )}
-                    </SectionCard>
-                  </div>
-                )}
-              </>
-            )}
+
 
             {/* ============ CORTEX AI SUMMARIES ============ */}
             {activeTab === 'cortex' && (

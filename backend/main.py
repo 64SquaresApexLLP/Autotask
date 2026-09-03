@@ -5007,6 +5007,83 @@ async def get_ont_truck_roll_record_detail(
         raise HTTPException(status_code=500, detail="Failed to load truck roll record")
 
 
+@app.get("/admin/reports/ont-truck-roll/export")
+async def export_ont_truck_roll_csv(
+    search: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    solution: Optional[str] = None,
+    service_city: Optional[str] = None,
+    service_revenue_area: Optional[str] = None,
+    technician: Optional[str] = None,
+    weather_match_status: Optional[str] = None,
+    location_match_type: Optional[str] = None,
+    order_status: Optional[str] = None,
+    current_user: dict = Depends(require_admin)
+):
+    """Server-side CSV export for the full filtered ONT Truck Roll dataset.
+    Streams directly from Snowflake — never exposes credentials to the browser.
+    Respects all the same filters as the /records endpoint.
+    Admin authorization is enforced server-side via Depends(require_admin).
+    """
+    import csv
+    import io
+    from fastapi.responses import StreamingResponse
+
+    try:
+        if not (snowflake_conn and snowflake_conn.is_connected()):
+            raise HTTPException(status_code=503, detail="Snowflake connection unavailable")
+
+        filters = {
+            "search": search, "date_from": date_from, "date_to": date_to,
+            "solution": solution, "service_city": service_city,
+            "service_revenue_area": service_revenue_area, "technician": technician,
+            "weather_match_status": weather_match_status, "location_match_type": location_match_type,
+            "order_status": order_status,
+        }
+        where_sql, params = _ont_truck_roll_where_clause(filters)
+
+        # Fetch all matching rows (no LIMIT — this is the export path)
+        rows = snowflake_conn.execute_query(
+            f"SELECT * FROM TEST_DB.ANALYTICS.VW_ONT_TRUCK_ROLL_WEATHER_ENRICHED "
+            f"{where_sql} ORDER BY ENTERED_DATE DESC",
+            params
+        )
+
+        def generate_csv():
+            output = io.StringIO()
+            if not rows:
+                yield ""
+                return
+            writer = csv.DictWriter(
+                output,
+                fieldnames=list(rows[0].keys()),
+                extrasaction="ignore",
+                lineterminator="\r\n"
+            )
+            writer.writeheader()
+            yield output.getvalue()
+            for row in rows:
+                output.seek(0)
+                output.truncate(0)
+                # Serialize all values to string, preserving None as empty
+                writer.writerow({k: ('' if v is None else str(v)) for k, v in row.items()})
+                yield output.getvalue()
+
+        timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+        filename = f"ONT_Truck_Roll_Export_{timestamp}.csv"
+        return StreamingResponse(
+            generate_csv(),
+            media_type="text/csv",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error exporting ONT truck roll CSV: {e}")
+        raise HTTPException(status_code=500, detail="Failed to export truck roll data")
+
+
 # ==================== STARTUP AND SHUTDOWN EVENTS ====================
 
 @app.on_event("startup")
