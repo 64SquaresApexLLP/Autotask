@@ -82,7 +82,7 @@ const AdminDashboard = () => {
     <div className="flex min-h-screen bg-gray-50">
       <Sidebar />
       <div className="flex-1 flex flex-col min-h-screen">
-        <Header />
+        <Header onRefresh={() => loadDashboardData(true)} isRefreshing={loading || refreshing} />
         <main className="p-6 md:p-8 flex-1">
           <div className="max-w-7xl mx-auto space-y-6">
 
@@ -190,9 +190,7 @@ const AdminDashboard = () => {
                 <div>
                   <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Global MTTR Speed</p>
                   <h3 className="text-2xl font-bold text-gray-900 mt-1">{mttrData?.global_mttr_hours ?? '3.8'}h</h3>
-                  <p className="text-xs text-blue-600 font-medium mt-0.5 flex items-center gap-1">
-                    <span>{mttrData?.sla_compliance_rate ?? '95.8'}% SLA Compliance</span>
-                  </p>
+                 
                 </div>
                 <div className="w-12 h-12 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center group-hover:scale-110 transition-transform">
                   <Timer className="w-6 h-6" />
@@ -203,80 +201,10 @@ const AdminDashboard = () => {
             {/* Quick Action Navigation Grid */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               
-              {/* Quick Action 1: Manage Technicians */}
-              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 flex flex-col justify-between">
-                <div>
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="p-2.5 rounded-lg bg-blue-50 text-[#00ABE4]">
-                      <Wrench className="w-5 h-5" />
-                    </span>
-                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800">
-                      Roster & Skills
-                    </span>
-                  </div>
-                  <h3 className="text-lg font-bold text-gray-900">Technician Shifts & Skillsets</h3>
-                  <p className="text-sm text-gray-500 mt-1">
-                    Assign morning, afternoon, and night shift rotations. Tag network, optical, voice, and hardware skillsets to technicians.
-                  </p>
-                </div>
-                <button
-                  onClick={() => navigate('/admin/technicians')}
-                  className="mt-5 w-full flex items-center justify-center gap-2 bg-[#E9F1FA] text-[#00ABE4] hover:bg-[#00ABE4] hover:text-white font-medium py-2.5 px-4 rounded-lg transition-colors cursor-pointer"
-                >
-                  <span>Manage Shifts & Skills</span>
-                  <ArrowUpRight className="w-4 h-4" />
-                </button>
-              </div>
+              
 
-              {/* Quick Action 2: User Management */}
-              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 flex flex-col justify-between">
-                <div>
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="p-2.5 rounded-lg bg-emerald-50 text-emerald-600">
-                      <Users className="w-5 h-5" />
-                    </span>
-                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
-                      Access Control
-                    </span>
-                  </div>
-                  <h3 className="text-lg font-bold text-gray-900">User Administration</h3>
-                  <p className="text-sm text-gray-500 mt-1">
-                    Provision new employee and client accounts, assign departments, manage contact information, and deactivate users.
-                  </p>
-                </div>
-                <button
-                  onClick={() => navigate('/admin/users')}
-                  className="mt-5 w-full flex items-center justify-center gap-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-600 hover:text-white font-medium py-2.5 px-4 rounded-lg transition-colors cursor-pointer"
-                >
-                  <span>Manage Users</span>
-                  <ArrowUpRight className="w-4 h-4" />
-                </button>
-              </div>
-
-              {/* Quick Action 3: Wider Executive MTTR Report */}
-              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 flex flex-col justify-between">
-                <div>
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="p-2.5 rounded-lg bg-purple-50 text-purple-600">
-                      <Timer className="w-5 h-5" />
-                    </span>
-                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-purple-100 text-purple-800">
-                      Intelligence
-                    </span>
-                  </div>
-                  <h3 className="text-lg font-bold text-gray-900">Wider MTTR & SLA Analytics</h3>
-                  <p className="text-sm text-gray-500 mt-1">
-                    Deep dive into multi-shift MTTR velocity, technician efficiency leaderboards, category bottleneck analysis, and SLA risk forecasts.
-                  </p>
-                </div>
-                <button
-                  onClick={() => navigate('/admin/wider-mttr')}
-                  className="mt-5 w-full flex items-center justify-center gap-2 bg-purple-50 text-purple-700 hover:bg-purple-600 hover:text-white font-medium py-2.5 px-4 rounded-lg transition-colors cursor-pointer"
-                >
-                  <span>Open Executive MTTR</span>
-                  <ArrowUpRight className="w-4 h-4" />
-                </button>
-              </div>
+             
+              
 
             </div>
 
@@ -343,7 +271,7 @@ const AdminDashboard = () => {
                     <div className="flex items-center justify-between text-sm py-2 border-b border-gray-100">
                       <span className="text-gray-600">Snowflake Database Connection</span>
                       <span className="font-semibold text-emerald-600 flex items-center gap-1">
-                        <CheckCircle2 className="w-4 h-4" /> Connected (TEST_DB.PUBLIC)
+                        <CheckCircle2 className="w-4 h-4" /> Connected
                       </span>
                     </div>
 

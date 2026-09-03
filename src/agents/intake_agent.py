@@ -16,6 +16,7 @@ from src.agents.notification_agent import NotificationAgent
 from src.agents.assignment_agent import AssignmentAgentIntegration
 from src.agents.resolution_agent import ResolutionAgent
 from src.services.email_listener import EmailListenerService
+from config import SF_DATABASE, SF_SCHEMA  # env-driven db/schema used to qualify SQL
 
 # Cross-platform file locking mechanism
 try:
@@ -150,7 +151,7 @@ class IntakeClassificationAgent:
 
     def _get_next_sequence_number_for_date(self, date_part: str) -> int:
         """
-        Get the next sequential number for the given date by checking both TICKETS and CLOSED_TICKETS tables.
+        Get the next sequential number for the given date by checking both TICKETS and CTTC_MOCK_CLOSED_TICKETS tables.
         Finds the highest sequence number for today and increments it.
 
         Args:
@@ -165,9 +166,9 @@ class IntakeClassificationAgent:
             try:
                 query = f"""
                 WITH all_tickets AS (
-                    SELECT TICKETNUMBER FROM TEST_DB.PUBLIC.TICKETS WHERE TICKETNUMBER LIKE 'T{date_part}.%'
+                    SELECT TICKETNUMBER FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS WHERE TICKETNUMBER LIKE 'T{date_part}.%'
                     UNION ALL
-                    SELECT TICKETNUMBER FROM TEST_DB.PUBLIC.CLOSED_TICKETS WHERE TICKETNUMBER LIKE 'T{date_part}.%'
+                    SELECT TICKETNUMBER FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_CLOSED_TICKETS WHERE TICKETNUMBER LIKE 'T{date_part}.%'
                 )
                 SELECT MAX(CAST(SUBSTRING(TICKETNUMBER, 11, 4) AS INTEGER)) as max_sequence
                 FROM all_tickets
@@ -296,19 +297,19 @@ class IntakeClassificationAgent:
 
     def _is_ticket_number_unique(self, ticket_number: str) -> bool:
         """
-        Check if a ticket number is unique across both TICKETS and CLOSED_TICKETS tables.
+        Check if a ticket number is unique across both TICKETS and CTTC_MOCK_CLOSED_TICKETS tables.
         """
         if not self.db_connection or not self.db_connection.is_connected():
             return self._is_ticket_unique_locally(ticket_number)
 
         try:
-            # Check both TICKETS and CLOSED_TICKETS tables
-            query = """
+            # Check both TICKETS and CTTC_MOCK_CLOSED_TICKETS tables
+            query = f"""
             SELECT COUNT(*) as count
             FROM (
-                SELECT TICKETNUMBER FROM TEST_DB.PUBLIC.TICKETS WHERE TICKETNUMBER = %s
+                SELECT TICKETNUMBER FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS WHERE TICKETNUMBER = %s
                 UNION ALL
-                SELECT TICKETNUMBER FROM TEST_DB.PUBLIC.CLOSED_TICKETS WHERE TICKETNUMBER = %s
+                SELECT TICKETNUMBER FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_CLOSED_TICKETS WHERE TICKETNUMBER = %s
             ) combined
             """
 
@@ -404,7 +405,7 @@ class IntakeClassificationAgent:
                 ),
                 SNOWFLAKE.CORTEX.EMBED_TEXT_768('e5-base-v2', '{escaped_ticket_text}')
             ) AS SIMILARITY_SCORE
-        FROM TEST_DB.PUBLIC.TICKETS
+        FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS
         WHERE TITLE IS NOT NULL
         AND DESCRIPTION IS NOT NULL
         AND TRIM(TITLE) != ''
@@ -483,7 +484,7 @@ class IntakeClassificationAgent:
         )
         query = f"""
         SELECT TICKETNUMBER, TITLE, DESCRIPTION, ISSUETYPE, SUBISSUETYPE, PRIORITY, STATUS, RESOLUTION
-        FROM TEST_DB.PUBLIC.TICKETS
+        FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS
         WHERE TITLE IS NOT NULL AND DESCRIPTION IS NOT NULL
         AND ({conditions})
         LIMIT {min(top_n, 10)}

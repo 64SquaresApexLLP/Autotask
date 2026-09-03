@@ -15,8 +15,8 @@
 
 
 # class TechnicianDummyData(Base):
-#     """Technician user model based on existing TECHNICIAN_DUMMY_DATA table."""
-#     __tablename__ = "TECHNICIAN_DUMMY_DATA"
+#     """Technician user model based on existing CTTC_MOCK_TECHNICIAN_DATA table."""
+#     __tablename__ = "CTTC_MOCK_TECHNICIAN_DATA"
 #     __table_args__ = {'schema': 'PUBLIC'}
 
 #     technician_id = Column(String(50), primary_key=True, name="TECHNICIAN_ID")
@@ -137,8 +137,8 @@
 
 
 # class UserDummyData(Base):
-#     """User model based on existing USER_DUMMY_DATA table."""
-#     __tablename__ = "USER_DUMMY_DATA"
+#     """User model based on existing CTTC_MOCK_USER_DATA table."""
+#     __tablename__ = "CTTC_MOCK_USER_DATA"
 #     __table_args__ = {'schema': 'PUBLIC'}
 
 #     user_id = Column(String(50), primary_key=True, name="USER_ID")
@@ -260,7 +260,7 @@
 #     """Verify existing database tables (no new tables created)."""
 #     try:
 #         # Only verify that existing tables are accessible
-#         # We don't create any new tables - using only TICKETS and TECHNICIAN_DUMMY_DATA
+#         # We don't create any new tables - using only TICKETS and CTTC_MOCK_TECHNICIAN_DATA
 #         logger.info("Using existing database tables only - no new tables created")
 #     except Exception as e:
 #         logger.error(f"Failed to verify database tables: {e}")
@@ -286,8 +286,8 @@ Base = declarative_base()
 
 
 class TechnicianDummyData(Base):
-    """Technician user model based on existing TECHNICIAN_DUMMY_DATA table."""
-    __tablename__ = "TECHNICIAN_DUMMY_DATA"
+    """Technician user model based on existing CTTC_MOCK_TECHNICIAN_DATA table."""
+    __tablename__ = "CTTC_MOCK_TECHNICIAN_DATA"
     __table_args__ = {'schema': 'PUBLIC'}
 
     technician_id = Column(String(50), primary_key=True, name="TECHNICIAN_ID")
@@ -416,8 +416,8 @@ class Ticket(Base):
 
 
 class UserDummyData(Base):
-    """User model based on existing USER_DUMMY_DATA table."""
-    __tablename__ = "USER_DUMMY_DATA"
+    """User model based on existing CTTC_MOCK_USER_DATA table."""
+    __tablename__ = "CTTC_MOCK_USER_DATA"
     __table_args__ = {'schema': 'PUBLIC'}
 
     user_id = Column(String(50), primary_key=True, name="USER_ID")
@@ -572,7 +572,7 @@ def init_database():
     """Verify existing database tables (no new tables created)."""
     try:
         # Only verify that existing tables are accessible
-        # We don't create any new tables - using only TICKETS and TECHNICIAN_DUMMY_DATA
+        # We don't create any new tables - using only TICKETS and CTTC_MOCK_TECHNICIAN_DATA
         logger.info("Using existing database tables only - no new tables created")
     except Exception as e:
         logger.error(f"Failed to verify database tables: {e}")

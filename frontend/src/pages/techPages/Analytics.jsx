@@ -479,7 +479,7 @@ const Analytics = () => {
                           <ShieldAlert className="h-4 w-4 text-orange-500" />
                           Tickets by Priority
                         </h3>
-                        <span className="text-[11px] text-blue-600 font-medium hover:underline cursor-pointer" onClick={() => navigate('/technician/urgent-tickets')}>
+                        <span className="text-[11px] text-blue-600 font-medium hover:underline cursor-pointer" onClick={() => navigate('/technician/my-tickets')}>
                           Urgent Queue &rarr;
                         </span>
                       </div>
@@ -494,7 +494,7 @@ const Analytics = () => {
                           return (
                             <div
                               key={item.priority}
-                              onClick={() => navigate(isUrgentTier ? '/technician/urgent-tickets' : '/technician/all-tickets')}
+                              onClick={() => navigate(isUrgentTier ? '/technician/my-tickets' : '/technician/all-tickets')}
                               className="p-2 rounded-xl hover:bg-slate-50 transition-all cursor-pointer group border border-transparent hover:border-slate-200/70"
                               title={`View ${item.priority} priority tickets`}
                             >

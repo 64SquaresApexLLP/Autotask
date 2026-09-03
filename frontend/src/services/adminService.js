@@ -1,9 +1,10 @@
 import apiService from './api';
 
 export const adminService = {
-  // 1. User Management
-  async getUsers() {
-    return await apiService.get('/admin/users');
+  // 1. User Management (Standard Users & System Admins)
+  async getUsers(role) {
+    const params = role ? `?role=${role}` : '';
+    return await apiService.get(`/admin/users${params}`);
   },
 
   async createUser(userData) {
@@ -12,6 +13,19 @@ export const adminService = {
 
   async deleteUser(userId) {
     return await apiService.delete(`/admin/users/${userId}`);
+  },
+
+  // 1b. Enterprise Admin Accounts (ADMIN_USERS table in Snowflake)
+  async getAdminUsers() {
+    return await apiService.get('/admin/admin-users');
+  },
+
+  async createAdminUser(adminData) {
+    return await apiService.post('/admin/admin-users', adminData);
+  },
+
+  async deleteAdminUser(adminId) {
+    return await apiService.delete(`/admin/admin-users/${adminId}`);
   },
 
   // 2. Technician & Shift Management

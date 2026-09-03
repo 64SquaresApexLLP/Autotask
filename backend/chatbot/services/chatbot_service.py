@@ -11,6 +11,14 @@ from ..database import TechnicianDummyData, Ticket
 from ..models import ChatResponse, TicketResponse
 import json
 
+# Env-driven Snowflake database/schema (no hardcoded DB name in queries)
+try:
+    from config import SF_DATABASE, SF_SCHEMA
+except ImportError:  # project root not on sys.path
+    import os
+    SF_DATABASE = os.getenv('SF_DATABASE') or os.getenv('SNOWFLAKE_DATABASE') or 'TEST_DB'
+    SF_SCHEMA = os.getenv('SF_SCHEMA') or os.getenv('SNOWFLAKE_SCHEMA') or 'PUBLIC'
+
 logger = logging.getLogger(__name__)
 
 
@@ -879,7 +887,7 @@ What would you like to do today?"""
                         COALESCE(TITLE, '') || ' ' || COALESCE(DESCRIPTION, ''),
                         '{search_text.replace("'", "''")}'
                     ) AS SIMILARITY_SCORE
-                FROM TEST_DB.PUBLIC.TICKETS
+                FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS
                 WHERE TITLE IS NOT NULL
                 AND DESCRIPTION IS NOT NULL
                 AND TRIM(TITLE) != ''
@@ -905,7 +913,7 @@ What would you like to do today?"""
                         COALESCE(TITLE, '') || ' ' || COALESCE(DESCRIPTION, ''),
                         '{search_text.replace("'", "''")}'
                     ) AS SIMILARITY_SCORE
-                FROM TEST_DB.PUBLIC.COMPANY_4130_DATA
+                FROM {SF_DATABASE}.{SF_SCHEMA}.COMPANY_4130_DATA
                 WHERE TITLE IS NOT NULL
                 AND DESCRIPTION IS NOT NULL
                 AND TRIM(TITLE) != ''

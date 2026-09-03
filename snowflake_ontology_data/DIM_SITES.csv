@@ -1,11 +1,11 @@
-SITE_ID,SITE_NAME,SITE_TYPE,LATITUDE,LONGITUDE,REGION,STATUS,CREATED_AT
-site:gldt,Goldthwaite,central_office,,,"Texas, USA",ACTIVE,2026-09-01T12:36:15.947036
-site:sang,San Angelo,aggregation_site,,,"Texas, USA",ACTIVE,2026-09-01T12:36:15.947077
-site:03,Service Area 03,remote_site,,,"Texas, USA",ACTIVE,2026-09-01T12:36:15.947092
-site:04,Service Area 04,remote_site,,,"Texas, USA",ACTIVE,2026-09-01T12:36:15.947103
-site:05,Service Area 05,remote_site,,,"Texas, USA",ACTIVE,2026-09-01T12:36:15.947115
-site:06,Service Area 06,remote_site,,,"Texas, USA",ACTIVE,2026-09-01T12:36:15.947127
-site:07,Service Area 07,remote_site,,,"Texas, USA",ACTIVE,2026-09-01T12:36:15.947146
-site:08,Service Area 08,remote_site,,,"Texas, USA",ACTIVE,2026-09-01T12:36:15.947158
-site:09,Service Area 09,remote_site,,,"Texas, USA",ACTIVE,2026-09-01T12:36:15.947169
-site:10,Service Area 10,remote_site,,,"Texas, USA",ACTIVE,2026-09-01T12:36:15.947180
+SITE_ID,SITE_NAME,SITE_TYPE,COUNTY,STATE,LATITUDE,LONGITUDE,ALTITUDE_METERS,ALTITUDE_FEET,REGION,STATUS,CREATED_AT
+site:gldt,Goldthwaite,central_office,Mills County,Texas,31.4504,-98.5714,463.0,1519.0,"Texas, USA",ACTIVE,2026-09-02T13:16:37.183963
+site:sang,San Angelo,aggregation_site,Tom Green County,Texas,31.4638,-100.437,563.0,1847.0,"Texas, USA",ACTIVE,2026-09-02T13:16:37.184027
+site:03,Brady (Service Area 03),remote_site,McCulloch County,Texas,31.1352,-99.3362,511.0,1677.0,"Texas, USA",ACTIVE,2026-09-02T13:16:37.184062
+site:04,Brownwood (Service Area 04),remote_site,Brown County,Texas,31.7093,-98.9912,422.0,1385.0,"Texas, USA",ACTIVE,2026-09-02T13:16:37.184079
+site:05,Lampasas (Service Area 05),remote_site,Lampasas County,Texas,31.0649,-98.1817,312.0,1024.0,"Texas, USA",ACTIVE,2026-09-02T13:16:37.184095
+site:06,Llano (Service Area 06),remote_site,Llano County,Texas,30.7593,-98.675,314.0,1030.0,"Texas, USA",ACTIVE,2026-09-02T13:16:37.184110
+site:07,Mason (Service Area 07),remote_site,Mason County,Texas,30.7491,-99.2306,469.0,1539.0,"Texas, USA",ACTIVE,2026-09-02T13:16:37.184125
+site:08,Richland Springs (Service Area 08),remote_site,San Saba County,Texas,31.2677,-98.9431,419.0,1375.0,"Texas, USA",ACTIVE,2026-09-02T13:16:37.184141
+site:09,Early (Service Area 09),remote_site,Brown County,Texas,31.7454,-98.9437,436.0,1430.0,"Texas, USA",ACTIVE,2026-09-02T13:16:37.184155
+site:10,Comanche (Service Area 10),remote_site,Comanche County,Texas,31.8974,-98.6042,421.0,1381.0,"Texas, USA",ACTIVE,2026-09-02T13:16:37.184176

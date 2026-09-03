@@ -184,7 +184,7 @@ const UserDashboard = () => {
     <div className="flex min-h-screen bg-gray-50">
       <Sidebar />
       <div className="flex-1">
-        <Header />
+        <Header onRefresh={loadUserTickets} isRefreshing={loading} />
         <main className="p-6 md:p-8">
           <div className="max-w-6xl mx-auto">
             <div className="mb-8">
@@ -217,7 +217,7 @@ const UserDashboard = () => {
                 </div>
               </div>
 
-              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+              {/* <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
                 <div className="flex items-center justify-between">
                   <div>
                     <h3 className="text-lg font-semibold text-gray-800">Open Tickets</h3>
@@ -227,7 +227,7 @@ const UserDashboard = () => {
                   </div>
                   <Clock className="w-8 h-8 text-yellow-600" />
                 </div>
-              </div>
+              </div> */}
 
               <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
                 <div className="flex items-center justify-between">
@@ -324,7 +324,7 @@ const UserDashboard = () => {
 
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Due Date
+                        Due Date <span className="text-gray-400 font-normal">(optional)</span>
                       </label>
                       <input
                         type="date"
@@ -397,7 +397,7 @@ const UserDashboard = () => {
             {/* My Tickets Section */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 md:p-8">
               <div className="flex items-center justify-between mb-6">
-                <h2 className="text-lg md:text-xl font-semibold text-gray-800">My Tickets</h2>
+                <h2 className="text-lg md:text-xl font-semibold text-gray-800">Recent Ticket</h2>
                 <button
                   onClick={loadUserTickets}
                   disabled={loading}
@@ -425,7 +425,7 @@ const UserDashboard = () => {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {tickets.map((ticket) => {
+                  { tickets.slice(0, 1).map((ticket) => {
                     const sla = calculateTicketSla(ticket);
                     const slaBadgeClass = sla.color === 'red'
                       ? 'bg-red-100 text-red-700 border-red-200'

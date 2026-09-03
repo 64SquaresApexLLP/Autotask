@@ -200,7 +200,7 @@ REQUIREMENTS:
 - Make HTML version visually appealing with metadata tables
 - Ensure text version is well-formatted with clear metadata sections
 - Use appropriate tone for recipient type: {recipient_tone}
-- Include TeamLogicIT Support branding
+
 - IMPORTANT: Use "html_content" and "text_content" (no backslashes!)
 """
 
@@ -409,7 +409,6 @@ INSTRUCTIONS: Generate a due date reminder email that:
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
                 <h2 style="color: #2c3e50;">🎫 Ticket Confirmation</h2>
                 <p>Dear {customer_name},</p>
-                <p>Thank you for contacting TeamLogicIT Support. Your support ticket has been successfully received and assigned the following details:</p>
 
                 <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
                     <h3 style="color: #495057; margin-top: 0;">📋 Ticket Details</h3>
@@ -426,7 +425,6 @@ INSTRUCTIONS: Generate a due date reminder email that:
                     </p>
                 </div>
                 <p>Best regards,<br>
-                <strong>TeamLogicIT Support</strong></p>
             </div>
             """,
             'text_content': f"""
@@ -434,7 +432,6 @@ INSTRUCTIONS: Generate a due date reminder email that:
 
 Dear {customer_name},
 
-Thank you for contacting TeamLogicIT Support. Your support ticket has been successfully received and assigned the following details:
 
 📋 Ticket Details
 Ticket Number: #{ticket_number}
@@ -448,7 +445,6 @@ Ticket Type: {ticket_type}
 Assigned Technician: {technician_name}
 
 Best regards,
-TeamLogicIT Support
             """
         }
 
@@ -498,7 +494,6 @@ TeamLogicIT Support
                 <p>Please ensure this ticket is resolved by the due date: <strong>{due_date}</strong></p>
 
                 <p>Best regards,<br>
-                <strong>TeamLogicIT Support System</strong></p>
             </div>
             """,
             'text_content': f"""
@@ -529,7 +524,6 @@ Assigned Technician: {technician_name} ({technician_email})
 Please ensure this ticket is resolved by the due date: {due_date}
 
 Best regards,
-TeamLogicIT Support System
             """
         }
 
@@ -783,7 +777,6 @@ TeamLogicIT Support System
             <pre style="white-space: pre-wrap; font-family: monospace;">{tickets_text}</pre>
         </div>
 
-        <p>This is an automated summary from the TeamLogicIT Support System.</p>
         """
 
         text_content = f"""
@@ -801,7 +794,6 @@ PROCESSED TICKETS:
 {tickets_text}
 
 ---
-This is an automated summary from the TeamLogicIT Support System.
         """
 
         return {

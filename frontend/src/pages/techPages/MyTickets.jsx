@@ -132,7 +132,7 @@ const MyTickets = () => {
     <div className="flex min-h-screen bg-gray-50">
       <Sidebar />
       <div className="flex-1 flex flex-col overflow-y-auto max-h-screen">
-        <Header />
+        <Header onRefresh={loadMyTickets} isRefreshing={loading} />
         <main className=" p-6 md:p-8 flex-1 overflow-y-auto">
           <div className="max-w-6xl mx-auto space-y-6">
             {/* Header Section */}
@@ -145,9 +145,9 @@ const MyTickets = () => {
                 <span className="border border-gray-300 px-3 py-1 rounded-full text-sm font-medium">
                   {filteredTickets.length} tickets
                 </span>
-                <span className="bg-red-100 text-red-800 px-3 py-1 rounded-full text-sm font-medium">
+                {/* <span className="bg-red-100 text-red-800 px-3 py-1 rounded-full text-sm font-medium">
                   {tickets.filter(t => t.priority?.toLowerCase() === "critical").length} critical
-                </span>
+                </span> */}
               </div>
             </div>
 
@@ -165,7 +165,7 @@ const MyTickets = () => {
             )}
 
             {/* Search and Filters */}
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+            <div className="bg-white w-full rounded-lg shadow-sm border border-gray-200 p-4">
               <div className="flex flex-col md:flex-row gap-4">
                 <div className="relative flex-1">
                   <FiSearch className="absolute left-3 top-3 text-gray-400" />
@@ -210,7 +210,7 @@ const MyTickets = () => {
 
               {/* Expanded Filters */}
               {showFilters && (
-                <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 border-t border-gray-200">
+                <div className="mt-4  grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 border-t border-gray-200">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
                     <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto">
@@ -310,9 +310,9 @@ const MyTickets = () => {
             </div>
 
             {/* Tickets Table */}
-            <div className="bg-white shadow-md rounded-lg overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
+            <div className="w-full bg-white shadow-md rounded-lg">
+              <div className="w-full">
+                <table className="w-full table-fixed divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ticket #</th>
@@ -366,25 +366,25 @@ const MyTickets = () => {
 
                       return (
                         <tr key={ticket.id} className="hover:bg-gray-50">
-                          <td className="px-6 py-4 whitespace-nowrap font-mono text-sm text-blue-900">{ticket.id}</td>
-                          <td className="px-6 py-4 whitespace-nowrap font-medium">{ticket.title}</td>
-                          <td className="px-6 py-4 whitespace-nowrap">
+                          <td className="px-2 sm:px-6 py-4 font-mono text-sm text-blue-900">{ticket.id}</td>
+                          <td className="px-2 sm:px-6 py-4 font-medium">{ticket.title}</td>
+                          <td className="px-2 sm:px-6 py-4">
                             <div className="flex items-center">
                               <FiUser className="h-4 w-4 text-gray-400 mr-1" />
                               {ticket.requester_name || ticket.user_email || 'Unknown'}
                             </div>
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
+                          <td className="px-2 sm:px-6 py-4">
                             <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusColors[ticket.status?.toLowerCase()] || 'bg-gray-100 text-gray-800'}`}>
                               {ticket.status || 'Unknown'}
                             </span>
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
+                          <td className="px-2 sm:px-6 py-4">
                             <span className={`px-2 py-1 rounded-full text-xs font-medium ${priorityColors[ticket.priority?.toLowerCase()] || 'bg-gray-100 text-gray-800'}`}>
                               {ticket.priority?.toUpperCase() || 'UNKNOWN'}
                             </span>
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
+                          <td className="px-2 sm:px-6 py-4">
                             {sla?.status === 'resolved' ? (
                               <span className="bg-blue-100 text-blue-800 px-2.5 py-1 rounded-full text-xs font-medium">
                                 ✅ SLA Met
@@ -403,13 +403,13 @@ const MyTickets = () => {
                               </span>
                             )}
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
+                          <td className="px-2 sm:px-6 py-4">
                             <div className="flex items-center font-medium text-gray-700">
                               <IoTimeOutline className="h-4 w-4 text-[#00ABE4] mr-1.5" />
                               <span>{timeSpentDisplay}</span>
                             </div>
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
+                          <td className="px-2 sm:px-6 py-4">
                             <button
                               onClick={() => navigate(`/technician/my-tickets/view/${ticket.id.replace('.', '-')}`)}
                               className="flex items-center text-sm font-semibold text-blue-600 hover:text-blue-800"

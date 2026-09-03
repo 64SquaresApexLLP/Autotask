@@ -1,40 +1,70 @@
 {
-  "hash": "aa458fbb",
-  "configHash": "b820beeb",
-  "lockfileHash": "cddb8a4f",
-  "browserHash": "0f7fa347",
+  "hash": "88479424",
+  "configHash": "a935a2cf",
+  "lockfileHash": "6c7361d0",
+  "browserHash": "f4ec89e3",
   "optimized": {
     "react": {
       "src": "../../node_modules/react/index.js",
       "file": "react.js",
-      "fileHash": "c91a95d9",
+      "fileHash": "fbc151ad",
       "needsInterop": true
     },
     "react-dom/client": {
       "src": "../../node_modules/react-dom/client.js",
       "file": "react-dom_client.js",
-      "fileHash": "edc4090e",
+      "fileHash": "14976ed3",
       "needsInterop": true
     },
     "react-router-dom": {
       "src": "../../node_modules/react-router-dom/dist/index.mjs",
       "file": "react-router-dom.js",
-      "fileHash": "9d97d277",
+      "fileHash": "a56b395c",
       "needsInterop": false
     },
     "lucide-react": {
       "src": "../../node_modules/lucide-react/dist/esm/lucide-react.js",
       "file": "lucide-react.js",
-      "fileHash": "c09e1d11",
+      "fileHash": "4174f3e5",
+      "needsInterop": false
+    },
+    "react-icons/fi": {
+      "src": "../../node_modules/react-icons/fi/index.mjs",
+      "file": "react-icons_fi.js",
+      "fileHash": "68e39417",
+      "needsInterop": false
+    },
+    "react-icons/io5": {
+      "src": "../../node_modules/react-icons/io5/index.mjs",
+      "file": "react-icons_io5.js",
+      "fileHash": "65d7889c",
+      "needsInterop": false
+    },
+    "recharts": {
+      "src": "../../node_modules/recharts/es6/index.js",
+      "file": "recharts.js",
+      "fileHash": "5f9448cc",
+      "needsInterop": false
+    },
+    "d3-force": {
+      "src": "../../node_modules/d3-force/src/index.js",
+      "file": "d3-force.js",
+      "fileHash": "f6f739c7",
       "needsInterop": false
     }
   },
   "chunks": {
-    "chunk-JJSCUBFW": {
-      "file": "chunk-JJSCUBFW.js"
+    "chunk-UOM743HI": {
+      "file": "chunk-UOM743HI.js"
     },
-    "chunk-H3AANLML": {
-      "file": "chunk-H3AANLML.js"
+    "chunk-6RZRVTL6": {
+      "file": "chunk-6RZRVTL6.js"
+    },
+    "chunk-7ETY4VQD": {
+      "file": "chunk-7ETY4VQD.js"
+    },
+    "chunk-G3PMV62Z": {
+      "file": "chunk-G3PMV62Z.js"
     }
   }
 }

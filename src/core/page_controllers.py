@@ -11,7 +11,7 @@ import os
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 
 # Import configuration constants
-from config import PAGE_TITLE, PRIORITY_OPTIONS
+from config import PAGE_TITLE, PRIORITY_OPTIONS, SF_DATABASE, SF_SCHEMA
 
 # Import TicketHandlers for data operations
 from src.core.ticket_handlers import TicketHandlers
@@ -346,7 +346,7 @@ class PageControllers:
         st.title("Technician Dashboard - All Tickets")
         all_tickets = []
         try:
-            query = 'SELECT * FROM TEST_DB.PUBLIC.TICKETS'
+            query = f'SELECT * FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS'
             all_tickets = ticket_db.conn.execute_query(query)
         except Exception as e:
             st.error(f"Error fetching tickets: {e}")

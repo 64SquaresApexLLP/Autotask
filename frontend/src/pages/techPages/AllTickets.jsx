@@ -176,7 +176,7 @@ const AllTickets = () => {
     <div className="flex min-h-screen bg-gray-50">
       <Sidebar />
       <div className="flex-1 flex flex-col overflow-y-auto max-h-screen">
-        <Header />
+        <Header onRefresh={loadTickets} isRefreshing={loading} />
         <main className=" p-6 md:p-8 flex-1 overflow-y-auto">
           <div className="max-w-7xl mx-auto space-y-6">
             <div>
@@ -326,7 +326,7 @@ const AllTickets = () => {
             </div>
 
             {/* Table */}
-            <div className="overflow-auto bg-white rounded-lg shadow">
+            <div className="w-full bg-white rounded-lg shadow">
               {loading && tickets.length === 0 ? (
                 <div className="p-8 text-center">
                   <Loader2 className="w-8 h-8 animate-spin text-[#00ABE4] mx-auto mb-4" />
@@ -354,7 +354,7 @@ const AllTickets = () => {
                   )}
                 </div>
               ) : (
-                <table className="min-w-full text-sm text-left">
+                <table className="w-full table-fixed text-sm text-left">
                   <thead className="bg-gray-100 border-b">
                     <tr>
                       <th className="p-3">#</th>

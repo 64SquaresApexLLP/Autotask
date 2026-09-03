@@ -163,16 +163,26 @@ def build_demo(seed: int = 518) -> Dataset:
         for sw in DEFECT_AFFECTS[did]:
             d.rel(sw, "AFFECTED_BY", did, source="vendor_bulletin", method="manual")
 
-    # --- sites --------------------------------------------------------------
-    sites = [("site:gldt", "Goldthwaite", "central_office"),
-             ("site:sang", "San Angelo", "aggregation_site")]
-    for i in range(3, 11):
-        sites.append((f"site:{i:02d}", f"Service Area {i:02d}", "remote_site"))
-    for sid, name, stype in sites:
-        d.node(sid, ["Site"], name=name, type=stype,
-               aliases=[name, sid.split(":")[1].upper()])
+    # --- sites with geographic coordinates and altitudes -------------------
+    site_definitions = [
+        ("site:gldt", "Goldthwaite", "central_office", "Goldthwaite", "Mills County", "Texas", 31.4504, -98.5714, 463.0, 1519.0),
+        ("site:sang", "San Angelo", "aggregation_site", "San Angelo", "Tom Green County", "Texas", 31.4638, -100.4370, 563.0, 1847.0),
+        ("site:03", "Brady (Service Area 03)", "remote_site", "Brady", "McCulloch County", "Texas", 31.1352, -99.3362, 511.0, 1677.0),
+        ("site:04", "Brownwood (Service Area 04)", "remote_site", "Brownwood", "Brown County", "Texas", 31.7093, -98.9912, 422.0, 1385.0),
+        ("site:05", "Lampasas (Service Area 05)", "remote_site", "Lampasas", "Lampasas County", "Texas", 31.0649, -98.1817, 312.0, 1024.0),
+        ("site:06", "Llano (Service Area 06)", "remote_site", "Llano", "Llano County", "Texas", 30.7593, -98.6750, 314.0, 1030.0),
+        ("site:07", "Mason (Service Area 07)", "remote_site", "Mason", "Mason County", "Texas", 30.7491, -99.2306, 469.0, 1539.0),
+        ("site:08", "Richland Springs (Service Area 08)", "remote_site", "Richland Springs", "San Saba County", "Texas", 31.2677, -98.9431, 419.0, 1375.0),
+        ("site:09", "Early (Service Area 09)", "remote_site", "Early", "Brown County", "Texas", 31.7454, -98.9437, 436.0, 1430.0),
+        ("site:10", "Comanche (Service Area 10)", "remote_site", "Comanche", "Comanche County", "Texas", 31.8974, -98.6042, 421.0, 1381.0)
+    ]
+    for sid, name, stype, town, county, state, lat, lon, alt_m, alt_ft in site_definitions:
+        d.node(sid, ["Site"], name=name, type=stype, town=town, county=county,
+               state=state, lat=lat, lon=lon, latitude=lat, longitude=lon,
+               alt_m=alt_m, alt_ft=alt_ft, altitude_meters=alt_m, altitude_feet=alt_ft,
+               aliases=[name, town, sid.split(":")[1].upper()])
 
-    site_ids = [s[0] for s in sites]
+    site_ids = [s[0] for s in site_definitions]
 
     def add_device(dev_id, name, model, vendor, role, site, sw, extra_labels=(),
                    aliases=None):
@@ -660,7 +670,9 @@ def main():
         print(CSV_SCHEMA)
         return
 
-    if args.json_file:
+    if args.demo:
+        ds = build_demo(args.seed)
+    elif args.json_file:
         ds = build_from_json(args.json_file)
     elif args.csv_dir:
         ds = build_from_csv(args.csv_dir)

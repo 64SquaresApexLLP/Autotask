@@ -133,7 +133,7 @@ const AdminTicketsReport = () => {
                 </div>
                 <div>
                   <h1 className="text-xl lg:text-2xl font-bold text-gray-800 tracking-tight">
-                    Master Tickets Operational Report
+                   Exicutive Dashboard
                   </h1>
                   <p className="text-gray-600 text-sm mt-0.5">
                     Centralized system ticket logs, resolution lifecycle auditing, technician assignments, and CSV data exports.
@@ -291,8 +291,8 @@ const AdminTicketsReport = () => {
                   <p className="text-gray-500 font-medium">No tickets found matching criteria.</p>
                 </div>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-sm text-gray-600">
+                <div className="w-full">
+                  <table className="w-full table-fixed text-left text-sm text-gray-600">
                     <thead className="bg-gray-50 text-xs uppercase font-semibold text-gray-500 border-b border-gray-200">
                       <tr>
                         <th className="py-3.5 px-4">Ticket ID</th>
@@ -365,7 +365,7 @@ const AdminTicketsReport = () => {
                               </span>
                             </td>
 
-                            <td className="py-3.5 px-4 text-xs text-gray-500 whitespace-nowrap">
+                            <td className="py-3.5 px-2 sm:px-4 text-xs text-gray-500">
                               {t.created_at ? new Date(t.created_at).toLocaleDateString() : 'Recent'}
                             </td>
                           </tr>
