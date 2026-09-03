@@ -432,6 +432,17 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
     except JWTError:
         raise credentials_exception
 
+async def require_admin(current_user: dict = Depends(get_current_user)) -> dict:
+    """Server-side admin-only enforcement, reusing the existing JWT auth (get_current_user).
+    No new auth system — this is the first server-side role check added to the app;
+    previously 'admin-only' was enforced only by hiding nav links in the frontend Sidebar."""
+    if current_user.get("role") != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required"
+        )
+    return current_user
+
 # Set database connection and LLM service for chatbot after initialization
 @app.on_event("startup")
 async def startup_event():
@@ -4135,6 +4146,355 @@ async def get_admin_wider_mttr_report():
             {"name": "Alex Smith", "shift": "Afternoon", "mttr_hours": 4.2, "resolved": 38, "sla_rate": 93.2, "skills": "AD, Software Drift"}
         ]
     }
+
+
+# ==================== ONT TRUCK ROLL ADMIN REPORTING ====================
+# Admin-only (Depends(require_admin)). Reads only from the already-validated
+# Snowflake views built in ont_truck_roll_data/ (see ont_truck_roll_data/README.md
+# and CORTEX_SUMMARIES.md) — RAW.ONT_TRUCK_ROLL, RAW.SERVICE_ADDRESS_GEOCODE,
+# RAW.WEATHER_OBSERVATIONS_OPENMETEO, RAW.LOCATION_CENTROIDS, and the
+# ANALYTICS.* views/table are never modified by any endpoint below.
+
+ONT_TRUCK_ROLL_FILTER_COLUMNS = {
+    "solution": "SOLUTION",
+    "service_city": "SERVICE_CITY",
+    "service_revenue_area": "SERVICE_REVENUE_AREA",
+    "technician": "SOLUTION_ENTRY_USER",
+    "order_status": "ORDER_STATUS",
+    "weather_match_status": "WEATHER_MATCH_STATUS",
+    "location_match_type": "LOCATION_MATCH_TYPE",
+}
+
+
+def _ont_truck_roll_where_clause(filters: dict):
+    """Builds a parameterized WHERE clause for VW_ONT_TRUCK_ROLL_WEATHER_ENRICHED filters."""
+    clauses = []
+    params = []
+    for key, column in ONT_TRUCK_ROLL_FILTER_COLUMNS.items():
+        value = filters.get(key)
+        if value:
+            clauses.append(f"{column} = %s")
+            params.append(value)
+    if filters.get("date_from"):
+        clauses.append("ENTERED_DATE >= %s")
+        params.append(filters["date_from"])
+    if filters.get("date_to"):
+        clauses.append("ENTERED_DATE <= %s")
+        params.append(filters["date_to"])
+    if filters.get("search"):
+        clauses.append("(ACCOUNT ILIKE %s OR SERVICE_ADDRESS ILIKE %s OR ORDER_NUMBER ILIKE %s OR ACCOUNT_NUMBER ILIKE %s)")
+        term = f"%{filters['search']}%"
+        params.extend([term, term, term, term])
+    where_sql = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+    return where_sql, tuple(params)
+
+
+@app.get("/admin/reports/ont-truck-roll/kpi-summary")
+async def get_ont_truck_roll_kpi_summary(current_user: dict = Depends(require_admin)):
+    """Headline KPI cards for the Executive Overview tab."""
+    try:
+        if not (snowflake_conn and snowflake_conn.is_connected()):
+            raise HTTPException(status_code=503, detail="Snowflake connection unavailable")
+
+        kpi_rows = snowflake_conn.execute_query(
+            "SELECT * FROM TEST_DB.ANALYTICS.VW_TRUCK_ROLL_KPI_SUMMARY"
+        )
+        kpi = kpi_rows[0] if kpi_rows else {}
+
+        repeat_rows = snowflake_conn.execute_query(
+            "SELECT COUNT(*) AS ADDR_3PLUS, SUM(TRUCK_ROLL_COUNT) AS ROLLS_3PLUS "
+            "FROM TEST_DB.ANALYTICS.VW_TRUCK_ROLL_BY_ADDRESS WHERE IS_REPEAT_ADDRESS_3PLUS"
+        )
+        repeat = repeat_rows[0] if repeat_rows else {}
+
+        weather_rows = snowflake_conn.execute_query(
+            "SELECT WEATHER_MATCH_STATUS, COUNT(*) AS N "
+            "FROM TEST_DB.ANALYTICS.VW_ONT_TRUCK_ROLL_WEATHER_ENRICHED GROUP BY WEATHER_MATCH_STATUS"
+        )
+        weather_counts = {r["WEATHER_MATCH_STATUS"]: r["N"] for r in weather_rows}
+        exact = weather_counts.get("MATCHED", 0)
+        approx = weather_counts.get("AREA_CENTROID_APPROXIMATE", 0) + weather_counts.get("CITY_CENTROID_APPROXIMATE", 0)
+        no_weather = weather_counts.get("GEOCODE_FAILED", 0) + weather_counts.get("NO_WEATHER_DATA", 0)
+
+        return {
+            "total_truck_rolls": kpi.get("TOTAL_TRUCK_ROLLS"),
+            "unique_order_numbers": kpi.get("UNIQUE_ORDER_NUMBERS"),
+            "unique_service_addresses": kpi.get("UNIQUE_SERVICE_ADDRESSES"),
+            "unique_accounts": kpi.get("UNIQUE_ACCOUNTS"),
+            "ont_replaced_count": kpi.get("ONT_REPLACED_COUNT"),
+            "wall_wart_replaced_count": kpi.get("WALL_WART_REPLACED_COUNT"),
+            "controller_replaced_count": kpi.get("CONTROLLER_REPLACED_COUNT"),
+            "avg_resolution_hours": float(kpi["AVG_RESOLUTION_HOURS"]) if kpi.get("AVG_RESOLUTION_HOURS") is not None else None,
+            "median_resolution_hours": float(kpi["MEDIAN_RESOLUTION_HOURS"]) if kpi.get("MEDIAN_RESOLUTION_HOURS") is not None else None,
+            "earliest_entered_date": str(kpi.get("EARLIEST_ENTERED_DATE")) if kpi.get("EARLIEST_ENTERED_DATE") else None,
+            "latest_entered_date": str(kpi.get("LATEST_ENTERED_DATE")) if kpi.get("LATEST_ENTERED_DATE") else None,
+            "duplicate_order_number_row_count": kpi.get("DUPLICATE_ORDER_NUMBER_ROW_COUNT"),
+            "date_anomaly_row_count": kpi.get("DATE_ANOMALY_ROW_COUNT"),
+            "repeat_addresses_3plus": repeat.get("ADDR_3PLUS", 0),
+            "truck_rolls_at_repeat_addresses_3plus": repeat.get("ROLLS_3PLUS", 0),
+            "exact_weather_count": exact,
+            "approximate_weather_count": approx,
+            "no_weather_count": no_weather,
+            "source": "TEST_DB.ANALYTICS.VW_TRUCK_ROLL_KPI_SUMMARY / VW_TRUCK_ROLL_BY_ADDRESS / VW_ONT_TRUCK_ROLL_WEATHER_ENRICHED"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching ONT truck roll KPI summary: {e}")
+        raise HTTPException(status_code=500, detail="Failed to load KPI summary")
+
+
+@app.get("/admin/reports/ont-truck-roll/solution-breakdown")
+async def get_ont_truck_roll_solution_breakdown(current_user: dict = Depends(require_admin)):
+    try:
+        if not (snowflake_conn and snowflake_conn.is_connected()):
+            raise HTTPException(status_code=503, detail="Snowflake connection unavailable")
+        rows = snowflake_conn.execute_query(
+            "SELECT * FROM TEST_DB.ANALYTICS.VW_TRUCK_ROLL_BY_SOLUTION ORDER BY TRUCK_ROLL_COUNT DESC"
+        )
+        return {"rows": rows}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching solution breakdown: {e}")
+        raise HTTPException(status_code=500, detail="Failed to load solution breakdown")
+
+
+@app.get("/admin/reports/ont-truck-roll/monthly-trend")
+async def get_ont_truck_roll_monthly_trend(current_user: dict = Depends(require_admin)):
+    try:
+        if not (snowflake_conn and snowflake_conn.is_connected()):
+            raise HTTPException(status_code=503, detail="Snowflake connection unavailable")
+        rows = snowflake_conn.execute_query(
+            "SELECT * FROM TEST_DB.ANALYTICS.VW_TRUCK_ROLL_MONTHLY_TREND ORDER BY ENTERED_YEAR_MONTH"
+        )
+        return {"rows": rows}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching monthly trend: {e}")
+        raise HTTPException(status_code=500, detail="Failed to load monthly trend")
+
+
+@app.get("/admin/reports/ont-truck-roll/service-areas")
+async def get_ont_truck_roll_service_areas(current_user: dict = Depends(require_admin)):
+    try:
+        if not (snowflake_conn and snowflake_conn.is_connected()):
+            raise HTTPException(status_code=503, detail="Snowflake connection unavailable")
+        rows = snowflake_conn.execute_query(
+            "SELECT * FROM TEST_DB.ANALYTICS.VW_TRUCK_ROLL_BY_SERVICE_AREA ORDER BY TRUCK_ROLL_COUNT DESC"
+        )
+        return {"rows": rows}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching service areas: {e}")
+        raise HTTPException(status_code=500, detail="Failed to load service areas")
+
+
+@app.get("/admin/reports/ont-truck-roll/technicians")
+async def get_ont_truck_roll_technicians(current_user: dict = Depends(require_admin)):
+    try:
+        if not (snowflake_conn and snowflake_conn.is_connected()):
+            raise HTTPException(status_code=503, detail="Snowflake connection unavailable")
+        rows = snowflake_conn.execute_query(
+            "SELECT * FROM TEST_DB.ANALYTICS.VW_TRUCK_ROLL_BY_TECHNICIAN ORDER BY TRUCK_ROLL_COUNT DESC"
+        )
+        return {"rows": rows}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching technicians: {e}")
+        raise HTTPException(status_code=500, detail="Failed to load technicians")
+
+
+@app.get("/admin/reports/ont-truck-roll/addresses")
+async def get_ont_truck_roll_addresses(
+    min_count: int = Query(1, ge=1),
+    limit: int = Query(500, le=2038),
+    current_user: dict = Depends(require_admin)
+):
+    try:
+        if not (snowflake_conn and snowflake_conn.is_connected()):
+            raise HTTPException(status_code=503, detail="Snowflake connection unavailable")
+        rows = snowflake_conn.execute_query(
+            "SELECT * FROM TEST_DB.ANALYTICS.VW_TRUCK_ROLL_BY_ADDRESS "
+            "WHERE TRUCK_ROLL_COUNT >= %s ORDER BY TRUCK_ROLL_COUNT DESC LIMIT %s",
+            (min_count, limit)
+        )
+        return {"rows": rows}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching addresses: {e}")
+        raise HTTPException(status_code=500, detail="Failed to load addresses")
+
+
+@app.get("/admin/reports/ont-truck-roll/data-quality")
+async def get_ont_truck_roll_data_quality(current_user: dict = Depends(require_admin)):
+    try:
+        if not (snowflake_conn and snowflake_conn.is_connected()):
+            raise HTTPException(status_code=503, detail="Snowflake connection unavailable")
+        issues = snowflake_conn.execute_query(
+            "SELECT * FROM TEST_DB.ANALYTICS.VW_TRUCK_ROLL_DATA_QUALITY_ISSUES"
+        )
+        kpi_rows = snowflake_conn.execute_query(
+            "SELECT TOTAL_TRUCK_ROLLS, DUPLICATE_ORDER_NUMBER_ROW_COUNT, DATE_ANOMALY_ROW_COUNT "
+            "FROM TEST_DB.ANALYTICS.VW_TRUCK_ROLL_KPI_SUMMARY"
+        )
+        kpi = kpi_rows[0] if kpi_rows else {}
+        weather_rows = snowflake_conn.execute_query(
+            "SELECT WEATHER_MATCH_STATUS, COUNT(*) AS N "
+            "FROM TEST_DB.ANALYTICS.VW_ONT_TRUCK_ROLL_WEATHER_ENRICHED GROUP BY WEATHER_MATCH_STATUS"
+        )
+        weather_counts = {r["WEATHER_MATCH_STATUS"]: r["N"] for r in weather_rows}
+        return {
+            "total_records": kpi.get("TOTAL_TRUCK_ROLLS"),
+            "duplicate_order_number_row_count": kpi.get("DUPLICATE_ORDER_NUMBER_ROW_COUNT"),
+            "date_anomaly_row_count": kpi.get("DATE_ANOMALY_ROW_COUNT"),
+            "exact_weather_count": weather_counts.get("MATCHED", 0),
+            "area_centroid_approximate_count": weather_counts.get("AREA_CENTROID_APPROXIMATE", 0),
+            "city_centroid_approximate_count": weather_counts.get("CITY_CENTROID_APPROXIMATE", 0),
+            "geocode_failed_count": weather_counts.get("GEOCODE_FAILED", 0),
+            "no_weather_data_count": weather_counts.get("NO_WEATHER_DATA", 0),
+            "issues": issues,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching data quality: {e}")
+        raise HTTPException(status_code=500, detail="Failed to load data quality")
+
+
+@app.get("/admin/reports/ont-truck-roll/weather-stats")
+async def get_ont_truck_roll_weather_stats(current_user: dict = Depends(require_admin)):
+    """Aggregate weather statistics, split by exact vs approximate location match."""
+    try:
+        if not (snowflake_conn and snowflake_conn.is_connected()):
+            raise HTTPException(status_code=503, detail="Snowflake connection unavailable")
+
+        buckets = snowflake_conn.execute_query("""
+            SELECT
+                CASE WHEN LOCATION_MATCH_TYPE = 'EXACT' THEN 'EXACT' ELSE 'APPROXIMATE' END AS BUCKET,
+                LOCATION_MATCH_TYPE,
+                COUNT(*) AS N,
+                SUM(IFF(PRECIPITATION_MM > 0, 1, 0)) AS WITH_PRECIP,
+                ROUND(AVG(TEMPERATURE_C), 1) AS AVG_TEMP_C,
+                ROUND(AVG(WIND_SPEED_KMH), 1) AS AVG_WIND_KMH,
+                SUM(IFF(IS_SEVERE_WEATHER, 1, 0)) AS SEVERE_COUNT
+            FROM TEST_DB.ANALYTICS.VW_ONT_TRUCK_ROLL_WEATHER_ENRICHED
+            GROUP BY BUCKET, LOCATION_MATCH_TYPE
+        """)
+        conditions = snowflake_conn.execute_query("""
+            SELECT
+                CASE WHEN LOCATION_MATCH_TYPE = 'EXACT' THEN 'EXACT' ELSE 'APPROXIMATE' END AS BUCKET,
+                WEATHER_CONDITION, COUNT(*) AS N
+            FROM TEST_DB.ANALYTICS.VW_ONT_TRUCK_ROLL_WEATHER_ENRICHED
+            WHERE WEATHER_CONDITION IS NOT NULL
+            GROUP BY BUCKET, WEATHER_CONDITION
+            ORDER BY BUCKET, N DESC
+        """)
+        return {"location_buckets": buckets, "weather_conditions": conditions}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching weather stats: {e}")
+        raise HTTPException(status_code=500, detail="Failed to load weather stats")
+
+
+@app.get("/admin/reports/ont-truck-roll/cortex-summaries")
+async def get_ont_truck_roll_cortex_summaries(current_user: dict = Depends(require_admin)):
+    """Latest generated summary of each type from ANALYTICS.CORTEX_SUMMARIES.
+    Never calls Cortex directly here — only reads what generate_cortex_summaries.py
+    already persisted."""
+    try:
+        if not (snowflake_conn and snowflake_conn.is_connected()):
+            raise HTTPException(status_code=503, detail="Snowflake connection unavailable")
+        rows = snowflake_conn.execute_query("""
+            SELECT SUMMARY_TYPE, SUMMARY_TEXT, MODEL_USED, GENERATION_STATUS, GENERATED_AT
+            FROM TEST_DB.ANALYTICS.CORTEX_SUMMARIES
+            QUALIFY ROW_NUMBER() OVER (PARTITION BY SUMMARY_TYPE ORDER BY GENERATED_AT DESC) = 1
+            ORDER BY SUMMARY_TYPE
+        """)
+        return {"rows": rows}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching Cortex summaries: {e}")
+        raise HTTPException(status_code=500, detail="Failed to load Cortex summaries")
+
+
+@app.get("/admin/reports/ont-truck-roll/records")
+async def get_ont_truck_roll_records(
+    limit: int = Query(50, le=500),
+    offset: int = Query(0, ge=0),
+    search: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    solution: Optional[str] = None,
+    service_city: Optional[str] = None,
+    service_revenue_area: Optional[str] = None,
+    technician: Optional[str] = None,
+    weather_match_status: Optional[str] = None,
+    location_match_type: Optional[str] = None,
+    order_status: Optional[str] = None,
+    current_user: dict = Depends(require_admin)
+):
+    """Paginated, filterable master truck-roll list — the 'Truck Roll Details' tab.
+    Does not load all 3,040 rows unnecessarily: server-side LIMIT/OFFSET + filters."""
+    try:
+        if not (snowflake_conn and snowflake_conn.is_connected()):
+            raise HTTPException(status_code=503, detail="Snowflake connection unavailable")
+
+        filters = {
+            "search": search, "date_from": date_from, "date_to": date_to,
+            "solution": solution, "service_city": service_city,
+            "service_revenue_area": service_revenue_area, "technician": technician,
+            "weather_match_status": weather_match_status, "location_match_type": location_match_type,
+            "order_status": order_status,
+        }
+        where_sql, params = _ont_truck_roll_where_clause(filters)
+
+        count_rows = snowflake_conn.execute_query(
+            f"SELECT COUNT(*) AS N FROM TEST_DB.ANALYTICS.VW_ONT_TRUCK_ROLL_WEATHER_ENRICHED {where_sql}",
+            params
+        )
+        total_count = count_rows[0]["N"] if count_rows else 0
+
+        rows = snowflake_conn.execute_query(
+            f"SELECT * FROM TEST_DB.ANALYTICS.VW_ONT_TRUCK_ROLL_WEATHER_ENRICHED {where_sql} "
+            f"ORDER BY ENTERED_DATE DESC LIMIT %s OFFSET %s",
+            params + (limit, offset)
+        )
+        return {"total_count": total_count, "limit": limit, "offset": offset, "records": rows}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching ONT truck roll records: {e}")
+        raise HTTPException(status_code=500, detail="Failed to load truck roll records")
+
+
+@app.get("/admin/reports/ont-truck-roll/records/{ont_truck_roll_id}")
+async def get_ont_truck_roll_record_detail(
+    ont_truck_roll_id: int,
+    current_user: dict = Depends(require_admin)
+):
+    """Full detail for a single truck roll, for the drill-down view."""
+    try:
+        if not (snowflake_conn and snowflake_conn.is_connected()):
+            raise HTTPException(status_code=503, detail="Snowflake connection unavailable")
+        rows = snowflake_conn.execute_query(
+            "SELECT * FROM TEST_DB.ANALYTICS.VW_ONT_TRUCK_ROLL_WEATHER_ENRICHED WHERE ONT_TRUCK_ROLL_ID = %s",
+            (ont_truck_roll_id,)
+        )
+        if not rows:
+            raise HTTPException(status_code=404, detail="Truck roll record not found")
+        return rows[0]
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching truck roll record {ont_truck_roll_id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to load truck roll record")
 
 
 # ==================== STARTUP AND SHUTDOWN EVENTS ====================
