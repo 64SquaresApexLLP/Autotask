@@ -25,6 +25,7 @@ import {
 } from 'recharts';
 import Header from '../../components/Header';
 import Sidebar from '../../components/Sidebar';
+import { formatMttrValue } from '../../components/MttrCard';
 import { adminService } from '../../services/adminService';
 
 const AdminWiderMttr = () => {
@@ -59,6 +60,16 @@ const AdminWiderMttr = () => {
   const targetMttr    = mttrData?.target_mttr_hours ?? null;
   const slaRate       = mttrData?.sla_compliance_rate ?? null;
   const auditedCount  = mttrData?.total_audited_tickets ?? null;
+
+  // MTTR display helpers — sub-hour durations render as minutes.
+  const fmtMttrText = (hours) => {
+    const f = formatMttrValue(hours);
+    return f ? `${f.value} ${f.unitLabel}` : '—';
+  };
+  const fmtMttrShort = (hours) => {
+    const f = formatMttrValue(hours);
+    return f ? f.short : '—';
+  };
 
   // Peak velocity shift = the shift with the lowest mttr_hours
   const fastestShift  = mttrData?.by_shift?.length
@@ -103,18 +114,18 @@ Generated on: ${new Date().toLocaleString()}
 =====================================================
 
 1. GLOBAL FLEET METRICS
-- Global Fleet MTTR: ${mttrData.global_mttr_hours} Hours (SLA Target: ${mttrData.target_mttr_hours} Hours)
+- Global Fleet MTTR: ${fmtMttrText(mttrData.global_mttr_hours)} (SLA Target: ${mttrData.target_mttr_hours} Hours)
 - SLA Compliance Rate: ${mttrData.sla_compliance_rate}%
 - Audited Operational Tickets: ${mttrData.total_audited_tickets}
 
 2. RESOLUTION VELOCITY BY SHIFT
-${(mttrData.by_shift || []).map(s => `  * ${s.shift}: MTTR ${s.mttr_hours}h | Resolved: ${s.tickets_resolved} | SLA: ${s.sla_rate}% (Active Techs: ${s.active_techs})`).join('\n')}
+${(mttrData.by_shift || []).map(s => `  * ${s.shift}: MTTR ${fmtMttrShort(s.mttr_hours)} | Resolved: ${s.tickets_resolved} | SLA: ${s.sla_rate}% (Active Techs: ${s.active_techs})`).join('\n')}
 
 3. RESOLUTION SPEED BY CATEGORY
-${(mttrData.by_category || []).map(c => `  * ${c.category}: MTTR ${c.mttr_hours}h | Tickets: ${c.tickets} | SLA: ${c.sla_compliance}%`).join('\n')}
+${(mttrData.by_category || []).map(c => `  * ${c.category}: MTTR ${fmtMttrShort(c.mttr_hours)} | Tickets: ${c.tickets} | SLA: ${c.sla_compliance}%`).join('\n')}
 
 4. TOP TECHNICIAN PERFORMANCE LEADERBOARD
-${(mttrData.technician_leaderboard || []).map((t, idx) => `  #${idx + 1} ${t.name} (${t.shift}): MTTR ${t.mttr_hours}h | Resolved: ${t.resolved} | SLA: ${t.sla_rate}% | Skills: ${t.skills}`).join('\n')}
+${(mttrData.technician_leaderboard || []).map((t, idx) => `  #${idx + 1} ${t.name} (${t.shift}): MTTR ${fmtMttrShort(t.mttr_hours)} | Resolved: ${t.resolved} | SLA: ${t.sla_rate}% | Skills: ${t.skills}`).join('\n')}
 =====================================================`;
 
     const blob = new Blob([reportContent], { type: 'text/plain;charset=utf-8' });
@@ -210,7 +221,7 @@ ${(mttrData.technician_leaderboard || []).map((t, idx) => `  #${idx + 1} ${t.nam
                 <div>
                   <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Fleet Global MTTR</p>
                   <h3 className="text-2xl font-bold text-gray-900 mt-1">
-                    {globalMttr !== null ? `${globalMttr} Hours` : '—'}
+                    {globalMttr !== null ? fmtMttrText(globalMttr) : '—'}
                   </h3>
                   {fasterPct !== null ? (
                     <p className={`text-xs font-medium mt-0.5 flex items-center gap-1 ${fasterPct >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
@@ -268,7 +279,7 @@ ${(mttrData.technician_leaderboard || []).map((t, idx) => `  #${idx + 1} ${t.nam
                     {fastestShift ? fastestShift.shift : '—'}
                   </h3>
                   <p className="text-xs text-amber-600 font-medium mt-0.5">
-                    {fastestShift ? `${fastestShift.mttr_hours}h Average Turnaround` : 'No shift data yet'}
+                    {fastestShift ? `${fmtMttrText(fastestShift.mttr_hours)} Average Turnaround` : 'No shift data yet'}
                   </p>
                 </div>
                 <div className="w-11 h-11 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
@@ -301,11 +312,14 @@ ${(mttrData.technician_leaderboard || []).map((t, idx) => `  #${idx + 1} ${t.nam
                       <BarChart data={priorityChartData} margin={{ top: 15, right: 15, left: -15, bottom: 5 }}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                         <XAxis dataKey="priority" axisLine={false} tickLine={false} tick={{ fill: '#475569', fontSize: 12, fontWeight: 500 }} />
-                        <YAxis axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 11 }} unit="h" />
+                        <YAxis axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 11 }} />
                         <Tooltip
                           contentStyle={{ backgroundColor: '#0f172a', borderRadius: '10px', border: 'none', color: '#fff' }}
                           itemStyle={{ color: '#fff', fontSize: '12px' }}
-                          formatter={(value, name) => [`${value} hours`, name]}
+                          formatter={(value, name) => {
+                            const fmt = formatMttrValue(Number(value));
+                            return [fmt ? `${fmt.value} ${fmt.unitLabel}` : `${value} hours`, name];
+                          }}
                         />
                         <Legend verticalAlign="top" align="right" iconType="circle" wrapperStyle={{ fontSize: '12px', paddingBottom: '10px' }} />
                         <Bar dataKey="actual" name="Actual MTTR" fill="#8b5cf6" radius={[6, 6, 0, 0]} maxBarSize={38} />
@@ -344,7 +358,7 @@ ${(mttrData.technician_leaderboard || []).map((t, idx) => `  #${idx + 1} ${t.nam
                         <div className="flex items-center justify-between">
                           <span className="font-semibold text-sm text-gray-900">{shift.shift}</span>
                           <span className="text-xs font-bold text-purple-700 bg-purple-50 px-2 py-0.5 rounded">
-                            {shift.mttr_hours}h MTTR
+                            {fmtMttrShort(shift.mttr_hours)} MTTR
                           </span>
                         </div>
                         <div className="flex items-center justify-between text-xs text-gray-500 mt-2">
@@ -408,7 +422,7 @@ ${(mttrData.technician_leaderboard || []).map((t, idx) => `  #${idx + 1} ${t.nam
                               <p className="text-[11px] text-gray-400 font-normal">{t.skills}</p>
                             </td>
                             <td className="py-3 px-3 text-gray-700">{t.shift}</td>
-                            <td className="py-3 px-3 font-bold text-purple-700">{t.mttr_hours}h</td>
+                            <td className="py-3 px-3 font-bold text-purple-700">{fmtMttrShort(t.mttr_hours)}</td>
                             <td className="py-3 px-3 text-gray-700">{t.resolved}</td>
                             <td className="py-3 px-3 font-semibold text-emerald-600">{t.sla_rate}%</td>
                           </tr>
@@ -442,7 +456,7 @@ ${(mttrData.technician_leaderboard || []).map((t, idx) => `  #${idx + 1} ${t.nam
                           </p>
                         </div>
                         <span className="px-2.5 py-1 rounded-md text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
-                          {cat.mttr_hours}h MTTR
+                          {fmtMttrShort(cat.mttr_hours)} MTTR
                         </span>
                       </div>
                     ))

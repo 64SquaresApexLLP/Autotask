@@ -32,7 +32,10 @@ const transformTicketData = (ticket) => {
   let createdAt = ticket.CREATED_AT || ticket.created_at || ticket.DATE || ticket.date;
   if (!createdAt) {
     const tNum = String(ticket.TICKETNUMBER || ticket.ticket_number || ticket.id || '');
-    if (tNum.startsWith('T20') && tNum.length >= 15) {
+    if (/^T\d{8}\./.test(tNum)) {
+      // Current format T{YYYYMMDD}.{seq} — only the creation date is encoded
+      createdAt = `${tNum.substring(1, 5)}-${tNum.substring(5, 7)}-${tNum.substring(7, 9)}T00:00:00Z`;
+    } else if (tNum.startsWith('T20') && tNum.length >= 15) {
       const yr = tNum.substring(1, 5);
       const mo = tNum.substring(5, 7);
       const dy = tNum.substring(7, 9);
@@ -50,12 +53,24 @@ const transformTicketData = (ticket) => {
     if (match) timeSpent = match[1];
   }
 
+  // Numeric technician effort in minutes (TIME_SPENT_MINUTES column, written by the backend)
+  const rawTimeSpentMinutes = ticket.TIME_SPENT_MINUTES ?? ticket.time_spent_minutes;
+  const timeSpentMinutes = (rawTimeSpentMinutes !== null && rawTimeSpentMinutes !== undefined && rawTimeSpentMinutes !== '')
+    ? Number(rawTimeSpentMinutes)
+    : null;
+
+  // Normalize priority: empty or legacy "Unknown" values fall back to Medium
+  const rawPriority = ticket.PRIORITY || ticket.priority;
+  const normalizedPriority = (rawPriority && String(rawPriority).trim().toLowerCase() !== 'unknown')
+    ? rawPriority
+    : 'Medium';
+
   return {
     id: ticket.TICKETNUMBER || ticket.ticket_number || ticket.id,
     title: ticket.TITLE || ticket.title || 'Untitled Ticket',
     description: ticket.DESCRIPTION || ticket.description || '',
     status: ticket.STATUS || ticket.status || 'Open',
-    priority: ticket.PRIORITY || ticket.priority || 'Medium',
+    priority: normalizedPriority,
     ticket_type: ticket.TICKETTYPE || ticket.ticket_type,
     ticket_category: ticket.TICKETCATEGORY || ticket.ticket_category || ticket.ISSUETYPE || ticket.issue_type,
     category: ticket.TICKETCATEGORY || ticket.ticket_category || ticket.ISSUETYPE || ticket.issue_type || ticket.TICKETTYPE || 'General',
@@ -64,6 +79,7 @@ const transformTicketData = (ticket) => {
     due_date: ticket.DUEDATETIME || ticket.due_date,
     resolution: resolutionText,
     time_spent: timeSpent,
+    time_spent_minutes: timeSpentMinutes,
     user_id: ticket.USERID || ticket.user_id,
     user_email: ticket.USEREMAIL || ticket.user_email,
     requester_name: ticket.USERID || ticket.requester_name || ticket.USEREMAIL || ticket.user_email || 'User',
@@ -77,6 +93,8 @@ const transformTicketData = (ticket) => {
     similar_tickets: ticket.similar_tickets || null,
     created_at: createdAt || new Date().toISOString(),
     resolved_at: ticket.RESOLVED_AT || ticket.resolved_at || ticket.COMPLETED_AT || ticket.completed_at || null,
+    closed_at: ticket.CLOSED_AT || ticket.closed_at || null,
+    assigned_at: ticket.ASSIGNED_AT || ticket.assigned_at || null,
     updated_at: ticket.UPDATED_AT || ticket.updated_at || new Date().toISOString()
   };
 };

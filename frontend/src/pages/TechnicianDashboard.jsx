@@ -123,49 +123,7 @@ const TechnicianDashboard = () => {
         <Header onRefresh={loadDashboardData} isRefreshing={loading} />
         <main className="p-6 md:p-8 flex-1 overflow-y-auto ">
           <div className="max-w-7xl mx-auto space-y-6">
-
-            {/* Operational Cockpit & Priority Pulse Banner */}
-            <div className="bg-gradient-to-r from-slate-900 via-blue-950 to-indigo-950 rounded-2xl p-5 lg:p-6 text-white shadow-lg border border-blue-900/40">
-              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                <div className="flex items-center space-x-3.5">
-                  <div className="w-12 h-12 rounded-xl bg-blue-500/20 border border-blue-400/30 flex items-center justify-center text-blue-400 flex-shrink-0 shadow-inner">
-                    <Wrench className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <div className="flex items-center flex-wrap gap-2">
-                      <h1 className="text-xl lg:text-2xl font-extrabold tracking-tight text-white">
-                        Technician Operations Cockpit
-                      </h1>
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                        Live Dispatch Active
-                      </span>
-                    </div>
-                    <p className="text-blue-200/80 text-sm mt-0.5">
-                      Real-time ticket triage, 1-click status progression, and active workload queue.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={() => window.location.href = '/technician/mttr-report'}
-                    className="inline-flex items-center gap-2 bg-blue-600/30 hover:bg-blue-600/50 text-blue-200 border border-blue-400/30 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all shadow-sm cursor-pointer"
-                  >
-                    <Clock className="w-4 h-4 text-blue-300" />
-                    <span>View SLA Speedometer &rarr;</span>
-                  </button>
-                  <button
-                    onClick={loadDashboardData}
-                    disabled={loading}
-                    className="inline-flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white border border-white/15 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all shadow-sm disabled:opacity-50 cursor-pointer"
-                  >
-                    <Loader2 className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-                    <span>{loading ? 'Refreshing...' : 'Refresh'}</span>
-                  </button>
-                </div>
-              </div>
-            </div>
+            
 
             {error && (
               <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg">
@@ -366,7 +324,7 @@ const TechnicianDashboard = () => {
                               </button>
                             )}
 
-                            {ticket.status?.toLowerCase() === 'in progress' && (
+                            {'in progress' === ticket.status?.toLowerCase() && ticket.time_spent && (
                               <button
                                 onClick={(e) => handleQuickStatusUpdate(e, ticket.id, 'Resolved')}
                                 disabled={updatingTicketId === ticket.id}

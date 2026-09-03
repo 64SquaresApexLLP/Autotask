@@ -83,6 +83,10 @@ function ViewTicket() {
     (currentUserEmail && (techEmail === currentUserEmail || assignedTech === currentUserEmail)) ||
     (currentFullName && (assignedTech === currentFullName || assignedTech.includes(currentFullName)))
   );
+ 
+  // Whether the ticket is currently in a resolved state (drives reopen UX)。
+  const currentStatusL = (ticket?.status || '' ).toLowerCase();
+  const wasResolvedLike = ['resolved', 'closed', 'completed', 'complete'].includes(currentStatusL);
 
   const fetchTicket = async () => {
     try {
@@ -104,6 +108,14 @@ function ViewTicket() {
     fetchTicket();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tId]);
+ 
+  // Prefill Time Spent with any previously logged effort (so re-resolving / closing
+  // after asite visit can just adjust it instead of starting blank)).
+  useEffect(() => {
+    const existing = ticket?.time_spent;
+    if (existing) setTimeSpent(existing);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ticket?.id]);
 
   // Load similar tickets once we know the current ticket's classification
   useEffect(() => {
@@ -133,7 +145,25 @@ function ViewTicket() {
       return;
     }
 
+    // Resolving/Closing requires Time Spent -- it is the source for MTTR analytics.
+
+    const RESOLVED_LIKE = ['Resolved', 'Closed'];
+    const resolvedLikeStatus = RESOLVED_LIKE.includes(newStatus);
+    const hasTimeSpent = Boolean(timeSpent && timeSpent.trim()) || Boolean(ticket?.time_spent);
+    if (resolvedLikeStatus && !hasTimeSpent) {
+      setSaveMessage({ type: 'error', text: 'Time Spent is required before marking this ticket Resolved/Closed - it powers your MTTR score.' });
+      return;
+    }
+
+    // Reopening the ticket clears resolution timestampsand logged time, so MTTR
+    // reflects the final resolution only - ask first..
+    if (wasResolvedLike && newStatus && !RESOLVED_LIKE.includes(newStatus)) {
+      const confirmed = window.confirm('Reopen this ticket? Resolution timestampsand logged time will be cleared so MTTR reflects the final resolution.');
+      if (!confirmed) return;
+    }
+
     const targetId = ticket?.id || tId;
+
     setSaving(true);
     setSaveMessage(null);
     try {
@@ -298,7 +328,7 @@ function ViewTicket() {
               )}
 
               {/* Lifecycle Quick Actions */}
-              <div className="flex flex-wrap items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg p-3">
+              {/* <div className="flex flex-wrap items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg p-3">
                 <span className="text-xs font-medium text-gray-500 mr-1">Lifecycle:</span>
                 <button
                   onClick={() => handleQuickStatus('In Progress')}
@@ -329,7 +359,7 @@ function ViewTicket() {
                     {quickActionMessage.text}
                   </span>
                 )}
-              </div>
+              </div> */}
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Left Column */}
@@ -521,8 +551,8 @@ function ViewTicket() {
                       className="w-full border border-gray-300 rounded-lg p-2 disabled:bg-gray-100 disabled:cursor-not-allowed"
                     >
                       <option value="">Select new status</option>
-                      <option value="Open">Open</option>
-                      <option value="In Progress">In Progress</option>
+                      <option value="Open">{wasResolvedLike ? 'Reopen - Open' : 'Open'}</option>
+                      <option value="In Progress">{wasResolvedLike ? 'Reopen - In Progress' : 'In Progress'}</option>
                       <option value="Resolved">Resolved</option>
                       <option value="Closed">Closed</option>
                     </select>

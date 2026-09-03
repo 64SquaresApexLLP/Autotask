@@ -21,6 +21,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import Header from '../../components/Header';
 import Sidebar from '../../components/Sidebar';
+import { formatMttrValue } from '../../components/MttrCard';
 import { adminService } from '../../services/adminService';
 import { ticketService } from '../../services/ticketService';
 import useAuth from '../../hooks/useAuth';
@@ -189,7 +190,12 @@ const AdminDashboard = () => {
               >
                 <div>
                   <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Global MTTR Speed</p>
-                  <h3 className="text-2xl font-bold text-gray-900 mt-1">{mttrData?.global_mttr_hours ?? '3.8'}h</h3>
+                  <h3 className="text-2xl font-bold text-gray-900 mt-1">
+                    {(() => {
+                      const fmt = formatMttrValue(mttrData?.global_mttr_hours);
+                      return fmt ? `${fmt.value}${fmt.unit === 'min' ? 'm' : 'h'}` : '3.8h';
+                    })()}
+                  </h3>
                  
                 </div>
                 <div className="w-12 h-12 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center group-hover:scale-110 transition-transform">

@@ -41,6 +41,13 @@ class Settings(BaseSettings):
     # LLM APIs (using standardized variable names)
     openai_api_key: str = Field(default="", env="OPENAI_API_KEY")
     groq_api_key: str = Field(default="", env="GROQ_API_KEY")
+
+    # Snowflake Cortex LLM query timeout (seconds).
+    # SNOWFLAKE.CORTEX.COMPLETE() calls routinely take 15-60s (long prompts +
+    # warehouse wake-up from auto-suspend). The previous hard-coded 15s client-side
+    # network_timeout cancelled them with error 000604 (57014)
+    # "SQL execution was cancelled by the client due to a timeout".
+    cortex_query_timeout: int = Field(default=120, env="CORTEX_QUERY_TIMEOUT")
     
     # Application Configuration (using standardized variable names)
     app_host: str = Field(default="0.0.0.0", env="APP_HOST")

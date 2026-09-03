@@ -1,5 +1,5 @@
 import React from 'react';
-import { Timer, Zap, CheckCircle2 } from 'lucide-react';
+import { Timer, Zap, CheckCircle2, Clock } from 'lucide-react';
 
 /**
  * Priority SLA standard thresholds in hours
@@ -9,6 +9,23 @@ export const SLA_TARGETS = {
   high: 8.0,
   medium: 24.0,
   low: 48.0
+};
+
+/**
+ * Formats an MTTR/turnaround value (in hours) for display.
+ * Values under one hour are shown as whole minutes (e.g. 0.5h -> 48m),
+ * anything at or above one hour is shown in hours (e.g. 1.2h).
+ * Returns null for null/undefined/empty values.
+ */
+export const formatMttrValue = (hours) => {
+  if (hours === null || hours === undefined || hours === '') return null;
+  const h = Number(hours);
+  if (Number.isNaN(h)) return null;
+  if (h < 1) {
+    const mins = Math.round(h * 60);
+    return { value: mins, unit: 'min', unitLabel: 'minutes', short: `${mins}m` };
+  }
+  return { value: h, unit: 'h', unitLabel: 'hours', short: `${h}h` };
 };
 
 /**
@@ -25,7 +42,10 @@ export const calculateTicketSla = (ticket) => {
   if (!createdAt || isNaN(createdAt.getTime())) {
     // Try parsing from ticket ID e.g. T20250804103000
     const idStr = String(ticket.id || '');
-    if (idStr.startsWith('T20') && idStr.length >= 15) {
+    if (/^T\d{8}\./.test(idStr)) {
+      // Current format T{YYYYMMDD}.{seq} — only the creation date is encoded
+      createdAt = new Date(`${idStr.substring(1, 5)}-${idStr.substring(5, 7)}-${idStr.substring(7, 9)}T00:00:00Z`);
+    } else if (idStr.startsWith('T20') && idStr.length >= 15) {
       const yr = idStr.substring(1, 5);
       const mo = idStr.substring(5, 7);
       const dy = idStr.substring(7, 9);
@@ -121,6 +141,8 @@ const MttrCard = ({ mttrData, isTechnician = true, className = '' }) => {
   const {
     overall_mttr_hours = null,
     personal_mttr_hours = null,
+    avg_work_time_hours = null,
+    work_time_logged_count = 0,
     by_priority = {}
   } = mttrData;
 
@@ -136,6 +158,12 @@ const MttrCard = ({ mttrData, isTechnician = true, className = '' }) => {
     ...priorities.map(p => Number(by_priority[p.key]?.mttr_hours ?? 0)),
     1
   );
+
+  // Pre-format MTTR values so sub-hour durations render in minutes.
+  const personalMttr = formatMttrValue(personal_mttr_hours);
+  const overallMttr = formatMttrValue(overall_mttr_hours);
+  const criticalMttr = formatMttrValue(by_priority.Critical?.mttr_hours);
+  const workTimeMttr = formatMttrValue(avg_work_time_hours);
 
   return (
     <div className={`bg-white rounded-xl shadow-sm border border-gray-200 p-5 lg:p-6 ${className}`}>
@@ -160,7 +188,7 @@ const MttrCard = ({ mttrData, isTechnician = true, className = '' }) => {
       </div>
 
       {/* Top Metrics Row */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <div className="p-4 rounded-xl bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-100">
           <div className="text-xs font-semibold uppercase tracking-wider text-blue-700 mb-1 flex items-center gap-1.5">
             <Zap className="w-3.5 h-3.5" />
@@ -168,9 +196,9 @@ const MttrCard = ({ mttrData, isTechnician = true, className = '' }) => {
           </div>
           <div className="flex items-baseline space-x-2">
             <span className="text-3xl font-extrabold text-blue-900">
-              {personal_mttr_hours !== null ? personal_mttr_hours : '—'}
+              {personalMttr ? personalMttr.value : '—'}
             </span>
-            {personal_mttr_hours !== null && <span className="text-sm font-semibold text-blue-700">hours</span>}
+            {personalMttr && <span className="text-sm font-semibold text-blue-700">{personalMttr.unitLabel}</span>}
           </div>
         </div>
 
@@ -181,9 +209,9 @@ const MttrCard = ({ mttrData, isTechnician = true, className = '' }) => {
           </div>
           <div className="flex items-baseline space-x-2">
             <span className="text-3xl font-extrabold text-emerald-900">
-              {overall_mttr_hours !== null ? overall_mttr_hours : '—'}
+              {overallMttr ? overallMttr.value : '—'}
             </span>
-            {overall_mttr_hours !== null && <span className="text-sm font-semibold text-emerald-700">hours</span>}
+            {overallMttr && <span className="text-sm font-semibold text-emerald-700">{overallMttr.unitLabel}</span>}
           </div>
           <p className="text-xs text-emerald-600/80 mt-1">
             {isTechnician ? 'Average resolution time across all tickets' : 'Average turnaround across all your tickets'}
@@ -197,10 +225,28 @@ const MttrCard = ({ mttrData, isTechnician = true, className = '' }) => {
           </div>
           <div className="flex items-baseline space-x-2">
             <span className="text-3xl font-extrabold text-purple-900">
-              {by_priority.Critical?.mttr_hours ?? '—'}
+              {criticalMttr ? criticalMttr.value : '—'}
             </span>
-            {by_priority.Critical?.mttr_hours != null && <span className="text-sm font-semibold text-purple-700">hours</span>}
+            {criticalMttr && <span className="text-sm font-semibold text-purple-700">{criticalMttr.unitLabel}</span>}
           </div>
+        </div>
+
+        {/* Avg Work Time — actual technician effort (independent of customer wait / MTTR) */}
+        <div className="p-4 rounded-xl bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-100">
+          <div className="text-xs font-semibold uppercase tracking-wider text-amber-700 mb-1 flex items-center gap-1.5">
+            <Clock className="w-3.5 h-3.5" />
+            Avg Work Time
+          </div>
+          <div className="flex items-baseline space-x-2">
+            <span className="text-3xl font-extrabold text-amber-900">
+              {workTimeMttr ? workTimeMttr.value : '—'}
+            </span>
+            {workTimeMttr && <span className="text-sm font-semibold text-amber-700">{workTimeMttr.unitLabel}</span>}
+          </div>
+          <p className="text-xs text-amber-600/80 mt-1">
+            {isTechnician ? 'Hands-on effort per ticket' : 'Technician effort per ticket'}
+            {work_time_logged_count > 0 ? ` • ${work_time_logged_count} logged` : ''}
+          </p>
         </div>
       </div>
 
@@ -262,7 +308,7 @@ const MttrCard = ({ mttrData, isTechnician = true, className = '' }) => {
                   {/* Center Text */}
                   <div className="absolute inset-0 flex flex-col items-center justify-center">
                     <span className="text-base font-extrabold text-gray-900 tracking-tight">
-                      {hours !== null ? `${hours}h` : '—'}
+                      {hours !== null ? formatMttrValue(hours)?.short : '—'}
                     </span>
                     <span className="text-[9px] font-semibold text-gray-400 uppercase">MTTR</span>
                   </div>

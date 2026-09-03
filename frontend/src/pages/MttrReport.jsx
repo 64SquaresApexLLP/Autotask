@@ -26,7 +26,7 @@ import {
 import Header from '../components/Header';
 import Sidebar from '../components/Sidebar';
 import ChatButton from '../components/ChatButton';
-import MttrCard from '../components/MttrCard';
+import MttrCard, { formatMttrValue } from '../components/MttrCard';
 import { ticketService } from '../services/ticketService.js';
 import useAuth from '../hooks/useAuth';
 
@@ -232,9 +232,28 @@ const MttrReport = () => {
               </div>
             )}
 
-            {/* USER EXPERIENCE: 4 Key Resolution & Turnaround Cards */}
+            {/* USER EXPERIENCE: 5 Key Resolution & Turnaround Cards */}
             {!isTechnician && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 animate-fadeIn">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5 animate-fadeIn">
+                {/* 0. Avg Work Time (technician effort metric) */}
+                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Avg Work Time</p>
+                    <h3 className="text-2xl font-bold text-purple-600 mt-1">
+                      {(() => {
+                        const fmt = formatMttrValue(mttrData?.avg_work_time_hours);
+                        return fmt ? `${fmt.value} ${fmt.unitLabel}` : '—';
+                      })()}
+                    </h3>
+                    <p className="text-xs text-purple-600 font-medium mt-0.5">
+                      {mttrData?.work_time_logged_count > 0 ? `${mttrData.work_time_logged_count} tickets logged` : 'Hands-on effort per ticket'}
+                    </p>
+                  </div>
+                  <div className="w-11 h-11 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center">
+                    <Clock className="w-5 h-5" />
+                  </div>
+                </div>
+
                 {/* 1. Tickets Created */}
                 <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 flex items-center justify-between">
                   <div>
@@ -359,7 +378,6 @@ const MttrReport = () => {
                         axisLine={false} 
                         tickLine={false} 
                         tick={{ fill: '#94a3b8', fontSize: 11 }}
-                        unit="h"
                       />
                       <Tooltip
                         contentStyle={{ 
@@ -370,7 +388,10 @@ const MttrReport = () => {
                           boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.2)' 
                         }}
                         itemStyle={{ color: '#fff', fontSize: '12px' }}
-                        formatter={(value, name) => [`${value} hours`, name]}
+                        formatter={(value, name) => {
+                          const fmt = formatMttrValue(Number(value));
+                          return [fmt ? `${fmt.value} ${fmt.unitLabel}` : `${value} hours`, name];
+                        }}
                       />
                       <Bar 
                         dataKey="actual" 

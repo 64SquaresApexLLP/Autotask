@@ -74,11 +74,16 @@ class LLMService:
                 if settings.snowflake_password:
                     connection_params['password'] = settings.snowflake_password
 
-            # Create connection with timeout
+            # Create connection with timeout.
+            # login_timeout only covers the login handshake (keep it fast), but
+            # network_timeout governs ALL other client-side waits — including SQL
+            # execution of SNOWFLAKE.CORTEX.COMPLETE() — so it must be large enough
+            # for LLM generation (which routinely takes 15-60s). A small value here
+            # makes the CLIENT cancel the query with 000604 (57014).
             self.snowflake_connection = snowflake.connector.connect(
                 **connection_params,
                 login_timeout=15,
-                network_timeout=15
+                network_timeout=settings.cortex_query_timeout
             )
             
             # Test Cortex availability
@@ -292,6 +297,7 @@ Response:"""
     
     def _call_cortex(self, prompt: str) -> str:
         """Call Snowflake Cortex Complete."""
+        cursor = None
         try:
             self._ensure_connection()
             
@@ -303,9 +309,11 @@ Response:"""
             # Use Cortex Complete with mistral-7b model
             query = f"SELECT SNOWFLAKE.CORTEX.COMPLETE('mistral-7b', '{escaped_prompt}') as response"
             
-            cursor.execute(query)
+            # Per-query timeout override so LLM generation gets its full budget.
+            # Without this, slow generations are cancelled by the client with
+            # 000604 (57014) "SQL execution was cancelled by the client due to a timeout".
+            cursor.execute(query, timeout=settings.cortex_query_timeout)
             result = cursor.fetchone()
-            cursor.close()
             
             if result and result[0]:
                 return result[0].strip()
@@ -315,6 +323,13 @@ Response:"""
         except Exception as e:
             logger.error(f"Cortex API error: {e}")
             raise
+        finally:
+            # Always release the cursor so failed queries don't leak sessions/cursors.
+            if cursor is not None:
+                try:
+                    cursor.close()
+                except Exception:
+                    pass
     
     def _ensure_connection(self):
         """Ensure Snowflake connection is active."""

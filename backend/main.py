@@ -16,6 +16,7 @@ from typing import Optional, List, Dict, Any
 import hashlib
 import hmac
 import json
+import re
 import requests
 from datetime import datetime, timedelta
 import asyncio
@@ -555,6 +556,15 @@ async def startup_event():
     except Exception as e:
         print(f"⚠️ Warning: Could not initialize LLM service: {e}")
 
+    # 3) Ensure MTTR timestamp columns exist on the ticket tables (idempotent migration).
+    #    RESOLVED_AT / CLOSED_AT / ASSIGNED_AT / TIME_SPENT_MINUTES power accurate
+    #    Mean-Time-To-Resolution analytics (see /analytics/mttr).
+    try:
+        if ensure_mttr_columns():
+            print("✅ MTTR columns verified (RESOLVED_AT, CLOSED_AT, ASSIGNED_AT, TIME_SPENT_MINUTES)")
+    except Exception as e:
+        print(f"⚠️ Warning: Could not ensure MTTR columns: {e}")
+
 # --- CONFIGURATION ---
 import config
 
@@ -952,7 +962,12 @@ def get_all_tickets_realtime() -> List[Dict[str, Any]]:
                         "USEREMAIL": nt.get("user_email", ""),
                         "USERID": nt.get("name", "Anonymous"),
                         "PHONENUMBER": nt.get("phone_number", ""),
-                        "CREATED_AT": created_at
+                        "CREATED_AT": created_at,
+                        "ASSIGNED_AT": nt.get("assigned_at", ""),
+                        "RESOLVED_AT": nt.get("resolved_at", ""),
+                        "CLOSED_AT": nt.get("closed_at", ""),
+                        "TIME_SPENT": nt.get("time_spent", ""),
+                        "TIME_SPENT_MINUTES": nt.get("time_spent_minutes", "")
                     }
         except Exception as e_kb:
             print(f"Notice: KB read: {e_kb}")
@@ -1036,6 +1051,14 @@ def get_mttr_analytics(
     """
     Calculate Mean Time To Resolution (MTTR) and SLA metrics
     across all tickets, by priority, and per technician/user.
+
+    MTTR prefers the technician logged hands-on effort (TIME_SPENT_MINUTES) --
+    the actual resolution time he needed on site, falling back to the wall-clock
+    wait (RESOLVED_AT - CREATED_AT) when no effort was logged. Resolved
+    tickets with neither are excluded (counted in resolved_missing_timestamp_count).
+
+    SLA compliance measures the customer wall-clock wait against priority targets;
+    Average Work Time = average(TIME_SPENT_MINUTES) --independent of wait time.
     """
     try:
         all_tickets = get_all_tickets_realtime()
@@ -1054,6 +1077,9 @@ def get_mttr_analytics(
         personal_durations = []
         priority_durations = {"Critical": [], "High": [], "Medium": [], "Low": []}
         category_durations = {}
+        work_minutes_total = []  # technician effort (minutes) per resolved ticket
+        priority_work = {"Critical": [], "High": [], "Medium": [], "Low": []}
+        resolved_missing_timestamp = 0
         sla_met_count = 0
         total_evaluated_sla = 0
         
@@ -1113,19 +1139,21 @@ def get_mttr_analytics(
                 except Exception:
                     pass
 
-            # Fallback parse from ticket number e.g. T20250804103000
+            # Fallback parse from ticket number. Handles both historical formats:
+            # T{YYYYMMDDHHMMSS} (e.g. T20250804103000) and the current
+            # T{YYYYMMDD}.{seq} (e.g. T20260903.0002 -> date at midnight).
             if not created_dt:
-                t_num = str(t.get("TICKETNUMBER") or t.get("ticket_number") or "")
-                if len(t_num) >= 15 and t_num.startswith("T20"):
-                    try:
-                        created_dt = datetime.strptime(t_num[1:15], "%Y%m%d%H%M%S")
-                    except Exception:
-                        pass
+                created_dt = parse_created_at_from_ticket_number(
+                    t.get("TICKETNUMBER") or t.get("ticket_number"))
 
             duration_hours = None
 
-            # Try parsing resolved timestamp if available
-            raw_resolved = t.get("RESOLVED_AT") or t.get("resolved_at") or t.get("COMPLETED_AT") or t.get("completed_at")
+            # Resolution timestamp (accurate MTTR source). Legacy resolved tickets
+            # without RESOLVED_AT are excluded from MTTR instead of using an
+            # inflated created→now estimate (see resolved_missing_timestamp_count).
+            raw_resolved = (t.get("RESOLVED_AT") or t.get("resolved_at")
+                            or t.get("COMPLETED_AT") or t.get("completed_at")
+                            or t.get("CLOSED_AT") or t.get("closed_at"))
             if raw_resolved and created_dt:
                 try:
                     resolved_dt = datetime.fromisoformat(str(raw_resolved).replace("Z", "+00:00").split("+")[0])
@@ -1134,29 +1162,46 @@ def get_mttr_analytics(
                         duration_hours = round(diff_h, 1)
                 except Exception:
                     pass
-            elif status_val in resolved_statuses and created_dt:
-                # No resolved timestamp but ticket IS resolved — use elapsed time from created → now
-                # This is the actual minimum time it took, better than a hardcoded estimate
-                elapsed = max(0.1, (now - created_dt).total_seconds() / 3600.0)
-                if elapsed <= 8760:  # cap at 1 year to ignore bad data
-                    duration_hours = round(elapsed, 1)
+
+            # Technician work time (effort metric — independent of MTTR wait time)
+            work_minutes = parse_time_spent_minutes(t.get("TIME_SPENT_MINUTES", t.get("time_spent_minutes")))
+            if work_minutes is None:
+                work_minutes = parse_time_spent_minutes(t.get("TIME_SPENT", t.get("time_spent")))
+            if work_minutes is None:
+                work_minutes = extract_time_spent_from_resolution(t.get("RESOLUTION") or t.get("resolution") or "")
 
             target_hours = sla_targets.get(priority_key.lower(), 24.0)
 
             if status_val in resolved_statuses:
-                if duration_hours is not None:
-                    total_durations.append(duration_hours)
-                    priority_durations[priority_key].append(duration_hours)
+                # MTTR source: technician logged hands-on effort (TIME_SPENT_MINUTES) takes precedence --
+                # it is the actual resolution time he needed on site, ignoring queue wait.
+
+                effort_hours = round(work_minutes / 60.0, 1) if work_minutes is not None else None
+                mttr_hours = effort_hours if effort_hours is not None else duration_hours
+
+                if mttr_hours is not None:
+                    total_durations.append(mttr_hours)
+                    priority_durations[priority_key].append(mttr_hours)
 
                     if category_val:
-                        category_durations.setdefault(category_val, []).append(duration_hours)
+                        category_durations.setdefault(category_val, []).append(mttr_hours)
 
-                    if duration_hours <= target_hours:
-                        sla_met_count += 1
-                    total_evaluated_sla += 1
+                    # SLA stays on customer wall-clock wait (RESOLVED_AT - CREATED_AT).
+
+                    if duration_hours is not None:
+                        if duration_hours <= target_hours:
+                            sla_met_count += 1
+                        total_evaluated_sla += 1
 
                     # Every ticket in target_tickets is already scoped to this tech/user
-                    personal_durations.append(duration_hours)
+                    personal_durations.append(mttr_hours)
+                else:
+                    # Resolved but no reliable timestamps nor logged effort -> excluded
+                    resolved_missing_timestamp += 1
+
+                if work_minutes is not None:
+                    work_minutes_total.append(work_minutes)
+                    priority_work[priority_key].append(work_minutes)
             else:
                 # Active open ticket SLA evaluation
                 total_evaluated_sla += 1
@@ -1178,12 +1223,17 @@ def get_mttr_analytics(
         overall_mttr = round(sum(total_durations) / len(total_durations), 1) if total_durations else None
         personal_mttr = round(sum(personal_durations) / len(personal_durations), 1) if personal_durations else None
 
+        avg_work_minutes = round(sum(work_minutes_total) / len(work_minutes_total), 1) if work_minutes_total else None
+        avg_work_hours = round(avg_work_minutes / 60.0, 1) if avg_work_minutes is not None else None
+
         by_priority_out = {}
         for p, durs in priority_durations.items():
+            wmins = priority_work[p]
             by_priority_out[p] = {
                 "mttr_hours": round(sum(durs) / len(durs), 1) if durs else None,
                 "sla_target_hours": sla_targets.get(p.lower(), 24.0),
-                "resolved_count": len(durs)
+                "resolved_count": len(durs),
+                "avg_work_time_hours": round((sum(wmins) / len(wmins)) / 60.0, 1) if wmins else None
             }
 
         by_category_out = {}
@@ -1200,6 +1250,10 @@ def get_mttr_analytics(
             "overall_resolved_count": len(total_durations),
             "personal_mttr_hours": personal_mttr,
             "personal_resolved_count": len(personal_durations),
+            "avg_work_time_hours": avg_work_hours,
+            "avg_work_time_minutes": avg_work_minutes,
+            "work_time_logged_count": len(work_minutes_total),
+            "resolved_missing_timestamp_count": resolved_missing_timestamp,
             "sla_compliance_rate": sla_compliance_rate,
             "sla_targets_hours": {
                 "Critical": 2.0,
@@ -2010,6 +2064,7 @@ def update_local_ticket_csv(ticket_number: str, status: Optional[str] = None, pr
             for item in kb_data:
                 nt = item.get("new_ticket", {})
                 if nt.get("ticket_number") in target_variants:
+                    old_status_l = str(nt.get("status") or "").strip().lower()
                     if status:
                         nt["status"] = status
                         if "classified_data" in nt and "STATUS" in nt["classified_data"]:
@@ -2017,6 +2072,20 @@ def update_local_ticket_csv(ticket_number: str, status: Optional[str] = None, pr
                                 nt["classified_data"]["STATUS"]["Label"] = status
                             else:
                                 nt["classified_data"]["STATUS"] = status
+                        # MTTR timestamp stamping (local fallback store)
+                        st_l = str(status).strip().lower()
+                        if st_l in ("resolved", "complete", "completed", "closed"):
+                            if not nt.get("resolved_at"):
+                                nt["resolved_at"] = datetime.now().isoformat()
+                            if st_l == "closed":
+                                nt["closed_at"] = datetime.now().isoformat()
+                        elif old_status_l in ("resolved", "complete", "completed", "closed"):
+                            # Reopened: clear resolution timestamps and logged effort so
+                            # MTTR reflects the final resolution only.
+                            nt.pop("resolved_at", None)
+                            nt.pop("closed_at", None)
+                            nt.pop("time_spent", None)
+                            nt.pop("time_spent_minutes", None)
                     if priority:
                         nt["priority"] = priority
                         if "classified_data" in nt and "PRIORITY" in nt["classified_data"]:
@@ -2030,6 +2099,9 @@ def update_local_ticket_csv(ticket_number: str, status: Optional[str] = None, pr
                         nt["technician_email"] = technician_email
                     if time_spent:
                         nt["time_spent"] = time_spent
+                        parsed_minutes = parse_time_spent_minutes(time_spent)
+                        if parsed_minutes is not None:
+                            nt["time_spent_minutes"] = parsed_minutes
                     if work_note:
                         existing_res = nt.get("resolution_note") or ""
                         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
@@ -2053,13 +2125,27 @@ def update_local_ticket_csv(ticket_number: str, status: Optional[str] = None, pr
             with open(csv_path, "r", encoding="utf-8") as f:
                 reader = csv.DictReader(f)
                 fieldnames = list(reader.fieldnames or [])
-                if "TIME_SPENT" not in fieldnames:
-                    fieldnames.append("TIME_SPENT")
+                for extra_col in ("TIME_SPENT", "CREATED_AT", "ASSIGNED_AT", "RESOLVED_AT", "CLOSED_AT", "TIME_SPENT_MINUTES"):
+                    if extra_col not in fieldnames:
+                        fieldnames.append(extra_col)
                 for row in reader:
                     current_num = row.get("TICKETNUMBER", "").strip()
                     if current_num in target_variants:
+                        old_status_l = str(row.get("STATUS") or "").strip().lower()
                         if status:
                             row["STATUS"] = status
+                            # MTTR timestamp stamping (local fallback store)
+                            st_l = str(status).strip().lower()
+                            if st_l in ("resolved", "complete", "completed", "closed"):
+                                if not row.get("RESOLVED_AT"):
+                                    row["RESOLVED_AT"] = datetime.now().isoformat()
+                                if st_l == "closed":
+                                    row["CLOSED_AT"] = datetime.now().isoformat()
+                            elif old_status_l in ("resolved", "complete", "completed", "closed"):
+                                row["RESOLVED_AT"] = ""
+                                row["CLOSED_AT"] = ""
+                                row["TIME_SPENT"] = ""
+                                row["TIME_SPENT_MINUTES"] = ""
                         if priority:
                             row["PRIORITY"] = priority
                         if technician_id:
@@ -2068,6 +2154,9 @@ def update_local_ticket_csv(ticket_number: str, status: Optional[str] = None, pr
                             row["TECHNICIANEMAIL"] = technician_email
                         if time_spent:
                             row["TIME_SPENT"] = time_spent
+                            parsed_minutes = parse_time_spent_minutes(time_spent)
+                            if parsed_minutes is not None:
+                                row["TIME_SPENT_MINUTES"] = parsed_minutes
                         if work_note:
                             existing_res = row.get("RESOLUTION") or ""
                             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
@@ -2092,6 +2181,11 @@ def sync_ticket_to_closed_table_snowflake(ticket_number: str):
     if not snowflake_conn or not snowflake_conn.is_connected():
         return
     try:
+        # Make sure the closed table has the MTTR columns before merging into them
+        try:
+            ensure_mttr_columns()
+        except Exception:
+            pass
         ticket_dot = ticket_number.strip().replace('-', '.')
         ticket_dash = ticket_number.strip().replace('.', '-')
         sync_sql = f"""
@@ -2101,7 +2195,10 @@ def sync_ticket_to_closed_table_snowflake(ticket_number: str):
                 TICKETNUMBER, TITLE, DESCRIPTION, TICKETTYPE, TICKETCATEGORY,
                 ISSUETYPE, SUBISSUETYPE, DUEDATETIME, PRIORITY, STATUS, RESOLUTION,
                 TECHNICIANEMAIL, TECHNICIAN_ID, USEREMAIL, USERID, PHONENUMBER,
-                CURRENT_TIMESTAMP AS CLOSED_AT, CURRENT_TIMESTAMP AS ORIGINAL_CREATED_AT
+                CREATED_AT AS ORIGINAL_CREATED_AT,
+                RESOLVED_AT,
+                COALESCE(CLOSED_AT, CURRENT_TIMESTAMP()) AS CLOSED_AT,
+                TIME_SPENT_MINUTES
             FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS
             WHERE (TICKETNUMBER = %s OR TICKETNUMBER = %s)
               AND LOWER(STATUS) IN ('closed', 'resolved', 'complete', 'completed')
@@ -2124,18 +2221,21 @@ def sync_ticket_to_closed_table_snowflake(ticket_number: str):
                 target.USEREMAIL = source.USEREMAIL,
                 target.USERID = source.USERID,
                 target.PHONENUMBER = source.PHONENUMBER,
-                target.CLOSED_AT = CURRENT_TIMESTAMP
+                target.ORIGINAL_CREATED_AT = source.ORIGINAL_CREATED_AT,
+                target.RESOLVED_AT = source.RESOLVED_AT,
+                target.CLOSED_AT = source.CLOSED_AT,
+                target.TIME_SPENT_MINUTES = source.TIME_SPENT_MINUTES
         WHEN NOT MATCHED THEN
             INSERT (
                 TICKETNUMBER, TITLE, DESCRIPTION, TICKETTYPE, TICKETCATEGORY,
                 ISSUETYPE, SUBISSUETYPE, DUEDATETIME, PRIORITY, STATUS, RESOLUTION,
                 TECHNICIANEMAIL, TECHNICIAN_ID, USEREMAIL, USERID, PHONENUMBER,
-                CLOSED_AT, ORIGINAL_CREATED_AT
+                CLOSED_AT, ORIGINAL_CREATED_AT, RESOLVED_AT, TIME_SPENT_MINUTES
             ) VALUES (
                 source.TICKETNUMBER, source.TITLE, source.DESCRIPTION, source.TICKETTYPE, source.TICKETCATEGORY,
                 source.ISSUETYPE, source.SUBISSUETYPE, source.DUEDATETIME, source.PRIORITY, source.STATUS, source.RESOLUTION,
                 source.TECHNICIANEMAIL, source.TECHNICIAN_ID, source.USEREMAIL, source.USERID, source.PHONENUMBER,
-                source.CLOSED_AT, source.ORIGINAL_CREATED_AT
+                source.CLOSED_AT, source.ORIGINAL_CREATED_AT, source.RESOLVED_AT, source.TIME_SPENT_MINUTES
             )
         """
         snowflake_conn.execute_query(sync_sql, (ticket_dot, ticket_dash))
@@ -2284,6 +2384,7 @@ def update_ticket_status_priority(ticket_number: str, update_request: TicketUpda
     try:
         if not update_request.status and not update_request.priority and not update_request.work_note and not update_request.time_spent:
             raise HTTPException(status_code=400, detail="At least one field (status, priority, work_note, or time_spent) must be provided")
+ 
 
         updated_fields = {}
         moved_to_closed = False
@@ -2304,9 +2405,38 @@ def update_ticket_status_priority(ticket_number: str, update_request: TicketUpda
                     technician_email = ticket_dict.get('TECHNICIANEMAIL')
                     technician_id = ticket_dict.get('TECHNICIAN_ID')
                     current_status = ticket_dict.get('STATUS')
+                    # Resolving/closing requires logged effort (Time Spent) -- the
+                    # source for MTTR analytics. Either this update provides it, or
+                    # the ticket must already have effort logged (earlier form save).
+                    new_status_l = (update_request.status or "").strip().lower()
+                    if new_status_l in ("resolved", "complete", "completed", "closed"):
+                        existing_effort = parse_time_spent_minutes(
+                            ticket_dict.get('TIME_SPENT_MINUTES') or ticket_dict.get('TIME_SPENT')
+                        )
+                        has_time_spent = bool(update_request.time_spent and str(update_request.time_spent.strip())) or existing_effort is not None
+                        if not has_time_spent:
+                            raise HTTPException(
+                                status_code=400,
+                                detail="Time Spent is required before resolving/closing a ticket (log it first in the ticket form) -- it powers the MTTR analytics."
+                            )
 
                     update_parts = []
                     update_values = []
+
+                    # Heal legacy rows: backfill CREATED_AT from the ticket number
+                    # when missing, so MTTR/SLA analytics can compute durations.
+                    if ticket_dict.get('CREATED_AT') is None:
+                        try:
+                            ensure_mttr_columns()
+                        except Exception:
+                            pass
+                        healed_created = parse_created_at_from_ticket_number(
+                            ticket_dict.get('TICKETNUMBER') or ticket_number)
+                        if healed_created:
+                            update_parts.append("CREATED_AT = %s")
+                            update_values.append(healed_created)
+                            updated_fields['created_at'] = 'backfilled from ticket number'
+
                     if update_request.status:
                         update_parts.append("STATUS = %s")
                         update_values.append(update_request.status)
@@ -2316,13 +2446,48 @@ def update_ticket_status_priority(ticket_number: str, update_request: TicketUpda
                         update_values.append(update_request.priority)
                         updated_fields['priority'] = update_request.priority
 
-                    # Handle time_spent in Snowflake
+                    # MTTR timestamp stamping: keep RESOLVED_AT / CLOSED_AT accurate for analytics.
+                    resolved_set = ('resolved', 'complete', 'completed', 'closed')
+                    if update_request.status:
+                        new_st_l = update_request.status.strip().lower()
+                        old_st_l = str(current_status or '').strip().lower()
+                        try:
+                            ensure_mttr_columns()
+                        except Exception:
+                            pass
+                        if new_st_l in resolved_set and new_st_l != 'closed':
+                            # First resolution time is preserved even if the ticket is resolved again
+                            update_parts.append("RESOLVED_AT = COALESCE(RESOLVED_AT, CURRENT_TIMESTAMP())")
+                            updated_fields['resolved_at'] = 'set (first resolution)'
+                        elif new_st_l == 'closed':
+                            update_parts.append("RESOLVED_AT = COALESCE(RESOLVED_AT, CURRENT_TIMESTAMP())")
+                            update_parts.append("CLOSED_AT = CURRENT_TIMESTAMP()")
+                            updated_fields['resolved_at'] = 'set (first resolution)'
+                            updated_fields['closed_at'] = 'set'
+                        elif old_st_l in resolved_set and new_st_l not in resolved_set:
+                            # Ticket reopened: clear timestamps AND logged effort so
+                            # MTTR reflects the final resolution only.
+                            update_parts.append("RESOLVED_AT = NULL")
+                            update_parts.append("CLOSED_AT = NULL")
+                            update_parts.append("TIME_SPENT = NULL")
+                            update_parts.append("TIME_SPENT_MINUTES = NULL")
+                            updated_fields['resolved_at'] = 'cleared (reopened)'
+                            updated_fields['closed_at'] = 'cleared (reopened)'
+                            updated_fields['time_spent'] = 'cleared (reopened)'
+                            updated_fields['time_spent_minutes'] = 'cleared (reopened)'
+
+                    # Handle time_spent in Snowflake (VARCHAR for display + numeric minutes for analytics)
                     if update_request.time_spent:
                         updated_fields['time_spent'] = update_request.time_spent
                         try:
-                            snowflake_conn.execute_query(f"ALTER TABLE {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS ADD COLUMN IF NOT EXISTS TIME_SPENT VARCHAR(255)")
+                            ensure_mttr_columns()
                             update_parts.append("TIME_SPENT = %s")
                             update_values.append(update_request.time_spent)
+                            parsed_minutes = parse_time_spent_minutes(update_request.time_spent)
+                            if parsed_minutes is not None:
+                                update_parts.append("TIME_SPENT_MINUTES = %s")
+                                update_values.append(parsed_minutes)
+                                updated_fields['time_spent_minutes'] = str(parsed_minutes)
                         except Exception as e_col:
                             print(f"Notice: Snowflake TIME_SPENT column: {e_col}")
 
@@ -2379,6 +2544,8 @@ def update_ticket_status_priority(ticket_number: str, update_request: TicketUpda
 
                     sf_updated = True
             except Exception as e_sf:
+                if isinstance(e_sf, HTTPException):
+                    raise
                 logger.error(f"Snowflake ticket update error: {e_sf}")
 
         # Synchronize local CSV as backup
@@ -2634,6 +2801,132 @@ def get_technician_id_from_email(technician_email: str) -> Optional[str]:
 
     return None
 
+def ensure_mttr_columns():
+    """
+    Ensure MTTR-related columns exist on the ticket tables (idempotent).
+
+    Adds to CTTC_MOCK_TICKETS (and mirrors on CTTC_MOCK_CLOSED_TICKETS):
+      - RESOLVED_AT        TIMESTAMP_NTZ  (first resolution timestamp — MTTR source)
+      - CLOSED_AT          TIMESTAMP_NTZ  (final close timestamp)
+      - ASSIGNED_AT        TIMESTAMP_NTZ  (assignment timestamp)
+      - TIME_SPENT_MINUTES NUMBER(8,0)    (technician effort in minutes — work-time metric)
+      - TIME_SPENT         VARCHAR(255)   (free-text display value, pre-existing)
+    """
+    if not snowflake_conn or not snowflake_conn.is_connected():
+        return False
+    statements = [
+        f"ALTER TABLE {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS ADD COLUMN IF NOT EXISTS RESOLVED_AT TIMESTAMP_NTZ",
+        f"ALTER TABLE {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS ADD COLUMN IF NOT EXISTS CLOSED_AT TIMESTAMP_NTZ",
+        f"ALTER TABLE {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS ADD COLUMN IF NOT EXISTS ASSIGNED_AT TIMESTAMP_NTZ",
+        f"ALTER TABLE {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS ADD COLUMN IF NOT EXISTS TIME_SPENT_MINUTES NUMBER(8,0)",
+        f"ALTER TABLE {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS ADD COLUMN IF NOT EXISTS TIME_SPENT VARCHAR(255)",
+        f"ALTER TABLE {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS ADD COLUMN IF NOT EXISTS CREATED_AT TIMESTAMP_NTZ",
+        f"ALTER TABLE {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_CLOSED_TICKETS ADD COLUMN IF NOT EXISTS RESOLVED_AT TIMESTAMP_NTZ",
+        f"ALTER TABLE {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_CLOSED_TICKETS ADD COLUMN IF NOT EXISTS CLOSED_AT TIMESTAMP_NTZ",
+        f"ALTER TABLE {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_CLOSED_TICKETS ADD COLUMN IF NOT EXISTS ORIGINAL_CREATED_AT TIMESTAMP_NTZ",
+        f"ALTER TABLE {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_CLOSED_TICKETS ADD COLUMN IF NOT EXISTS TIME_SPENT_MINUTES NUMBER(8,0)",
+    ]
+    try:
+        for stmt in statements:
+            try:
+                snowflake_conn.execute_query(stmt)
+            except Exception as e_stmt:
+                # e.g. CTTC_MOCK_CLOSED_TICKETS may not exist yet — non-fatal
+                print(f"Notice: MTTR column migration skipped a statement: {e_stmt}")
+        # Backfill CREATED_AT for legacy rows from the ticket-number date.
+        # Idempotent: only touches rows where CREATED_AT is still NULL.
+        backfill_statements = [
+            f"""UPDATE {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS
+                SET CREATED_AT = TO_TIMESTAMP_NTZ(SUBSTR(TICKETNUMBER, 2, 8), 'YYYYMMDD')
+                WHERE CREATED_AT IS NULL AND REGEXP_LIKE(TICKETNUMBER, '^T[0-9]{{8}}[.][0-9]+$')""",
+            f"""UPDATE {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS
+                SET CREATED_AT = TO_TIMESTAMP_NTZ(SUBSTR(TICKETNUMBER, 2, 14), 'YYYYMMDDHH24MISS')
+                WHERE CREATED_AT IS NULL AND REGEXP_LIKE(TICKETNUMBER, '^T[0-9]{{14}}$')""",
+        ]
+        for stmt in backfill_statements:
+            try:
+                snowflake_conn.execute_query(stmt)
+            except Exception as e_bf:
+                print(f"Notice: CREATED_AT backfill skipped a statement: {e_bf}")
+        return True
+    except Exception as e:
+        print(f"Error ensuring MTTR columns: {e}")
+        return False
+
+
+def parse_created_at_from_ticket_number(t_num) -> Optional[datetime]:
+    """
+    Derive the creation timestamp from a ticket number.
+
+    Handles both historical formats:
+      - T{YYYYMMDDHHMMSS}  e.g. T20250804103000 -> full timestamp
+      - T{YYYYMMDD}.{seq}  e.g. T20260903.0002  -> creation date at 00:00
+        (the current ticket-number format encodes only the creation date)
+
+    Returns None when no date can be extracted.
+    """
+    t_num = str(t_num or "").strip()
+    if not t_num.upper().startswith("T20"):
+        return None
+    digits = t_num[1:]
+    try:
+        if re.fullmatch(r"\d{14}", digits):
+            return datetime.strptime(digits, "%Y%m%d%H%M%S")
+        if re.fullmatch(r"\d{8}", digits[:8]) and len(digits) > 8:
+            return datetime.strptime(digits[:8], "%Y%m%d")
+    except Exception:
+        return None
+    return None
+
+
+def parse_time_spent_minutes(raw) -> Optional[float]:
+    """
+    Normalize a technician-entered time_spent value to minutes.
+
+    Accepts:
+      - numbers                     → treated as minutes (e.g. TIME_SPENT_MINUTES column)
+      - '45 mins', '2 hours', '1.5 hrs', '90m', '2h'
+    Returns None when the value cannot be interpreted.
+    """
+    if raw is None:
+        return None
+    if isinstance(raw, (int, float)):
+        return float(raw) if raw >= 0 else None
+    text = str(raw).strip()
+    if not text:
+        return None
+    try:
+        return float(text)  # pure number → minutes
+    except ValueError:
+        pass
+    match = re.search(r"(\d+(?:\.\d+)?)\s*(mins?|minutes?|m|hrs?|hours?|h)\b", text, re.IGNORECASE)
+    if not match:
+        return None
+    value = float(match.group(1))
+    unit = match.group(2).lower()
+    return value * 60.0 if unit.startswith("h") else value
+
+
+def extract_time_spent_from_resolution(resolution_text) -> Optional[float]:
+    """
+    Scrape the time spent recorded inside a resolution log, mirroring the
+    frontend parser: '(2 hours)', 'Time Spent: 45 mins', 'Logged Time Spent: 1.5 hrs'.
+    Returns minutes or None.
+    """
+    if not resolution_text:
+        return None
+    match = re.search(
+        r"(?:\(|Time Spent:\s*|Logged Time Spent:\s*)(\d+(?:\.\d+)?)\s*(mins?|minutes?|hrs?|hours?)\b",
+        str(resolution_text),
+        re.IGNORECASE,
+    )
+    if not match:
+        return None
+    value = float(match.group(1))
+    unit = match.group(2).lower()
+    return value * 60.0 if unit.startswith("h") else value
+
+
 def ensure_technician_id_column():
     """
     Ensure TECHNICIAN_ID column exists in both TICKETS and CTTC_MOCK_CLOSED_TICKETS tables
@@ -2804,6 +3097,14 @@ def create_ticket(request: TicketCreateRequest):
         ticket_category = extract_classified_value(classified, 'TICKETCATEGORY', 'General')
         ticket_type = extract_classified_value(classified, 'TICKETTYPE', 'Support')
         priority = extract_classified_value(classified, 'PRIORITY', request.priority or "Medium")
+
+        # Guard: never persist an unrecognized priority (e.g. an "Unknown" label
+        # produced upstream). Fall back to the user-selected priority or Medium.
+        _valid_priorities = {str(_lbl).strip().lower()
+                             for _lbl in (intake_agent.reference_data.get('priority', {}) or {}).values()}
+        if str(priority or '').strip().lower() not in _valid_priorities:
+            print(f"⚠️ Invalid classified priority '{priority}' - falling back to '{(request.priority or 'Medium').title()}'")
+            priority = (request.priority or "Medium").strip().title()
         status = extract_classified_value(classified, 'STATUS', 'Open')
         resolution = result.get('resolution_note', '')
 
@@ -2813,8 +3114,10 @@ def create_ticket(request: TicketCreateRequest):
             INSERT INTO {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS (
                 TICKETNUMBER, TITLE, DESCRIPTION, TICKETTYPE, TICKETCATEGORY,
                 ISSUETYPE, SUBISSUETYPE, DUEDATETIME, PRIORITY, STATUS, RESOLUTION,
-                TECHNICIANEMAIL, TECHNICIAN_ID, USEREMAIL, USERID, PHONENUMBER
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                TECHNICIANEMAIL, TECHNICIAN_ID, USEREMAIL, USERID, PHONENUMBER,
+                CREATED_AT, ASSIGNED_AT
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                      CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP())
         """
         params = (
             ticket_number,
@@ -2838,6 +3141,11 @@ def create_ticket(request: TicketCreateRequest):
         # Attempt Snowflake insertion if connected, otherwise save to local storage
         if snowflake_conn and snowflake_conn.is_connected():
             try:
+                # Make sure timestamp columns exist before inserting (idempotent)
+                try:
+                    ensure_mttr_columns()
+                except Exception:
+                    pass
                 snowflake_conn.execute_query(insert_query, params)
                 print(f"✅ Ticket {ticket_number} successfully inserted into database")
             except Exception as e_insert:
@@ -2849,14 +3157,26 @@ def create_ticket(request: TicketCreateRequest):
             csv_path = os.path.join(parent_dir, "data", "TICKETS.csv")
             if os.path.exists(csv_path):
                 with open(csv_path, "a", newline="", encoding="utf-8") as f_csv:
-                    writer = csv.writer(f_csv)
-                    writer.writerow([
-                        ticket_number, request.title, request.description, ticket_type,
-                        ticket_category, issue_type, sub_issue_type, request.due_date,
-                        priority, status, resolution, technician_email, technician_id or "",
-                        request.user_email or "", request.requester_name or "Anonymous",
-                        request.phone_number or ""
-                    ])
+                    _now_iso = datetime.now().isoformat()
+                    field_order = [
+                        "TICKETNUMBER", "TITLE", "DESCRIPTION", "TICKETTYPE", "TICKETCATEGORY",
+                        "ISSUETYPE", "SUBISSUETYPE", "DUEDATETIME", "PRIORITY", "STATUS", "RESOLUTION",
+                        "TECHNICIANEMAIL", "TECHNICIAN_ID", "USEREMAIL", "USERID", "PHONENUMBER",
+                        "TIME_SPENT", "CREATED_AT", "ASSIGNED_AT", "RESOLVED_AT", "CLOSED_AT", "TIME_SPENT_MINUTES"
+                    ]
+                    writer = csv.DictWriter(f_csv, fieldnames=field_order)
+                    writer.writerow({
+                        "TICKETNUMBER": ticket_number, "TITLE": request.title,
+                        "DESCRIPTION": request.description, "TICKETTYPE": ticket_type,
+                        "TICKETCATEGORY": ticket_category, "ISSUETYPE": issue_type,
+                        "SUBISSUETYPE": sub_issue_type, "DUEDATETIME": request.due_date,
+                        "PRIORITY": priority, "STATUS": status, "RESOLUTION": resolution,
+                        "TECHNICIANEMAIL": technician_email, "TECHNICIAN_ID": technician_id or "",
+                        "USEREMAIL": request.user_email or "",
+                        "USERID": request.requester_name or "Anonymous",
+                        "PHONENUMBER": request.phone_number or "",
+                        "CREATED_AT": _now_iso, "ASSIGNED_AT": _now_iso
+                    })
                 print(f"💾 Ticket {ticket_number} appended to local TICKETS.csv")
         except Exception as e_csv:
             print(f"Warning saving ticket to CSV: {e_csv}")
@@ -4434,18 +4754,15 @@ async def get_admin_wider_mttr_report():
                 created_dt = datetime.fromisoformat(str(raw_created).replace("Z", "+00:00").split("+")[0])
             except Exception:
                 pass
-        # Fallback: extract from ticket number e.g. T20250804103000
+        # Fallback: extract from ticket number (both historical formats)
         if not created_dt:
-            t_num = str(ticket.get("TICKETNUMBER") or ticket.get("ticket_number") or "")
-            if len(t_num) >= 15 and t_num.startswith("T20"):
-                try:
-                    created_dt = datetime.strptime(t_num[1:15], "%Y%m%d%H%M%S")
-                except Exception:
-                    pass
+            created_dt = parse_created_at_from_ticket_number(
+                ticket.get("TICKETNUMBER") or ticket.get("ticket_number"))
 
         # Try actual resolved timestamp
         raw_resolved = (ticket.get("RESOLVED_AT") or ticket.get("resolved_at")
-                        or ticket.get("COMPLETED_AT") or ticket.get("completed_at"))
+                        or ticket.get("COMPLETED_AT") or ticket.get("completed_at")
+                        or ticket.get("CLOSED_AT") or ticket.get("closed_at"))
         if raw_resolved and created_dt:
             try:
                 resolved_dt = datetime.fromisoformat(str(raw_resolved).replace("Z", "+00:00").split("+")[0])

@@ -46,6 +46,64 @@ class AIProcessor:
                     return value
         return "N/A"
 
+    def _resolve_reference(self, field_name: str, raw_value) -> Optional[Dict[str, str]]:
+        """
+        Resolve a raw classification value to its {"Value", "Label"} reference pair.
+
+        Similar historical tickets may store either the numeric reference Value
+        (e.g. "2") or the Label itself (e.g. "Medium") depending on how the row
+        was written, so both forms must be handled here. Previously, a Label
+        string was looked up against the Value-keyed reference map and fell
+        back to "Unknown", which then got persisted as the ticket priority and
+        rendered as UNKNOWN on every ticket page.
+
+        Returns None when the value cannot be matched to the reference data.
+        """
+        if raw_value is None:
+            return None
+        field_map = self.reference_data.get(field_name, {})
+        raw_str = str(raw_value).strip()
+        if not raw_str:
+            return None
+        # Direct hit: raw value is a numeric reference Value (e.g. "2").
+        if raw_str in field_map:
+            return {"Value": raw_str, "Label": field_map[raw_str]}
+        # Otherwise treat the raw value as (or as containing) a Label.
+        raw_lower = raw_str.lower()
+        for value, label in field_map.items():
+            if str(label).strip().lower() == raw_lower:
+                return {"Value": value, "Label": label}
+        return None
+
+    def _resolve_priority(self, ticket_data: Dict, summary: Dict) -> Dict[str, str]:
+        """
+        Resolve PRIORITY to a valid {"Value", "Label"} pair.
+
+        Resolution order:
+        1. The user-set priority from the creation form (priority_initial), so
+           an explicitly chosen priority is never lost or degraded.
+        2. The most common priority among similar historical tickets (handles
+           rows that store either the Value ID or the Label).
+        3. The "Medium" default from the reference data.
+        """
+        # 1. The user explicitly chose a priority when creating the ticket.
+        user_priority = self._resolve_reference("priority", ticket_data.get("priority", ""))
+        if user_priority:
+            return user_priority
+
+        # 2. Most common priority among similar tickets.
+        if "PRIORITY" in summary:
+            resolved = self._resolve_reference("priority", summary["PRIORITY"].get("Value"))
+            if resolved:
+                return resolved
+
+        # 3. Sensible default.
+        priority_value = self._find_value_by_label("priority", "Medium")
+        if priority_value == "N/A":
+            priority_value = "2"
+        return {"Value": priority_value,
+                "Label": self.reference_data.get("priority", {}).get(priority_value, "Medium")}
+
     def extract_metadata(self, title: str, description: str, model: str = 'llama3.1-70b') -> Optional[Dict]:
         """
         Extracts structured metadata from the ticket title and description using LLM.
@@ -175,7 +233,10 @@ class AIProcessor:
 
         summary_str = "\nMost common classification values among similar tickets:\n"
         for field, info in summary.items():
-            label = self.reference_data.get(field.lower(), {}).get(str(info["Value"]), "Unknown")
+            # Similar-ticket values may be Value IDs or Labels; resolve both so
+            # the prompt never advertises an "Unknown" label for a valid field.
+            resolved = self._resolve_reference(field.lower(), info["Value"])
+            label = resolved["Label"] if resolved else str(info["Value"])
             summary_str += f"{field}: {info['Value']} (Label: {label}, appeared {info['Count']} times)\n"
 
         classification_prompt = f"""
@@ -292,10 +353,26 @@ JSON Schema:
         # Handle case where LLM returns None
         if not classified_data:
             print("LLM classification failed, using intelligent content-based fallback classification")
-            classified_data = {}
 
             # Intelligent fallback based on ticket content analysis
             classified_data = self._intelligent_fallback_classification(new_ticket_data, extracted_metadata, summary)
+        else:
+            # Validate the LLM's PRIORITY: an empty or unrecognized label would
+            # otherwise be persisted verbatim and rendered as "UNKNOWN" on the
+            # ticket pages. Recover from the user-set priority / similar tickets.
+            llm_priority = classified_data.get("PRIORITY")
+            resolved_priority = None
+            if isinstance(llm_priority, dict):
+                resolved_priority = (self._resolve_reference("priority", llm_priority.get("Label"))
+                                     or self._resolve_reference("priority", llm_priority.get("Value")))
+            elif llm_priority is not None:
+                resolved_priority = self._resolve_reference("priority", llm_priority)
+
+            if resolved_priority:
+                classified_data["PRIORITY"] = resolved_priority
+            else:
+                print(f"LLM returned invalid PRIORITY ({llm_priority!r}); recovering via priority resolution chain")
+                classified_data["PRIORITY"] = self._resolve_priority(new_ticket_data, summary)
 
         return classified_data
 
@@ -348,9 +425,15 @@ JSON Schema:
 
         # Set other fields with intelligent defaults
         for field in ["SUBISSUETYPE", "TICKETTYPE", "PRIORITY"]:
-            if field in summary:
-                label = self.reference_data.get(field.lower(), {}).get(str(summary[field]["Value"]), "Unknown")
-                classified_data[field] = {"Value": summary[field]["Value"], "Label": label}
+            # Similar tickets may store either the numeric Value or the Label;
+            # resolve both forms so we never persist an "Unknown" label.
+            resolved = self._resolve_reference(field.lower(), summary[field]["Value"]) if field in summary else None
+
+            if field == "PRIORITY":
+                # Honor the user-set priority first, then similar tickets, then Medium.
+                classified_data[field] = self._resolve_priority(ticket_data, summary)
+            elif resolved:
+                classified_data[field] = resolved
             else:
                 # Set reasonable defaults
                 if field == "SUBISSUETYPE":
@@ -358,9 +441,6 @@ JSON Schema:
                 elif field == "TICKETTYPE":
                     type_value = self._find_value_by_label("tickettype", "Incident") or "2"
                     classified_data[field] = {"Value": type_value, "Label": "Incident"}
-                elif field == "PRIORITY":
-                    priority_value = self._find_value_by_label("priority", "Medium") or "2"
-                    classified_data[field] = {"Value": priority_value, "Label": "Medium"}
 
         # Always set STATUS to Open
         status_value = self._find_value_by_label("status", "Open") or "1"
