@@ -19,6 +19,8 @@ import AdminTechnicians from './pages/adminPages/AdminTechnicians';
 import AdminUsers from './pages/adminPages/AdminUsers';
 import AdminTicketsReport from './pages/adminPages/AdminTicketsReport';
 import AdminWiderMttr from './pages/adminPages/AdminWiderMttr';
+import AdminOntTruckRoll from './pages/adminPages/AdminOntTruckRoll';
+import AdminRoute from './components/AdminRoute';
 
 function App() {
   return (
@@ -159,58 +161,68 @@ function App() {
             }
           />
 
-          {/* Admin Routes */}
+          {/* Admin Routes — AdminRoute enforces role === 'admin' on the frontend;
+               backend endpoints all use Depends(require_admin) for real enforcement */}
           <Route
             path="/admin"
             element={
-              <ProtectedRoute>
+              <AdminRoute>
                 <AdminDashboard />
-              </ProtectedRoute>
+              </AdminRoute>
             }
           />
 
           <Route
             path="/admin/dashboard"
             element={
-              <ProtectedRoute>
+              <AdminRoute>
                 <AdminDashboard />
-              </ProtectedRoute>
+              </AdminRoute>
             }
           />
 
           <Route
             path="/admin/technicians"
             element={
-              <ProtectedRoute>
+              <AdminRoute>
                 <AdminTechnicians />
-              </ProtectedRoute>
+              </AdminRoute>
             }
           />
 
           <Route
             path="/admin/users"
             element={
-              <ProtectedRoute>
+              <AdminRoute>
                 <AdminUsers />
-              </ProtectedRoute>
+              </AdminRoute>
             }
           />
 
           <Route
             path="/admin/tickets-report"
             element={
-              <ProtectedRoute>
+              <AdminRoute>
                 <AdminTicketsReport />
-              </ProtectedRoute>
+              </AdminRoute>
             }
           />
 
           <Route
             path="/admin/wider-mttr"
             element={
-              <ProtectedRoute>
+              <AdminRoute>
                 <AdminWiderMttr />
-              </ProtectedRoute>
+              </AdminRoute>
+            }
+          />
+
+          <Route
+            path="/admin/ont-truck-roll"
+            element={
+              <AdminRoute>
+                <AdminOntTruckRoll />
+              </AdminRoute>
             }
           />
         </Routes>
