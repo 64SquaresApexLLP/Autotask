@@ -88,15 +88,34 @@ def load_full_graph(reload: bool = False) -> Dict[str, Any]:
                 "props": props
             })
 
+        # Convert deviceLinks into direct relationships so device-to-device topology is always linked
+        direct_device_rels = []
+        for idx, dl in enumerate(viz_data.get("deviceLinks", [])):
+            direct_device_rels.append({
+                "id": f"link:dev:{idx+1}",
+                "start": dl.get("a"),
+                "end": dl.get("z"),
+                "source": dl.get("a"),
+                "target": dl.get("z"),
+                "type": "CONNECTED_TO",
+                "props": dl
+            })
+
+        combined_rels = direct_device_rels + raw_relationships
+
         _CACHED_UNIFIED_GRAPH = {
             "summary": cttc_data.get("summary", {}),
             "meta": meta,
             "nodes": enriched_nodes,
-            "relationships": raw_relationships,
-            "rels": raw_relationships,
+            "relationships": combined_rels,
+            "rels": combined_rels,
             "devices": viz_data.get("devices", []),
             "deviceLinks": viz_data.get("deviceLinks", []),
             "sites": viz_sites,
+            "alarms": viz_data.get("alarms", []),
+            "pons": viz_data.get("pons", []),
+            "subs": viz_data.get("subs", []),
+            "services": viz_data.get("services", []),
             "findings": findings,
             "incident": incident
         }

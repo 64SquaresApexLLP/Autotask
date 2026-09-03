@@ -125,23 +125,44 @@ const DEFECT_PRESETS = [
   },
   {
     id: 'alarm_cluster',
-    label: 'Central Office Alarms',
-    sublabel: 'Goldthwaite Optical Cascade',
-    badge: 'High (P2)',
-    badgeColor: 'bg-orange-100 text-orange-700 border-orange-200',
+    label: 'Active Alarms (29)',
+    sublabel: 'OLT-XG-01 & 28 Downstream ONTs',
+    badge: 'Active (29)',
+    badgeColor: 'bg-amber-100 text-amber-800 border-amber-300 font-bold',
     icon: BellRing,
-    color: '#f97316',
-    filterKeywords: ['mx960-gldt', 'gldt-a', 'acx-10', 'acx-11'],
+    color: '#f59e0b',
+    filterKeywords: ['olt-xg01'],
     defectInfo: {
-      id: 'alarm:gldt-cluster',
-      title: 'Goldthwaite Central Office Active Alarm Cluster',
-      severity: 'High (P2)',
-      vendor: '400G ZR Optics / BGP Flap',
+      id: 'alarm:cluster-29',
+      title: 'OLT-XG-01 Active Alarm Cascade (29 Alarms)',
+      severity: 'Major (29 Open Alarms)',
+      vendor: 'Calix E7-2 / Uplink Port FEC Errors',
       case: 'ticket:alm-4902',
-      impact: '400G ZR optic temp reached 60.2°C causing optical power degradation and BGP neighbor flapping.',
-      affectedDevices: 'GLDT-CORE-01, GLDT-A, ACX-10',
-      impactedServices: 'Core Backbone Uplink',
-      impactedSubscribers: '74 Downstream Accounts'
+      impact: 'Uplink FEC error rate on OLT-XG-01 triggered loss of management connectivity on 28 downstream customer ONTs (ONT-00 through ONT-27).',
+      affectedDevices: '1 OLT (OLT-XG-01) + 28 Customer ONTs',
+      impactedServices: '28 Optical Subscriber Circuits',
+      impactedSubscribers: '28 Delivered Subscribers'
+    }
+  },
+  {
+    id: 'def_ont_isolated',
+    label: 'Isolated ONT Defect',
+    sublabel: 'ONT-08 → OLT-XG-02 (Client Demo)',
+    badge: 'ONT Edge Only',
+    badgeColor: 'bg-rose-100 text-rose-800 border-rose-300 font-bold',
+    icon: Activity,
+    color: '#e11d48',
+    filterKeywords: ['olt-xg02-3-08', 'olt-xg02', 'acx-07', 'mx304-07', 'mx960-gldt'],
+    defectInfo: {
+      id: 'def:ont-08-optical-drift',
+      title: 'Isolated Customer ONT Optical Loss (-31.2 dBm)',
+      severity: 'Critical (Edge Only - Client Demo)',
+      vendor: 'Calix GigaPoint GP1100X',
+      case: 'ticket:ont-4908',
+      impact: 'Severe optical attenuation on customer drop fiber to ONT-08 (-31.2 dBm). Hierarchy above (OLT-XG-02 → ACX-07 → AGG-07 → GLDT-CORE-01) is 100% healthy.',
+      affectedDevices: '1 Customer Premise ONT (ONT-08)',
+      impactedServices: '1 Customer Broadband Circuit',
+      impactedSubscribers: '1 Residential Subscriber (ACCT-20383)'
     }
   }
 ];
@@ -150,56 +171,27 @@ const DEFECT_PRESETS = [
 const AURA_TABS = [
   {
     id: 'full_access',
-    title: 'Full Access Topology',
-    query: `MATCH (d:Device)-[hp:HAS_PORT]->(p:Port)
-OPTIONAL MATCH (s:Site)-[c:CONTAINS]->(d)
-OPTIONAL MATCH (p)-[t:TERMINATES]-(l:Link)
-OPTIONAL MATCH (p)-[srv:SERVES]->(pon:PONTree)
-RETURN s, c, d, hp, p, t, l, srv, pon
-ORDER BY d.name, p.name
-LIMIT 1000;`,
-    description: 'All network devices, ports, trunk links, and PON trees'
+    title: 'Full 5-Tier Hierarchy (Core → Agg → ACX → OLT → ONT)',
+    query: `MATCH (c:Core)->(agg:Aggregation)->(acx:Access)->(olt:OLT)-[:PONT]->(ont:ONT) RETURN *;`,
+    description: 'Complete 5-Tier Network Infrastructure Hierarchy'
   },
   {
-    id: 'geo_sites',
-    title: 'Physical Sites (Geo & Altitude)',
-    query: `MATCH (s:Site)
-OPTIONAL MATCH (s)-[c:CONTAINS]->(d:Device)
-RETURN s, c, d
-ORDER BY s.alt_m DESC;`,
-    description: 'Central Office, Aggregation & Remote Hubs with GPS Coordinates, Altitude & Linked Hardware'
+    id: 'core_agg',
+    title: 'Core & Aggregation Backbone',
+    query: `MATCH (c:Core)->(agg:Aggregation) RETURN c, agg;`,
+    description: 'Backbone routers and 100G/400G transport trunks'
   },
   {
-    id: 'all_ports',
-    title: 'All port',
-    query: `MATCH (d:Device)-[hp:HAS_PORT]->(p:Port)
-RETURN d, hp, p
-LIMIT 500;`,
-    description: 'Physical interfaces attached to network nodes'
+    id: 'acx_olt',
+    title: 'Access & OLT Distribution',
+    query: `MATCH (acx:Access)->(olt:OLT) RETURN acx, olt;`,
+    description: 'Aggregation-to-access rings and OLT headends'
   },
   {
-    id: 'all_devices',
-    title: 'All devices with all ports and topology',
-    query: `MATCH (d:Device)-[hp:HAS_PORT]->(p:Port)
-OPTIONAL MATCH (p)-[t:TERMINATES]-(l:Link)
-RETURN d, hp, p, t, l;`,
-    description: 'Core, aggregation, access routers and physical links'
-  },
-  {
-    id: 'services_subscribers',
-    title: 'Services, Intended Paths & Delivered Subscribers',
-    query: `MATCH (s:Service)-[d:DELIVERED_TO]->(sub:Subscriber)
-OPTIONAL MATCH (s)-[t:TRAVERSES]->(p:Port)
-RETURN s, d, sub, t, p;`,
-    description: 'End-to-end customer circuits and delivered subscribers'
-  },
-  {
-    id: 'entire_db',
-    title: 'Entire DB',
-    query: `MATCH (n) OPTIONAL MATCH (n)-[r]->(m)
-RETURN n, r, m
-LIMIT 1200;`,
-    description: 'Full knowledge graph'
+    id: 'olt_ont',
+    title: 'PONT Links & Customer ONTs',
+    query: `MATCH (olt:OLT)-[p:PONT]->(ont:ONT) RETURN olt, p, ont;`,
+    description: 'FTTH / PON distribution and terminal edge customer premises'
   }
 ];
 
@@ -214,9 +206,9 @@ export default function NetworkOntology() {
   // Tab & Cypher Query State
   const [activeTabId, setActiveTabId] = useState('full_access');
   const [cypherQuery, setCypherQuery] = useState(AURA_TABS[0].query);
-  const [viewMode, setViewMode] = useState('graph'); // 'graph' | 'table' | 'raw'
+  const [viewMode, setViewMode] = useState('graph'); // 'graph' | 'map' | 'table'
   const [searchQuery, setSearchQuery] = useState('');
-  const [isEditorExpanded, setIsEditorExpanded] = useState(false);
+  const [showCypherConsole, setShowCypherConsole] = useState(false);
 
   // Raw Graph Data from API
   const [rawData, setRawData] = useState(null);
@@ -283,29 +275,30 @@ export default function NetworkOntology() {
       });
 
       const nSet = new Set(filteredNodes.map(n => n.id));
-      filteredRels = relationships.filter(r => nSet.has(r.source) || nSet.has(r.target));
+      filteredRels = relationships.filter(r => {
+        if (activeDefectFilter.id === 'def_ont_isolated') {
+          return nSet.has(r.source) && nSet.has(r.target);
+        }
+        return nSet.has(r.source) || nSet.has(r.target);
+      });
     }
     // 2. Tab Presets
-    else if (activeTabId === 'geo_sites') {
-      filteredNodes = nodes.filter(n => ['Site', 'Device', 'Router'].includes(n.type));
-      const nSet = new Set(filteredNodes.map(n => n.id));
-      filteredRels = relationships.filter(r => (r.type === 'CONTAINS' || r.type === 'TERMINATES') && nSet.has(r.source) && nSet.has(r.target));
-    } else if (activeTabId === 'all_ports') {
-      filteredNodes = nodes.filter(n => ['Port', 'Device'].includes(n.type));
-      const nSet = new Set(filteredNodes.map(n => n.id));
-      filteredRels = relationships.filter(r => r.type === 'HAS_PORT' && nSet.has(r.source) && nSet.has(r.target));
-    } else if (activeTabId === 'all_devices') {
-      filteredNodes = nodes.filter(n => ['Device', 'Port', 'Link', 'Site'].includes(n.type));
+    else if (activeTabId === 'core_agg') {
+      filteredNodes = nodes.filter(n => n.role === 'core' || n.role === 'aggregation' || n.props?.role === 'core' || n.props?.role === 'aggregation');
       const nSet = new Set(filteredNodes.map(n => n.id));
       filteredRels = relationships.filter(r => nSet.has(r.source) && nSet.has(r.target));
-    } else if (activeTabId === 'full_access') {
-      filteredNodes = nodes.filter(n => ['Device', 'Port', 'Link', 'PONTree', 'Site', 'Splitter'].includes(n.type));
+    } else if (activeTabId === 'acx_olt') {
+      filteredNodes = nodes.filter(n => n.role === 'access' || n.role === 'olt' || n.props?.role === 'access' || n.props?.role === 'olt');
       const nSet = new Set(filteredNodes.map(n => n.id));
       filteredRels = relationships.filter(r => nSet.has(r.source) && nSet.has(r.target));
-    } else if (activeTabId === 'services_subscribers') {
-      filteredNodes = nodes.filter(n => ['Service', 'Subscriber', 'Port', 'Device', 'ONT'].includes(n.type));
+    } else if (activeTabId === 'olt_ont') {
+      filteredNodes = nodes.filter(n => n.role === 'olt' || n.type === 'ONT' || n.role === 'ont' || n.props?.role === 'olt' || n.props?.role === 'ont');
       const nSet = new Set(filteredNodes.map(n => n.id));
       filteredRels = relationships.filter(r => nSet.has(r.source) && nSet.has(r.target));
+    } else {
+      // Default: full 5-tier hierarchy (Core -> Agg -> Access -> OLT -> ONT)
+      filteredNodes = nodes;
+      filteredRels = relationships;
     }
 
     // 3. Smart Search Query Filter
@@ -385,36 +378,99 @@ export default function NetworkOntology() {
         description: `Running release ${release || 'outdated'} instead of approved standard 22.4R3-S7.5.`
       });
     }
+    if (selectedNode.id === 'ont:olt-xg02-3-08' || (selectedNode.id?.includes('olt-xg02') && selectedNode.id?.endsWith('-08'))) {
+      issues.push({
+        severity: 'critical',
+        title: 'Customer Drop Fiber Optical Loss (-31.2 dBm)',
+        description: 'Severe optical attenuation on customer drop fiber to ONT-08 (-31.2 dBm). Hierarchy above (OLT-XG-02 → ACX-07 → AGG-07 → GLDT-CORE-01) is 100% healthy.'
+      });
+    }
 
-    // Step-by-step diagnostic breadcrumb
-    hops.push({
-      step: 1,
-      name: 'GLDT-CORE-01',
-      type: 'Core Backbone (MX960)',
-      status: 'healthy',
-      ip: '10.56.91.67'
+    // 2. Resolve the REAL 5-Tier Path: Core -> Agg -> Access -> OLT -> ONT
+    const allGraphNodes = displayedGraph.nodes || [];
+    const allGraphRels = displayedGraph.rels || [];
+    const nodeMap = new Map();
+    allGraphNodes.forEach(n => {
+      let tier = 2;
+      const role = (n.role || n.props?.role || '').toLowerCase();
+      const type = (n.type || '').toUpperCase();
+      if (role === 'core' || type === 'CORE') tier = 0;
+      else if (role === 'aggregation' || type === 'AGGREGATION') tier = 1;
+      else if (role === 'olt' || type === 'OLT') tier = 3;
+      else if (role === 'ont' || type === 'ONT') tier = 4;
+      nodeMap.set(n.id, { ...n, tier });
     });
 
-    hops.push({
-      step: 2,
-      name: selectedNode.isDevice ? selectedNode.label : 'AGG-02',
-      type: 'Aggregation Gateway (MX304)',
-      status: issues.length > 0 ? 'danger' : 'healthy',
-      ip: p.mgmt_ip || '10.54.147.244'
-    });
+    const currTierNode = nodeMap.get(selectedNode.id);
+    if (currTierNode) {
+      // Trace upstream
+      const upstreamNodes = [];
+      let up = currTierNode;
+      while (up && up.tier > 0) {
+        const link = allGraphRels.find(r => {
+          const s = typeof r.source === 'object' ? r.source.id : r.source;
+          const t = typeof r.target === 'object' ? r.target.id : r.target;
+          if (s === up.id) {
+            const tgt = nodeMap.get(t);
+            return tgt && tgt.tier === up.tier - 1;
+          }
+          if (t === up.id) {
+            const src = nodeMap.get(s);
+            return src && src.tier === up.tier - 1;
+          }
+          return false;
+        });
+        if (!link) break;
+        const s = typeof link.source === 'object' ? link.source.id : link.source;
+        const t = typeof link.target === 'object' ? link.target.id : link.target;
+        const parentId = s === up.id ? t : s;
+        up = nodeMap.get(parentId);
+        if (up) upstreamNodes.unshift(up);
+      }
 
-    if (selectedNode.type === 'Port') {
-      hops.push({
-        step: 3,
-        name: selectedNode.label,
-        type: 'Physical Port Interface',
-        status: p.oper_state === 'up' ? 'healthy' : 'warning',
-        ip: `${p.speed_gbps || 100} Gbps`
+      // Trace downstream
+      const downstreamNodes = [];
+      let down = currTierNode;
+      while (down && down.tier < 4) {
+        const link = allGraphRels.find(r => {
+          const s = typeof r.source === 'object' ? r.source.id : r.source;
+          const t = typeof r.target === 'object' ? r.target.id : r.target;
+          if (s === down.id) {
+            const tgt = nodeMap.get(t);
+            return tgt && tgt.tier === down.tier + 1;
+          }
+          if (t === down.id) {
+            const src = nodeMap.get(s);
+            return src && src.tier === down.tier + 1;
+          }
+          return false;
+        });
+        if (!link) break;
+        const s = typeof link.source === 'object' ? link.source.id : link.source;
+        const t = typeof link.target === 'object' ? link.target.id : link.target;
+        const childId = s === down.id ? t : s;
+        down = nodeMap.get(childId);
+        if (down) downstreamNodes.push(down);
+      }
+
+      const fullChain = [...upstreamNodes, currTierNode, ...downstreamNodes];
+      
+      fullChain.forEach((nodeOnPath, idx) => {
+        const tierNames = ['Core Router', 'Aggregation Gateway', 'Access Switch', 'Optical Line Terminal (OLT)', 'Customer Terminal (ONT)'];
+        const np = nodeOnPath.props || {};
+        hops.push({
+          step: idx + 1,
+          name: nodeOnPath.name || nodeOnPath.label || nodeOnPath.id.replace('dev:', '').toUpperCase(),
+          type: tierNames[nodeOnPath.tier] || 'Network Element',
+          status: nodeOnPath.hasAlarm || np.hasAlarm ? 'danger' : (nodeOnPath.outlier ? 'warning' : 'healthy'),
+          ip: np.mgmt_ip || np.ip || (nodeOnPath.tier === 4 ? (np.model || 'GP1100X') : '10.5x.xx.xx'),
+          tier: nodeOnPath.tier
+        });
       });
     }
 
     return { issues, hops };
-  }, [selectedNode]);
+  }, [selectedNode, displayedGraph]);
 
   // Execute / Refresh Cypher Query Action
   const handleRunQuery = () => {
@@ -429,51 +485,113 @@ export default function NetworkOntology() {
       <div className="flex-1 flex flex-col overflow-hidden">
         <Header onRefresh={() => loadData(true)} isRefreshing={loading} />
 
-        <main className="flex-1 flex flex-col overflow-hidden p-6 space-y-4">
-          {/* Top Page Header & Welcome Banner (Matches App Design System) */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 flex items-center justify-between shrink-0">
-            <div className="flex items-center space-x-3">
-              <div className="p-2.5 bg-[#E9F1FA] text-[#00ABE4] rounded-xl">
-                <Network className="w-6 h-6" />
+        <main className="flex-1 flex flex-col overflow-hidden p-4 space-y-3">
+          {/* Top Unified Header & Actions */}
+          <div className="bg-white rounded-xl shadow-xs border border-gray-200 px-4 py-3 flex items-center justify-between gap-4 shrink-0">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-[#E9F1FA] text-[#00ABE4] rounded-lg">
+                <Network className="w-5 h-5" />
               </div>
               <div>
-                <h1 className="text-xl font-bold text-gray-800">Network Ontology &amp; Topology Explorer</h1>
-                <p className="text-xs text-gray-500">Interactive force-directed graph with root-cause defect analysis and blast radius tracing</p>
+                <h1 className="text-base font-bold text-gray-900 leading-tight">Network Ontology Explorer</h1>
+                <p className="text-[11px] text-gray-500">Interactive topology &bull; Root-cause defect analysis &bull; Blast radius tracing</p>
               </div>
             </div>
 
-            <div className="flex items-center space-x-3">
-              <button
-                onClick={() => loadData(true)}
-                disabled={loading}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 rounded-lg text-xs font-semibold shadow-xs transition cursor-pointer"
-                title="Force Reload Ontology Dataset"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 text-[#00ABE4] ${loading ? 'animate-spin' : ''}`} />
-                <span>Reload Ontology</span>
-              </button>
-
-              <div className="flex items-center space-x-2 bg-[#E9F1FA] px-3.5 py-1.5 rounded-lg border border-[#00ABE4]/20">
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                <span className="text-xs font-semibold text-gray-800">
-                  Technician: <strong className="text-[#00ABE4]">{user?.full_name || user?.username || 'Active Technician'}</strong>
-                </span>
-                {user?.role && (
-                  <span className="text-[10px] bg-white text-gray-600 px-1.5 py-0.5 rounded uppercase font-bold border border-gray-200">
-                    {user.role}
-                  </span>
-                )}
+            <div className="flex items-center gap-3 shrink-0">
+              {/* Search Bar */}
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-2.5" />
+                <input
+                  type="text"
+                  placeholder="Search device, IP, defect..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-8 pr-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs text-gray-800 focus:outline-none focus:border-[#00ABE4] focus:ring-1 focus:ring-[#00ABE4] w-52 focus:w-64 transition-all placeholder:text-gray-400"
+                />
               </div>
+
+              {/* View Switcher: Graph | Google Map | Table */}
+              <div className="flex items-center bg-gray-100 p-1 rounded-lg border border-gray-200 text-xs font-semibold">
+                <button
+                  onClick={() => setViewMode('graph')}
+                  className={`px-3 py-1 rounded-md transition cursor-pointer flex items-center gap-1.5 ${
+                    viewMode === 'graph' ? 'bg-white text-gray-900 shadow-xs font-bold' : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  <Workflow className="w-3.5 h-3.5 text-[#00ABE4]" />
+                  <span>Graph</span>
+                </button>
+                <button
+                  onClick={() => setViewMode('map')}
+                  className={`px-3 py-1 rounded-md transition flex items-center gap-1.5 cursor-pointer ${
+                    viewMode === 'map' ? 'bg-[#00ABE4] text-white shadow-xs font-bold' : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  <Globe className="w-3.5 h-3.5" />
+                  <span>Google Map</span>
+                </button>
+                <button
+                  onClick={() => setViewMode('table')}
+                  className={`px-3 py-1 rounded-md transition cursor-pointer flex items-center gap-1.5 ${
+                    viewMode === 'table' ? 'bg-white text-gray-900 shadow-xs font-bold' : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  <Table className="w-3.5 h-3.5 text-gray-500" />
+                  <span>Table</span>
+                </button>
+              </div>
+
+              {/* Optional Advanced Cypher Console Toggle */}
+              <button
+                onClick={() => setShowCypherConsole(!showCypherConsole)}
+                className={`p-1.5 rounded-lg border text-xs transition cursor-pointer ${
+                  showCypherConsole
+                    ? 'bg-slate-800 text-white border-slate-700'
+                    : 'bg-gray-50 text-gray-500 hover:text-gray-700 border-gray-200'
+                }`}
+                title={showCypherConsole ? 'Hide Cypher Console' : 'Show Advanced Cypher Console'}
+              >
+                <Terminal className="w-4 h-4" />
+              </button>
             </div>
           </div>
 
-          {/* 1-CLICK DEFECT & INCIDENT RADAR PILLS (Styled to Match App Theme) */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-3 flex items-center justify-between gap-3 shrink-0 overflow-x-auto">
-            <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1.5 text-xs font-bold text-gray-700 uppercase tracking-wider mr-1">
-                <AlertTriangle className="w-4 h-4 text-amber-500" />
-                <span>Defect Radar:</span>
-              </div>
+          {/* Filter Strip: Topology Preset Dropdown + Defect Radar Chips */}
+          <div className="bg-white rounded-xl shadow-xs border border-gray-200 px-4 py-2 flex items-center justify-between gap-4 shrink-0 overflow-x-auto">
+            {/* Left: Topology Preset Select */}
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="text-xs font-bold text-gray-600 uppercase tracking-wider flex items-center gap-1">
+                <Layers className="w-3.5 h-3.5 text-[#00ABE4]" />
+                Topology:
+              </span>
+              <select
+                value={activeTabId}
+                onChange={(e) => {
+                  const selected = AURA_TABS.find(t => t.id === e.target.value);
+                  if (selected) {
+                    setActiveDefectFilter(null);
+                    setActiveTabId(selected.id);
+                    setCypherQuery(selected.query);
+                    setPhysicsEnabled(true);
+                  }
+                }}
+                className="bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-gray-800 focus:outline-none focus:border-[#00ABE4] cursor-pointer"
+              >
+                {AURA_TABS.map(tab => (
+                  <option key={tab.id} value={tab.id}>
+                    {tab.title}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Right: 1-Click Defect & SPOF Badges */}
+            <div className="flex items-center gap-2 overflow-x-auto py-0.5">
+              <span className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1 mr-1">
+                <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
+                Defects:
+              </span>
 
               {DEFECT_PRESETS.map((preset) => {
                 const Icon = preset.icon;
@@ -491,27 +609,17 @@ export default function NetworkOntology() {
                       setPhysicsEnabled(true);
                       if (fitRef.current) fitRef.current();
                     }}
-                    className={`px-3 py-2 rounded-xl text-xs font-medium flex items-center gap-2.5 transition cursor-pointer border ${
+                    className={`px-2.5 py-1 rounded-lg text-xs font-medium flex items-center gap-1.5 transition cursor-pointer border shrink-0 ${
                       isActive
-                        ? 'bg-red-50 border-red-300 text-red-800 shadow-sm ring-2 ring-red-400/40'
+                        ? 'bg-red-50 border-red-300 text-red-800 font-bold shadow-xs ring-1 ring-red-400'
                         : 'bg-gray-50 border-gray-200 hover:bg-[#E9F1FA] hover:border-[#00ABE4] text-gray-700'
                     }`}
                   >
-                    <div
-                      className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
-                      style={{ backgroundColor: `${preset.color}18`, color: preset.color }}
-                    >
-                      <Icon className="w-4 h-4" />
-                    </div>
-                    <div className="text-left leading-tight">
-                      <div className="font-bold text-gray-800 flex items-center gap-1.5">
-                        <span>{preset.label}</span>
-                        <span className={`text-[9.5px] px-1.5 py-0.2 rounded border font-semibold ${preset.badgeColor}`}>
-                          {preset.badge}
-                        </span>
-                      </div>
-                      <div className="text-[11px] text-gray-500 mt-0.5">{preset.sublabel}</div>
-                    </div>
+                    <Icon className="w-3.5 h-3.5" style={{ color: preset.color }} />
+                    <span>{preset.label}</span>
+                    <span className={`text-[9.5px] px-1.5 py-0.2 rounded font-semibold ${preset.badgeColor}`}>
+                      {preset.badge}
+                    </span>
                   </button>
                 );
               })}
@@ -522,108 +630,18 @@ export default function NetworkOntology() {
                     setActiveDefectFilter(null);
                     if (fitRef.current) fitRef.current();
                   }}
-                  className="px-3 py-1.5 text-xs font-bold text-gray-700 hover:text-gray-900 bg-gray-100 hover:bg-gray-200 rounded-lg flex items-center gap-1 border border-gray-300 transition cursor-pointer"
+                  className="px-2 py-1 text-xs font-semibold text-gray-500 hover:text-gray-800 bg-gray-100 hover:bg-gray-200 rounded-lg flex items-center gap-1 transition cursor-pointer border border-gray-200"
+                  title="Clear defect filter"
                 >
-                  <X className="w-3.5 h-3.5" />
-                  <span>Show All</span>
+                  <X className="w-3 h-3" />
+                  <span>Clear</span>
                 </button>
               )}
-            </div>
-
-            {/* Top Page Action Buttons & Smart Search Bar */}
-            <div className="flex items-center gap-2 shrink-0">
-              <button
-                onClick={() => setViewMode(viewMode === 'map' ? 'graph' : 'map')}
-                className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 shadow-xs cursor-pointer border ${
-                  viewMode === 'map'
-                    ? 'bg-blue-600 text-white border-blue-600 ring-2 ring-blue-400/40 shadow-md'
-                    : 'bg-gradient-to-r from-blue-50 to-indigo-50 hover:from-blue-100 hover:to-indigo-100 text-blue-800 border-blue-300'
-                }`}
-              >
-                <Globe className={`w-4 h-4 ${viewMode === 'map' ? 'text-white' : 'text-blue-600'}`} />
-                <span>{viewMode === 'map' ? 'Switch to Graph View' : 'View on Google Map'}</span>
-              </button>
-
-              <div className="relative shrink-0">
-                <Search className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
-                <input
-                  type="text"
-                  placeholder="Search device, IP, or type 'defect' / 'spof'..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-9 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-800 focus:outline-none focus:border-[#00ABE4] focus:ring-1 focus:ring-[#00ABE4] w-56 focus:w-72 transition-all placeholder:text-gray-400"
-                />
-              </div>
             </div>
           </div>
 
           {/* Main Visualizer Card Frame */}
           <div className="flex-1 bg-white rounded-2xl shadow-sm border border-gray-200 flex flex-col overflow-hidden">
-            {/* Top Toolbar Strip: Tabs + View Switcher */}
-            <div className="px-4 py-2.5 border-b border-gray-200 flex items-center justify-between gap-4 bg-gray-50/90 text-xs shrink-0 select-none">
-              {/* Query Tabs with horizontal scroll */}
-              <div className="flex items-center gap-1.5 overflow-x-auto min-w-0 flex-1 py-0.5">
-                {AURA_TABS.map(tab => (
-                  <button
-                    key={tab.id}
-                    onClick={() => {
-                      setActiveDefectFilter(null);
-                      setActiveTabId(tab.id);
-                      setCypherQuery(tab.query);
-                      setPhysicsEnabled(true);
-                    }}
-                    className={`px-3 py-1.5 rounded-lg font-semibold text-xs flex items-center gap-2 transition cursor-pointer border shrink-0 ${
-                      activeTabId === tab.id && !activeDefectFilter
-                        ? 'bg-[#00ABE4] text-white border-[#00ABE4] shadow-sm'
-                        : 'bg-white text-gray-600 hover:bg-[#E9F1FA] hover:text-[#00ABE4] border-gray-200'
-                    }`}
-                  >
-                    <Workflow className="w-3.5 h-3.5" />
-                    <span>{tab.title}</span>
-                  </button>
-                ))}
-              </div>
-
-              {/* View Switchers (Graph | Google Map | Table | Raw) - Fixed shrink-0 so it is NEVER hidden */}
-              <div className="flex items-center gap-2 shrink-0">
-                <div className="flex items-center bg-gray-200/90 p-1 rounded-xl border border-gray-300 shadow-xs text-xs font-bold">
-                  <button
-                    onClick={() => setViewMode('graph')}
-                    className={`px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
-                      viewMode === 'graph' ? 'bg-white text-gray-900 shadow-xs' : 'text-gray-600 hover:text-gray-900'
-                    }`}
-                  >
-                    Graph
-                  </button>
-                  <button
-                    onClick={() => setViewMode('map')}
-                    className={`px-3 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
-                      viewMode === 'map' ? 'bg-blue-600 text-white shadow-xs' : 'text-blue-700 hover:bg-blue-50'
-                    }`}
-                  >
-                    <Globe className="w-3.5 h-3.5" />
-                    <span>Google Map</span>
-                  </button>
-                  <button
-                    onClick={() => setViewMode('table')}
-                    className={`px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
-                      viewMode === 'table' ? 'bg-white text-gray-900 shadow-xs' : 'text-gray-600 hover:text-gray-900'
-                    }`}
-                  >
-                    Table
-                  </button>
-                  <button
-                    onClick={() => setViewMode('raw')}
-                    className={`px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
-                      viewMode === 'raw' ? 'bg-white text-gray-900 shadow-xs' : 'text-gray-600 hover:text-gray-900'
-                    }`}
-                  >
-                    Raw
-                  </button>
-                </div>
-              </div>
-            </div>
-
             {/* Visual Canvas + Inspector Panel Split */}
             <div className="flex-1 flex overflow-hidden relative">
               {/* Canvas View */}
@@ -672,40 +690,50 @@ export default function NetworkOntology() {
                     />
                   )}
 
-                  {/* Dynamic Statistics Bar (Top-left of canvas) */}
+                  {/* Dynamic 5-Tier Hierarchy Statistics Bar (Top-left of canvas) */}
                   <div className="absolute top-3 left-4 bg-slate-900/90 border border-slate-800 text-slate-300 px-3 py-1.5 rounded-xl text-xs font-mono backdrop-blur-md shadow-2xl flex items-center gap-3 flex-wrap pointer-events-auto z-10">
-                    {Object.entries(displayedGraph.stats.nodeTypeCounts || {}).map(([type, count]) => (
-                      <span key={type} className="flex items-center gap-1.5">
-                        <span
-                          className="w-2.5 h-2.5 rounded-full"
-                          style={{ backgroundColor: getNodeTypeColor(type) }}
-                        ></span>
-                        <span className="text-slate-400">{type}:</span>
-                        <strong className="text-white">{count}</strong>
-                      </span>
-                    ))}
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-2.5 h-2.5 rounded-full bg-[#8b5cf6]"></span>
+                      <span className="text-slate-400">Core:</span>
+                      <strong className="text-white">{displayedGraph.nodes.filter(n => n.role === 'core' || n.props?.role === 'core').length}</strong>
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-2.5 h-2.5 rounded-full bg-[#0ea5e9]"></span>
+                      <span className="text-slate-400">Agg:</span>
+                      <strong className="text-white">{displayedGraph.nodes.filter(n => n.role === 'aggregation' || n.props?.role === 'aggregation').length}</strong>
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-2.5 h-2.5 rounded-full bg-[#64748b]"></span>
+                      <span className="text-slate-400">ACX:</span>
+                      <strong className="text-white">{displayedGraph.nodes.filter(n => n.role === 'access' || n.props?.role === 'access').length}</strong>
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-2.5 h-2.5 rounded-full bg-[#22c55e]"></span>
+                      <span className="text-slate-400">OLT:</span>
+                      <strong className="text-white">{displayedGraph.nodes.filter(n => n.role === 'olt' || n.props?.role === 'olt').length}</strong>
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-2.5 h-2.5 rounded-full bg-[#f59e0b]"></span>
+                      <span className="text-slate-400">ONT:</span>
+                      <strong className="text-white">{displayedGraph.nodes.filter(n => n.type === 'ONT' || n.role === 'ont' || n.props?.role === 'ont').length}</strong>
+                    </span>
+                    <span className="text-slate-600">|</span>
+                    <button
+                      onClick={() => {
+                        const alm = DEFECT_PRESETS.find(p => p.id === 'alarm_cluster');
+                        if (alm) setActiveDefectFilter(alm);
+                      }}
+                      className="flex items-center gap-1 hover:text-amber-300 transition cursor-pointer text-amber-400 font-bold"
+                      title="Click to view all 29 active alarms on the topology"
+                    >
+                      <BellRing className="w-3 h-3 text-amber-400 animate-pulse" />
+                      <span>Alarms: <strong>29</strong></span>
+                    </button>
                     <span className="text-slate-600">|</span>
                     <span>⚡ Links: <strong className="text-slate-200">{displayedGraph.stats.totalRelationships}</strong></span>
                     <span className="text-slate-600">|</span>
                     <span className="text-emerald-400">{displayedGraph.stats.totalNodes} nodes ({queryExecutionTime}s)</span>
                   </div>
-
-                  {/* Quick Action to open Google Map when on Geo Sites tab */}
-                  {activeTabId === 'geo_sites' && (
-                    <div className="absolute top-14 left-4 bg-slate-900/90 border border-blue-500/60 text-white px-3 py-1.5 rounded-xl text-xs shadow-2xl backdrop-blur-md flex items-center gap-2.5 z-10 animate-fadeIn pointer-events-auto">
-                      <span className="flex items-center gap-1.5 font-bold text-blue-300">
-                        <MapPin className="w-3.5 h-3.5 text-blue-400" />
-                        10 Central Texas Physical Sites
-                      </span>
-                      <button
-                        onClick={() => setViewMode('map')}
-                        className="px-2.5 py-1 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-[11px] font-extrabold shadow-sm transition flex items-center gap-1 cursor-pointer"
-                      >
-                        <Globe className="w-3 h-3" />
-                        <span>Launch Google Map &rarr;</span>
-                      </button>
-                    </div>
-                  )}
                 </div>
               )}
 
@@ -714,12 +742,20 @@ export default function NetworkOntology() {
                 <div className="flex-1 relative overflow-hidden flex flex-col bg-slate-950">
                   <GoogleNetworkMap
                     selectedSiteId={selectedNode?.type === 'Site' ? selectedNode.id : null}
+                    selectedNode={selectedNode}
+                    activeTabId={activeTabId}
+                    activeDefectFilter={activeDefectFilter}
+                    searchQuery={searchQuery}
+                    displayedGraph={displayedGraph}
                     onSelectSite={(site) => {
                       const matchingNode = displayedGraph.nodes.find(n => n.id === site.id);
-                      if (matchingNode) {
-                        setSelectedNode(matchingNode);
-                        setIsInspectorOpen(true);
-                      }
+                      setSelectedNode(matchingNode || site);
+                      setIsInspectorOpen(true);
+                    }}
+                    onSelectNode={(node) => {
+                      const matchingNode = displayedGraph.nodes.find(n => n.id === node.id);
+                      setSelectedNode(matchingNode || node);
+                      setIsInspectorOpen(true);
                     }}
                   />
                 </div>
@@ -860,6 +896,56 @@ export default function NetworkOntology() {
                           </div>
                           <h3 className="text-base font-bold text-gray-900">{selectedNode.label}</h3>
                         </div>
+
+                        {/* End-to-End Hierarchy Path Banner */}
+                        <div className="bg-slate-900 text-white p-3 rounded-xl text-xs space-y-2 shadow-sm">
+                          <div className="text-[10px] font-bold uppercase tracking-wider text-cyan-400 flex items-center justify-between">
+                            <span className="flex items-center gap-1.5">
+                              <Workflow className="w-3.5 h-3.5 text-cyan-400" />
+                              End-to-End Connection Chain
+                            </span>
+                            <span className="text-[9.5px] text-slate-400 font-mono">5-Tier Topology</span>
+                          </div>
+                          <div className="flex items-center gap-1 font-mono text-[10px] overflow-x-auto pb-0.5">
+                            <span className="px-1.5 py-0.5 rounded bg-purple-950 text-purple-300 border border-purple-700">Core</span>
+                            <span className="text-slate-500">&rarr;</span>
+                            <span className="px-1.5 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-700">Agg</span>
+                            <span className="text-slate-500">&rarr;</span>
+                            <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-600">Access</span>
+                            <span className="text-slate-500">&rarr;</span>
+                            <span className="px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-700">OLT</span>
+                            <span className="text-slate-500">&rarr;</span>
+                            <span className="px-1.5 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-600 font-bold">ONT</span>
+                          </div>
+                        </div>
+
+                        {/* Active Alarms Card for Selected Node */}
+                        {((selectedNode.alarms && selectedNode.alarms.length > 0) || (selectedNode.props?.alarms && selectedNode.props?.alarms.length > 0)) && (
+                          <div className="bg-amber-50 border border-amber-300 p-3.5 rounded-xl space-y-2 text-amber-950 animate-fadeIn">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 bg-amber-200 text-amber-900 rounded font-mono flex items-center gap-1.5">
+                                <BellRing className="w-3.5 h-3.5 text-amber-700" />
+                                Active Alarms ({selectedNode.alarms?.length || selectedNode.props?.alarms?.length})
+                              </span>
+                              <span className="text-[10px] font-mono text-red-600 font-bold">Hardware Alert</span>
+                            </div>
+                            <div className="space-y-1.5 pt-1">
+                              {(selectedNode.alarms || selectedNode.props?.alarms || []).map((alm, aIdx) => (
+                                <div key={aIdx} className="bg-white/95 p-2 rounded-lg border border-amber-200 text-xs shadow-xs space-y-1">
+                                  <div className="flex justify-between items-center">
+                                    <span className="font-bold text-red-700 font-mono text-[11px]">{alm.type}</span>
+                                    <span className="text-[9px] px-1.5 py-0.2 rounded bg-red-100 text-red-700 uppercase font-bold border border-red-200">{alm.severity}</span>
+                                  </div>
+                                  <p className="text-[11.5px] text-gray-800 leading-snug">{alm.text}</p>
+                                  <div className="text-[10px] text-gray-400 font-mono pt-0.5 flex justify-between">
+                                    <span>Target: {alm.target || selectedNode.id}</span>
+                                    <span>{alm.raised_at}</span>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
 
                         {/* Issue Localization Alert Banner */}
                         {nodeFlowAnalysis?.issues && nodeFlowAnalysis.issues.length > 0 ? (
@@ -1021,51 +1107,106 @@ export default function NetworkOntology() {
                           <span>Create Ticket for this Fault Node</span>
                         </button>
                       </div>
-                    ) : null}
+                    ) : (
+                      <div className="space-y-6 px-2 py-4">
+                        <div className="space-y-1">
+                          <h2 className="text-2xl font-bold text-gray-800">Nothing selected</h2>
+                          <p className="text-xs text-gray-400 font-mono tracking-tight">click a node, or open Findings</p>
+                        </div>
+                        
+                        <div className="text-[11.5px] leading-[1.6] text-gray-600 space-y-4 pr-2">
+                          <p>
+                            This is the CTTC ontology rendered as a graph. Device models,
+                            counts and software releases follow the 18 May assessment;
+                            <span className="font-bold text-gray-800"> everything below device level is synthetic placeholder data
+                            shaped to match, so the queries have something to return.</span>
+                          </p>
+                          <p>
+                            Press <span className="font-bold text-gray-800">Map</span> to place the network on San Angelo, Texas. Site
+                            coordinates are the real locations of those places; which
+                            equipment sits where is invented, and the basemap is
+                            schematic rather than survey grade.
+                          </p>
+                        </div>
+
+                        <div className="space-y-2 pt-4">
+                          <h3 className="text-[10px] font-bold uppercase tracking-[0.15em] text-gray-400 border-b border-gray-200 pb-2">Graph Contents</h3>
+                          <div className="space-y-0.5">
+                            <div className="flex justify-between py-2 border-b border-gray-100 text-[11px]"><span className="text-gray-800 font-bold">Devices</span><span className="text-gray-400 font-mono">83</span></div>
+                            <div className="flex justify-between py-2 border-b border-gray-100 text-[11px]"><span className="text-gray-800 font-bold">Device links</span><span className="text-gray-400 font-mono">78</span></div>
+                            <div className="flex justify-between py-2 border-b border-gray-100 text-[11px]"><span className="text-gray-800 font-bold">PON trees</span><span className="text-gray-400 font-mono">116</span></div>
+                            <div className="flex justify-between py-2 border-b border-gray-100 text-[11px]"><span className="text-gray-800 font-bold">Services</span><span className="text-gray-400 font-mono">24</span></div>
+                            <div className="flex justify-between py-2 border-b border-gray-100 text-[11px]"><span className="text-gray-800 font-bold">Subscribers</span><span className="text-gray-400 font-mono">74</span></div>
+                            <button
+                              onClick={() => {
+                                const almPreset = DEFECT_PRESETS.find(p => p.id === 'alarm_cluster');
+                                if (almPreset) setActiveDefectFilter(almPreset);
+                              }}
+                              className="flex justify-between py-2 border-b border-gray-100 text-[11px] w-full text-left hover:bg-amber-50 px-1 rounded transition cursor-pointer group"
+                              title="Click to view all 29 active alarms on the topology"
+                            >
+                              <span className="text-gray-800 font-bold group-hover:text-amber-700 flex items-center gap-1.5">
+                                <BellRing className="w-3.5 h-3.5 text-amber-500" />
+                                Open alarms
+                              </span>
+                              <span className="text-red-600 font-mono font-bold bg-red-50 border border-red-200 px-1.5 py-0.5 rounded text-[10px]">29 Active</span>
+                            </button>
+                            <div className="flex justify-between py-2 border-b border-gray-100 text-[11px]"><span className="text-gray-800 font-bold">Geo-located nodes</span><span className="text-gray-400 font-mono">199</span></div>
+                          </div>
+                        </div>
+
+                        <div className="space-y-2 pt-4">
+                          <h3 className="text-[10px] font-bold uppercase tracking-[0.15em] text-gray-400 border-b border-gray-200 pb-2">What The Graph Found</h3>
+                          <div className="space-y-0.5">
+                            <div className="flex justify-between py-2 border-b border-gray-100 text-[11px]"><span className="text-gray-800 font-bold">Version outliers</span><span className="text-gray-400 font-mono">3</span></div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
             </div>
 
-            {/* DOCKED CYPHER QUERY CONSOLE AT BOTTOM (Collapsible for advanced users) */}
-            <div className="border-t border-gray-200 bg-gray-50 shrink-0 z-30 transition-all">
-              <div className="px-4 py-2 flex items-center justify-between border-b border-gray-200 text-xs">
-                <div className="flex items-center gap-2 text-gray-700 font-mono font-bold">
-                  <Terminal className="w-3.5 h-3.5 text-[#00ABE4]" />
-                  <span>CYPHER CONSOLE (ADVANCED QUERY)</span>
+            {/* OPTIONAL ADVANCED CYPHER CONSOLE (Hidden by default, toggleable via top terminal button) */}
+            {showCypherConsole && (
+              <div className="border-t border-gray-200 bg-gray-50 shrink-0 z-30 transition-all animate-fadeIn">
+                <div className="px-4 py-2 flex items-center justify-between border-b border-gray-200 text-xs">
+                  <div className="flex items-center gap-2 text-gray-700 font-mono font-bold">
+                    <Terminal className="w-3.5 h-3.5 text-[#00ABE4]" />
+                    <span>CYPHER CONSOLE (ADVANCED QUERY)</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setPhysicsEnabled(!physicsEnabled)}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition cursor-pointer flex items-center gap-1 ${
+                        physicsEnabled
+                          ? 'bg-purple-50 border-purple-300 text-purple-700'
+                          : 'bg-white border-gray-300 text-gray-600'
+                      }`}
+                    >
+                      <Compass className={`w-3 h-3 ${physicsEnabled ? 'animate-spin' : ''}`} />
+                      <span>{physicsEnabled ? 'Physics Active' : 'Freeze'}</span>
+                    </button>
+
+                    <button
+                      onClick={handleRunQuery}
+                      className="px-4 py-1 bg-[#00ABE4] hover:bg-[#0090c2] text-white font-bold rounded-lg text-xs flex items-center gap-1.5 transition shadow-sm cursor-pointer"
+                    >
+                      <Play className="w-3 h-3 fill-current" />
+                      <span>Run Query</span>
+                    </button>
+
+                    <button
+                      onClick={() => setShowCypherConsole(false)}
+                      className="p-1 text-gray-400 hover:text-gray-700 rounded transition cursor-pointer"
+                      title="Close Cypher Console"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setPhysicsEnabled(!physicsEnabled)}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition cursor-pointer flex items-center gap-1 ${
-                      physicsEnabled
-                        ? 'bg-purple-50 border-purple-300 text-purple-700'
-                        : 'bg-white border-gray-300 text-gray-600'
-                    }`}
-                  >
-                    <Compass className={`w-3 h-3 ${physicsEnabled ? 'animate-spin' : ''}`} />
-                    <span>{physicsEnabled ? 'Floating Physics' : 'Freeze'}</span>
-                  </button>
 
-                  <button
-                    onClick={handleRunQuery}
-                    className="px-4 py-1 bg-[#00ABE4] hover:bg-[#0090c2] text-white font-bold rounded-lg text-xs flex items-center gap-1.5 transition shadow-sm cursor-pointer"
-                  >
-                    <Play className="w-3 h-3 fill-current" />
-                    <span>Run Query</span>
-                  </button>
-
-                  <button
-                    onClick={() => setIsEditorExpanded(!isEditorExpanded)}
-                    className="p-1 text-gray-500 hover:text-gray-800 rounded hover:bg-gray-200 transition"
-                    title={isEditorExpanded ? 'Collapse Console' : 'Expand Console'}
-                  >
-                    {isEditorExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
-
-              {isEditorExpanded && (
                 <div className="p-3 bg-[#090d16]">
                   <textarea
                     rows={2}
@@ -1075,8 +1216,8 @@ export default function NetworkOntology() {
                     placeholder="Enter Cypher query..."
                   />
                 </div>
-              )}
-            </div>
+              </div>
+            )}
           </div>
         </main>
       </div>
