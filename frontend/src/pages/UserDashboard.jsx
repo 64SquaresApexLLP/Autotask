@@ -445,7 +445,7 @@ const UserDashboard = () => {
                                 {ticket.priority || 'Medium'}
                               </span>
                               <span className={`text-[11px] font-semibold px-2.5 py-0.5 rounded-md border ${slaBadgeClass}`}>
-                                ⏱️ {sla.text}
+                                {sla.text}
                               </span>
                             </div>
                             <p className="text-gray-600 mb-3">{ticket.description}</p>

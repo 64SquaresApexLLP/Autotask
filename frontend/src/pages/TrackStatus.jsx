@@ -128,7 +128,7 @@ const TrackStatus = () => {
             
             {/* Header */}
             <div>
-              <h1 className="text-3xl font-bold text-gray-900">📋 Track Ticket Status</h1>
+              <h1 className="text-3xl font-bold text-gray-900">Track Ticket Status</h1>
               <p className="text-gray-600 mt-2">Monitor the progress of your submitted tickets</p>
             </div>
 
@@ -288,7 +288,7 @@ const TrackStatus = () => {
                               </div>
 
                               <div>
-                                <div className="text-xs text-gray-500 mb-1">🤖 AI Suggested Resolution</div>
+                                <div className="text-xs text-gray-500 mb-1">AI Suggested Resolution</div>
                                 {ticket.resolution ? (
                                   <p className="text-sm text-gray-700 p-3 bg-purple-50 border border-purple-100 rounded whitespace-pre-line">
                                     {ticket.resolution}

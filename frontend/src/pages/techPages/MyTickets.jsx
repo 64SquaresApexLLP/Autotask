@@ -39,7 +39,7 @@ const MyTickets = () => {
   
   const navigate = useNavigate();
 
-  // Synchronize state when URL query parameters change
+  // Sync(hrs?|hours?|h)onize state when URL query parameters change
   useEffect(() => {
     const cat = searchParams.get("category");
     if (cat) {
@@ -129,7 +129,7 @@ const MyTickets = () => {
   
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
+    <div className="flex (hrs?|hours?|h)-h-screen bg-gray-50">
       <Sidebar />
       <div className="flex-1 flex flex-col overflow-y-auto max-h-screen">
         <Header onRefresh={loadMyTickets} isRefreshing={loading} />
@@ -138,7 +138,7 @@ const MyTickets = () => {
             {/* Header Section */}
             <div className="flex items-center justify-between">
               <div>
-                <h1 className="text-2xl md:text-3xl font-bold text-gray-800">🎟️ My Tickets</h1>
+                <h1 className="text-2xl md:text-3xl font-bold text-gray-800">My Tickets</h1>
                 <p className="text-gray-600">Tickets assigned to you, sorted and searchable</p>
               </div>
               <div className="flex items-center space-x-2">
@@ -191,7 +191,7 @@ const MyTickets = () => {
               {categoryFilter !== "all" && (
                 <div className="mt-3 flex items-center justify-between bg-blue-50 border border-blue-200 text-blue-800 px-3.5 py-2 rounded-lg text-xs font-semibold">
                   <div className="flex items-center gap-2">
-                    <span>🏷️</span>
+                    <span></span>
                     <span>Filtering by Category: <strong className="text-blue-900 font-bold">&ldquo;{categoryFilter}&rdquo;</strong></span>
                   </div>
                   <button
@@ -320,7 +320,7 @@ const MyTickets = () => {
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Priority</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">SLA Status</th>
+                      {/* <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">SLA Status</th> */}
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Time Spent</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                     </tr>
@@ -340,7 +340,7 @@ const MyTickets = () => {
                       let timeSpentDisplay = ticket.time_spent || ticket.TIME_SPENT;
                       if (!timeSpentDisplay) {
                         const text = `${ticket.resolution || ''} ${ticket.description || ''}`;
-                        const match = text.match(/\((\d+(?:\.\d+)?\s*(?:mins?|minutes?|hrs?|hours?))\)/i);
+                        const match = text.match(/\((\d+(?:\.\d+)?\s*(?:hrs?|hours?|h))\)/i);
                         if (match) {
                           timeSpentDisplay = match[1];
                         } else {
@@ -384,25 +384,25 @@ const MyTickets = () => {
                               {ticket.priority?.toUpperCase() || 'UNKNOWN'}
                             </span>
                           </td>
-                          <td className="px-2 sm:px-6 py-4">
+                          {/* <td className="px-2 sm:px-6 py-4">
                             {sla?.status === 'resolved' ? (
                               <span className="bg-blue-100 text-blue-800 px-2.5 py-1 rounded-full text-xs font-medium">
-                                ✅ SLA Met
+                                SLA Met
                               </span>
                             ) : sla?.status === 'breached' ? (
                               <span className="bg-red-100 text-red-800 px-2.5 py-1 rounded-full text-xs font-medium">
-                                ⚠️ Breached
+                                Breached
                               </span>
                             ) : sla?.status === 'approaching' ? (
                               <span className="bg-amber-100 text-amber-800 px-2.5 py-1 rounded-full text-xs font-medium">
-                                ⏳ Near SLA
+                                Near SLA
                               </span>
                             ) : (
                               <span className="bg-emerald-100 text-emerald-800 px-2.5 py-1 rounded-full text-xs font-medium">
-                                🟢 On Track
+                                On Track
                               </span>
                             )}
-                          </td>
+                          </td> */}
                           <td className="px-2 sm:px-6 py-4">
                             <div className="flex items-center font-medium text-gray-700">
                               <IoTimeOutline className="h-4 w-4 text-[#00ABE4] mr-1.5" />

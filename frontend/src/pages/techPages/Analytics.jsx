@@ -340,7 +340,7 @@ const Analytics = () => {
                       <ArrowRight className="w-4 h-4 text-indigo-400 opacity-0 group-hover:opacity-100 transition-all -translate-x-1 group-hover:translate-x-0" />
                     </div>
                     <div className="flex items-center justify-between mt-3 pt-3 border-t border-slate-100 text-xs text-slate-500">
-                      <span className="text-indigo-600 font-medium">⚡ Active queue</span>
+                      <span className="text-indigo-600 font-medium">Active queue</span>
                       <span className="group-hover:text-indigo-700 font-medium">Open my tickets &rarr;</span>
                     </div>
                   </div>
@@ -363,7 +363,7 @@ const Analytics = () => {
                       <ArrowRight className="w-4 h-4 text-blue-400 opacity-0 group-hover:opacity-100 transition-all -translate-x-1 group-hover:translate-x-0" />
                     </div>
                     <div className="flex items-center justify-between mt-3 pt-3 border-t border-slate-100 text-xs text-slate-500">
-                      <span className="text-blue-600 font-medium">⚡ Speed benchmark</span>
+                      <span className="text-blue-600 font-medium">Speed benchmark</span>
                       <span className="group-hover:text-blue-700 font-medium">MTTR Report &rarr;</span>
                     </div>
                   </div>
@@ -386,7 +386,7 @@ const Analytics = () => {
                       <ArrowRight className="w-4 h-4 text-purple-400 opacity-0 group-hover:opacity-100 transition-all -translate-x-1 group-hover:translate-x-0" />
                     </div>
                     <div className="flex items-center justify-between mt-3 pt-3 border-t border-slate-100 text-xs text-slate-500">
-                      <span className="text-purple-600 font-medium">🎯 Target met</span>
+                      <span className="text-purple-600 font-medium">Target met</span>
                       <span className="group-hover:text-purple-700 font-medium">SLA Governance &rarr;</span>
                     </div>
                   </div>
@@ -702,7 +702,6 @@ const Analytics = () => {
                     >
                       <div className="flex items-center justify-between text-indigo-300 font-semibold text-xs mb-1.5">
                         <div className="flex items-center gap-2">
-                          <span className="text-base">📡</span>
                           <span>Dominant Issue Cluster</span>
                         </div>
                         <ArrowRight className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -719,7 +718,6 @@ const Analytics = () => {
                     >
                       <div className="flex items-center justify-between text-indigo-300 font-semibold text-xs mb-1.5">
                         <div className="flex items-center gap-2">
-                          <span className="text-base">⏰</span>
                           <span>Peak Inflow Window</span>
                         </div>
                         <ArrowRight className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -736,7 +734,6 @@ const Analytics = () => {
                     >
                       <div className="flex items-center justify-between text-indigo-300 font-semibold text-xs mb-1.5">
                         <div className="flex items-center gap-2">
-                          <span className="text-base">🎯</span>
                           <span>Efficiency Multiplier</span>
                         </div>
                         <ArrowRight className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity" />

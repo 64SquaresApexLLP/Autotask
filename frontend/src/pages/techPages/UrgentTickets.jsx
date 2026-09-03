@@ -263,7 +263,7 @@ const UrgentTickets = () => {
       });
 
       setToastMessage({
-        title: "Ticket Escalated! ⬆️",
+        title: "Ticket Escalated! ",
         description: `Ticket ${ticketNumber} has been escalated. Manager notified about due date exceeded.`,
       });
 
@@ -288,7 +288,7 @@ const UrgentTickets = () => {
       await ticketService.assignTicket(ticketNumber, technicianId);
 
       setToastMessage({
-        title: "Ticket Assigned! 🎯",
+        title: "Ticket Assigned! ",
         description: `Ticket ${ticketNumber} has been assigned to ${technicianId}. Customer notified.`,
       });
 
@@ -308,7 +308,7 @@ const UrgentTickets = () => {
 
   const handleEmergencyContact = (phone) => {
     setToastMessage({
-      title: "Emergency Contact Initiated! 📞",
+      title: "Emergency Contact Initiated! ",
       description: `Calling ${phone} for immediate assistance.`,
     });
     setTimeout(() => setToastMessage(null), 5000);
@@ -442,7 +442,7 @@ const UrgentTickets = () => {
                     <div className="pb-3">
                       <div className="flex items-center justify-between mb-3">
                         <span className={`${getPriorityColor(ticket.priority)} px-3 py-1 rounded-full text-xs font-medium`}>
-                          {ticket.priority?.toLowerCase() === "critical" ? "🔴 CRITICAL" : "⚠️ HIGH"}
+                          {ticket.priority?.toLowerCase() === "critical" ? " CRITICAL" : " HIGH"}
                         </span>
                         <div className="text-right">
                           <p className="text-xs text-gray-500">Status</p>
@@ -486,7 +486,7 @@ const UrgentTickets = () => {
                           </div>
                           {isTicketOverdue(ticket) && (
                             <div className="bg-red-100 text-red-800 px-2 py-1 rounded-full text-xs font-medium animate-pulse">
-                              ⚠️ OVERDUE
+                               OVERDUE
                             </div>
                           )}
                         </div>
@@ -511,7 +511,7 @@ const UrgentTickets = () => {
                         className="border w-full border-gray-300 hover:bg-gray-100 px-4 py-2 rounded-lg text-sm font-medium"
                         onClick={() => handleEscalate(ticket)}
                       >
-                        ⬆️ Escalate
+                         Escalate
                       </button>
                     </div>
                     <div className="flex gap-2">
@@ -607,7 +607,7 @@ const UrgentTickets = () => {
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <h4 className="font-semibold text-orange-900 mb-2">📞 Emergency Contacts</h4>
+                  <h4 className="font-semibold text-orange-900 mb-2">Emergency Contacts</h4>
                   <div className="space-y-2 text-sm">
                     <div className="flex justify-between">
                       <span>IT Manager:</span>
@@ -624,7 +624,7 @@ const UrgentTickets = () => {
                   </div>
                 </div>
                 <div>
-                  <h4 className="font-semibold text-orange-900 mb-2">⚡ Escalation Triggers</h4>
+                  <h4 className="font-semibold text-orange-900 mb-2">Escalation Triggers</h4>
                   <div className="space-y-1 text-sm text-orange-800">
                     <p>• Ticket overdue by 1+ hours</p>
                     <p>• System down affecting 10+ users</p>

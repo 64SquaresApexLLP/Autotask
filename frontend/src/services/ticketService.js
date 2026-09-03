@@ -45,18 +45,18 @@ const transformTicketData = (ticket) => {
     }
   }
 
-  // Extract time spent
+  // Extract time spent (hours only)
   let timeSpent = ticket.TIME_SPENT || ticket.time_spent || null;
   const resolutionText = ticket.RESOLUTION || ticket.resolution || '';
   if (!timeSpent && resolutionText) {
-    const match = String(resolutionText).match(/(?:\(|Time Spent:\s*|Logged Time Spent:\s*)(\d+(?:\.\d+)?\s*(?:mins?|minutes?|hrs?|hours?))\)?/i);
+    const match = String(resolutionText).match(/(?:\(|Time Spent:\s*|Logged Time Spent:\s*)(\d+(?:\.\d+)?\s*(?:hrs?|hours?|h))\)?/i);
     if (match) timeSpent = match[1];
   }
 
-  // Numeric technician effort in minutes (TIME_SPENT_MINUTES column, written by the backend)
-  const rawTimeSpentMinutes = ticket.TIME_SPENT_MINUTES ?? ticket.time_spent_minutes;
-  const timeSpentMinutes = (rawTimeSpentMinutes !== null && rawTimeSpentMinutes !== undefined && rawTimeSpentMinutes !== '')
-    ? Number(rawTimeSpentMinutes)
+  // Numeric technician effort in hours (TIME_SPENT_HOURS column, written by the backend)
+  const rawTimeSpentHours = ticket.TIME_SPENT_HOURS ?? ticket.time_spent_hours;
+  const timeSpentHours = (rawTimeSpentHours !== null && rawTimeSpentHours !== undefined && rawTimeSpentHours !== '')
+    ? Number(rawTimeSpentHours)
     : null;
 
   // Normalize priority: empty or legacy "Unknown" values fall back to Medium
@@ -79,7 +79,7 @@ const transformTicketData = (ticket) => {
     due_date: ticket.DUEDATETIME || ticket.due_date,
     resolution: resolutionText,
     time_spent: timeSpent,
-    time_spent_minutes: timeSpentMinutes,
+    time_spent_hours: timeSpentHours,
     user_id: ticket.USERID || ticket.user_id,
     user_email: ticket.USEREMAIL || ticket.user_email,
     requester_name: ticket.USERID || ticket.requester_name || ticket.USEREMAIL || ticket.user_email || 'User',

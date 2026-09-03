@@ -230,7 +230,7 @@ const AdminDashboard = () => {
                 <div className="space-y-4">
                   <div className="p-3.5 rounded-lg border border-gray-100 bg-gray-50 flex items-center justify-between">
                     <div>
-                      <h4 className="text-sm font-semibold text-gray-800">🌅 Morning Shift (08:00 - 16:00)</h4>
+                      <h4 className="text-sm font-semibold text-gray-800">Morning Shift (08:00 - 16:00)</h4>
                       <p className="text-xs text-gray-500 mt-0.5">Primary queue triage & EVPN deployment</p>
                     </div>
                     <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-800">
@@ -240,7 +240,7 @@ const AdminDashboard = () => {
 
                   <div className="p-3.5 rounded-lg border border-gray-100 bg-gray-50 flex items-center justify-between">
                     <div>
-                      <h4 className="text-sm font-semibold text-gray-800">☀️ Afternoon Shift (14:00 - 22:00)</h4>
+                      <h4 className="text-sm font-semibold text-gray-800">Afternoon Shift (14:00 - 22:00)</h4>
                       <p className="text-xs text-gray-500 mt-0.5">Hardware maintenance & software updates</p>
                     </div>
                     <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800">
@@ -250,7 +250,7 @@ const AdminDashboard = () => {
 
                   <div className="p-3.5 rounded-lg border border-gray-100 bg-gray-50 flex items-center justify-between">
                     <div>
-                      <h4 className="text-sm font-semibold text-gray-800">🌙 Night Shift (22:00 - 06:00)</h4>
+                      <h4 className="text-sm font-semibold text-gray-800">Night Shift (22:00 - 06:00)</h4>
                       <p className="text-xs text-gray-500 mt-0.5">Emergency optical outage & on-call dispatch</p>
                     </div>
                     <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-purple-100 text-purple-800">

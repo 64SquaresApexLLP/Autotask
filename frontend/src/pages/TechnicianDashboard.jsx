@@ -176,7 +176,7 @@ const TechnicianDashboard = () => {
                 title="Click to view your active assigned tickets"
               >
                 <div className="flex items-center justify-between mb-3">
-                  <div className="text-2xl">📋</div>
+                  <div className="text-2xl"></div>
                   <ArrowRight className="w-4 h-4 text-blue-400 opacity-0 group-hover:opacity-100 transition-all -translate-x-1 group-hover:translate-x-0" />
                 </div>
                 <h3 className="text-lg font-semibold text-gray-800 mb-1 group-hover:text-blue-600 transition-colors">My Active Tickets</h3>
@@ -219,7 +219,7 @@ const TechnicianDashboard = () => {
                 title="Click to view all resolved tickets"
               >
                 <div className="flex items-center justify-between mb-3">
-                  <div className="text-2xl">✅</div>
+                  <div className="text-2xl"></div>
                   <ArrowRight className="w-4 h-4 text-green-400 opacity-0 group-hover:opacity-100 transition-all -translate-x-1 group-hover:translate-x-0" />
                 </div>
                 <h3 className="text-lg font-semibold text-gray-800 mb-1 group-hover:text-green-600 transition-colors">Completed</h3>
@@ -287,7 +287,7 @@ const TechnicianDashboard = () => {
                             <div className="font-semibold text-gray-800 flex flex-wrap items-center gap-2">
                               <span>{ticket.title}</span>
                               <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-md border ${slaBadgeClass}`}>
-                                ⏱️ {sla.text}
+                                {sla.text}
                               </span>
                             </div>
                             <div className="text-sm text-gray-600 mt-1">
@@ -298,7 +298,7 @@ const TechnicianDashboard = () => {
                               <span>Priority: {ticket.priority || 'Medium'} • Status: {ticket.status || 'Open'}</span>
                               {ticket.time_spent && (
                                 <span className="font-semibold text-[#00ABE4] bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">
-                                  ⏱️ Logged: {ticket.time_spent}
+                                  Logged: {ticket.time_spent}
                                 </span>
                               )}
                             </div>

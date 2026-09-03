@@ -735,11 +735,11 @@ export default function GoogleNetworkMap({
     const stroke = (isAlarm || hasAlarm) ? '#FFFFFF' : (isSelected ? '#FFFFFF' : isDefectAffected ? '#FECACA' : '#0F172A');
 
     let iconText = '';
-    if (isAlarm) iconText = '🚨';
-    else if (hasAlarm) iconText = '⚠';
-    else if (isDefectAffected && activeDefectFilter?.id === 'def_evpn') iconText = '🔥';
-    else if (isDefectAffected && activeDefectFilter?.id === 'spof_sang') iconText = '⚠️';
-    else if (isDefectAffected && activeDefectFilter?.id === 'drift_stragglers') iconText = '⚡';
+    if (isAlarm) iconText = '!';
+    else if (hasAlarm) iconText = '!';
+    else if (isDefectAffected && activeDefectFilter?.id === 'def_evpn') iconText = 'X';
+    else if (isDefectAffected && activeDefectFilter?.id === 'spof_sang') iconText = '!';
+    else if (isDefectAffected && activeDefectFilter?.id === 'drift_stragglers') iconText = 'Z';
     else if (isSite) iconText = node.isHub ? (node.id.includes('gldt') ? 'CO' : 'AGG') : node.town.substring(0, 3).toUpperCase();
     else if (isDev) iconText = (node.subType || '').includes('Core') ? 'CR' : (node.subType || '').includes('Agg') ? 'AR' : (node.subType || '').includes('OLT') ? 'OLT' : 'SW';
     else if (isOnt) iconText = 'ONT';
@@ -774,7 +774,7 @@ export default function GoogleNetworkMap({
           <circle cx="24" cy="24" r="20" fill="rgba(239,68,68,0.22)"/>
         ` : (showHalo ? `<circle cx="24" cy="24" r="${isHighlighted ? 22.5 : 21}" fill="none" stroke="${haloColor}" stroke-width="${isHighlighted ? 3.5 : 2.5}" opacity="0.95"/>` : '')}
         <circle cx="24" cy="24" r="17.5" fill="${bg}" stroke="${stroke}" stroke-width="${(isAlarm || hasAlarm || isSelected) ? 3 : 2}" filter="url(#shadow)" />
-        <text x="24" y="${iconText === '🚨' || iconText === '🔥' || iconText === '⚠️' || iconText === '⚡' || iconText === '⚠' ? '29' : '28'}" fill="#FFFFFF" font-family="system-ui, sans-serif" font-size="${iconText === '🚨' ? '17' : iconText.length > 2 ? '10' : '13'}" font-weight="900" text-anchor="middle">${iconText}</text>
+        <text x="24" y="${iconText === '!' || iconText === 'X' || iconText === 'Z' ? '29' : '28'}" fill="#FFFFFF" font-family="system-ui, sans-serif" font-size="${iconText === '!' ? '17' : iconText.length > 2 ? '10' : '13'}" font-weight="900" text-anchor="middle">${iconText}</text>
         ${hasAlarm && !isAlarm ? `
           <!-- Alarm alert badge -->
           <circle cx="36" cy="12" r="8" fill="#DC2626" stroke="#FFFFFF" stroke-width="1.8" />
@@ -909,7 +909,7 @@ export default function GoogleNetworkMap({
               <div style="font-size: 11px; color: #64748b;">
                 Endpoints: <strong>${link.from.id} &bull; ${link.to.id}</strong>
               </div>
-              ${isSpofLink ? `<div style="font-size: 11px; color: #dc2626; margin-top: 5px; font-weight: bold; background: #fef2f2; padding: 4px 6px; border-radius: 6px; border: 1px solid #fecaca;">⚠ Single Point of Failure (SPOF) - Unprotected 100G link without ERPS ring</div>` : ''}
+              ${isSpofLink ? `<div style="font-size: 11px; color: #dc2626; margin-top: 5px; font-weight: bold; background: #fef2f2; padding: 4px 6px; border-radius: 6px; border: 1px solid #fecaca;">Single Point of Failure (SPOF) - Unprotected 100G link without ERPS ring</div>` : ''}
             </div>
           `;
           infoWindowRef.current.setContent(content);
@@ -995,7 +995,7 @@ export default function GoogleNetworkMap({
 
               ${isAlarm ? `
                 <div style="font-size: 11px; font-weight: 700; color: #dc2626; background: #fef2f2; padding: 6px; border-radius: 6px; margin-bottom: 6px; border: 1px solid #fecaca;">
-                  ⚠ ${node.text || 'Active Optical Power & BGP Threshold Alarm'}
+                  ${node.text || 'Active Optical Power & BGP Threshold Alarm'}
                 </div>
               ` : ''}
 
@@ -1011,14 +1011,14 @@ export default function GoogleNetworkMap({
                 </div>
                 ${node.hasAlarm ? `
                   <div style="font-size: 11px; font-weight: 700; color: #dc2626; background: #fef2f2; padding: 6px; border-radius: 6px; margin-bottom: 6px; border: 1px solid #fecaca;">
-                    ⚠ Customer Drop Optical Loss (-31.2 dBm). Parent OLT-XG-02 and upper tiers are 100% healthy.
+                    Customer Drop Optical Loss (-31.2 dBm). Parent OLT-XG-02 and upper tiers are 100% healthy.
                   </div>
                 ` : ''}
               ` : ''}
 
               ${(hasAlarm || isAlarm) ? `
                 <div style="font-size: 10.5px; color: #dc2626; font-weight: 700; background: #fef2f2; padding: 4px 6px; border-radius: 6px; border: 1px solid #fecaca;">
-                  ⚠ Status: CRITICAL DEFECT &bull; Optical Loss / Alarm Active
+                  Status: CRITICAL DEFECT &bull; Optical Loss / Alarm Active
                 </div>
               ` : `
                 <div style="font-size: 10.5px; color: #059669; font-weight: 700; background: #ecfdf5; padding: 4px 6px; border-radius: 6px;">
@@ -1102,7 +1102,7 @@ export default function GoogleNetworkMap({
           <div style="font-size: 11px; color: #64748b;">
             Endpoints: <strong>${link.from.id} &bull; ${link.to.id}</strong>
           </div>
-          ${isSpofLink ? `<div style="font-size: 11px; color: #dc2626; margin-top: 5px; font-weight: bold; background: #fef2f2; padding: 4px 6px; border-radius: 6px; border: 1px solid #fecaca;">⚠ Single Point of Failure (SPOF) - Unprotected 100G link without ERPS ring</div>` : ''}
+          ${isSpofLink ? `<div style="font-size: 11px; color: #dc2626; margin-top: 5px; font-weight: bold; background: #fef2f2; padding: 4px 6px; border-radius: 6px; border: 1px solid #fecaca;">Single Point of Failure (SPOF) - Unprotected 100G link without ERPS ring</div>` : ''}
         </div>
       `;
       infoWindowRef.current.setContent(content);
@@ -1188,7 +1188,7 @@ export default function GoogleNetworkMap({
               }`}
             title="Highlight / Toggle Core, Agg, Access, and OLT Devices"
           >
-            <span>🖥️ Devices</span>
+            <span> Devices</span>
             <span className="font-mono text-[10px] opacity-80">({categoryCounts.devices})</span>
             {isCategoryActive('devices') && <Check className="w-3 h-3 text-white" />}
           </button>
@@ -1205,7 +1205,7 @@ export default function GoogleNetworkMap({
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
               <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
             </span>
-            <span>🚨 Alarms</span>
+            <span> Alarms</span>
             <span className="font-mono text-[10px] bg-red-800 text-white px-1.5 py-0.2 rounded-full font-black border border-red-500/60">
               {categoryCounts.alarms}
             </span>
@@ -1347,7 +1347,7 @@ export default function GoogleNetworkMap({
                     </div>
                     <div className="text-[10.5px] text-slate-400 truncate">{link.type}</div>
                     {isSpof && (
-                      <div className="text-[9.5px] text-red-400 font-bold">⚠ Single Point of Failure (SPOF)</div>
+                      <div className="text-[9.5px] text-red-400 font-bold">Single Point of Failure (SPOF)</div>
                     )}
                   </div>
                 );
@@ -1409,7 +1409,7 @@ export default function GoogleNetworkMap({
 
                     {node.text && (
                       <div className="text-[10px] text-red-400 truncate font-semibold">
-                        ⚠ {node.text}
+                        {node.text}
                       </div>
                     )}
                   </div>

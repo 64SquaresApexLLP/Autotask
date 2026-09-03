@@ -113,7 +113,10 @@ function ViewTicket() {
   // after asite visit can just adjust it instead of starting blank)).
   useEffect(() => {
     const existing = ticket?.time_spent;
-    if (existing) setTimeSpent(existing);
+    if (existing) {
+      const numeric = String(existing).replace(/[^0-9.]/g, '');
+      setTimeSpent(numeric);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ticket?.id]);
 
@@ -151,7 +154,7 @@ function ViewTicket() {
     const resolvedLikeStatus = RESOLVED_LIKE.includes(newStatus);
     const hasTimeSpent = Boolean(timeSpent && timeSpent.trim()) || Boolean(ticket?.time_spent);
     if (resolvedLikeStatus && !hasTimeSpent) {
-      setSaveMessage({ type: 'error', text: 'Time Spent is required before marking this ticket Resolved/Closed - it powers your MTTR score.' });
+      setSaveMessage({ type: 'error', text: 'Time Spent is required (in hours) before marking this ticket Resolved/Closed — it powers your MTTR score.' });
       return;
     }
 
@@ -423,7 +426,7 @@ function ViewTicket() {
                   {/* AI Suggested Resolution */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1">
-                      🤖 AI Suggested Resolution
+                      AI Suggested Resolution
                     </label>
                     {editingResolution ? (
                       <div className="space-y-2">
@@ -560,14 +563,22 @@ function ViewTicket() {
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Time Spent</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. 30 mins"
-                      value={timeSpent}
-                      onChange={(e) => setTimeSpent(e.target.value)}
-                      disabled={!isAssignedToMe}
-                      className="w-full border border-gray-300 rounded-lg p-2 disabled:bg-gray-100 disabled:cursor-not-allowed"
-                    />
+                    <div className="relative">
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        placeholder="0.5"
+                        value={timeSpent}
+                        onChange={(e) => {
+                          const val = e.target.value.replace(/[^0-9.]/g, '');
+                          setTimeSpent(val);
+                        }}
+                        disabled={!isAssignedToMe}
+                        className="w-full border border-gray-300 rounded-lg p-2 pr-14 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400 pointer-events-none">hours</span>
+                    </div>
+                    <p className="text-xs text-gray-400 mt-1">Enter time in hours (e.g. 0.5, 1.5, 2)</p>
                   </div>
 
                   <div>

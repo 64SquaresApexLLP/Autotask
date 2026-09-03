@@ -180,7 +180,7 @@ const AllTickets = () => {
         <main className=" p-6 md:p-8 flex-1 overflow-y-auto">
           <div className="max-w-7xl mx-auto space-y-6">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900">📋 All Tickets</h1>
+              <h1 className="text-3xl font-bold text-gray-900">All Tickets</h1>
               <p className="text-gray-600">Manage all system-wide tickets</p>
             </div>
 
@@ -219,7 +219,7 @@ const AllTickets = () => {
             {categoryFilter !== 'all' && (
               <div className="flex items-center justify-between bg-blue-50 border border-blue-200 text-blue-800 px-4 py-3 rounded-xl shadow-sm animate-fadeIn">
                 <div className="flex items-center gap-2.5">
-                  <span className="text-xl">🏷️</span>
+                  <span className="text-xl"></span>
                   <div>
                     <span className="font-semibold text-sm">Active Category Filter: </span>
                     <span className="font-bold text-blue-900 bg-blue-100/80 px-2 py-0.5 rounded border border-blue-300 ml-1">
@@ -390,7 +390,7 @@ const AllTickets = () => {
                             className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold bg-slate-100 hover:bg-blue-50 text-slate-700 hover:text-blue-700 border border-slate-200 hover:border-blue-200 transition cursor-pointer"
                             title="Filter by this category"
                           >
-                            🏷️ {ticket.category || ticket.ticket_category || ticket.issue_type || 'General'}
+                             {ticket.category || ticket.ticket_category || ticket.issue_type || 'General'}
                           </span>
                         </td>
                         <td className="p-3">

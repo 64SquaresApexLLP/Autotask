@@ -47,22 +47,22 @@ const ChatBot = ({ onClose }) => {
       switch (action) {
         case 'getMyTickets':
           setPendingAction(null);
-          addMessage('📋 Get My Ticket', 'user');
+          addMessage('Get My Ticket', 'user');
           response = await handleGetMyTickets();
           break;
         case 'aiResolution':
-          addMessage('🤖 AI Resolution', 'user');
+          addMessage('AI Resolution', 'user');
           response = "Sure! Please describe the issue or topic you'd like an AI-generated resolution for.";
           setPendingAction('ai_resolution');
           break;
         case 'getSimilarTickets':
-          addMessage('🧾 Similar Ticket', 'user');
+          addMessage('Similar Ticket', 'user');
           response = 'Please enter the ticket number you\'d like to find similar tickets for.';
           setPendingAction('similar_ticket');
           break;
         case 'getFAQ':
           setPendingAction(null);
-          addMessage('❓ Get FAQ', 'user');
+          addMessage('Get FAQ', 'user');
           response = handleGetFAQ();
           break;
         default:
@@ -88,7 +88,7 @@ const ChatBot = ({ onClose }) => {
 
         return `Here is your most recent ticket:\n\n• **${ticket.ticket_id}**: ${ticket.title}\n  Status: ${ticket.status}\n  Priority: ${ticket.priority}${ticket.description ? `\n\n${ticket.description}` : ''}`;
       } else {
-        return `You don't have any assigned tickets at the moment.\n\n📝 **You can:**\n• Create a new ticket for an issue\n• Ask me about common problems\n• Browse our FAQ for solutions\n\n💬 **What technical issue are you experiencing?**`;
+        return `You don't have any assigned tickets at the moment.\n\n**You can:**\n• Create a new ticket for an issue\n• Ask me about common problems\n• Browse our FAQ for solutions\n\n**What technical issue are you experiencing?**`;
       }
     } catch (error) {
       console.error('Get my tickets error:', error);
@@ -135,7 +135,7 @@ const ChatBot = ({ onClose }) => {
   // Get FAQ information — a fixed, deterministic message (not routed through the AI)
   const handleGetFAQ = () => {
     const technicianId = user?.technician_id || 'T001';
-    return `Hello ${technicianId}! I'm your IT support chatbot assistant! 🤖\n\nI can help you with a wide range of topics:\n\n**Technical Support:**\n• Troubleshooting computer issues\n• Network connectivity problems\n• Software installation and configuration\n• Hardware diagnostics\n\n**General IT Knowledge:**\n• Operating systems (Windows, Linux, macOS)\n• Security best practices\n• Email and communication tools\n• System administration\n\n**Ticket Management:**\n• Search our ticket database\n• Find similar resolved issues\n• Look up your assigned tickets\n\nWhat would you like to know or what issue can I help you resolve today?`;
+    return `Hello ${technicianId}! I'm your IT support chatbot assistant! \n\nI can help you with a wide range of topics:\n\n**Technical Support:**\n• Troubleshooting computer issues\n• Network connectivity problems\n• Software installation and configuration\n• Hardware diagnostics\n\n**General IT Knowledge:**\n• Operating systems (Windows, Linux, macOS)\n• Security best practices\n• Email and communication tools\n• System administration\n\n**Ticket Management:**\n• Search our ticket database\n• Find similar resolved issues\n• Look up your assigned tickets\n\nWhat would you like to know or what issue can I help you resolve today?`;
   };
 
   // Handle regular chat messages
@@ -209,7 +209,7 @@ const ChatBot = ({ onClose }) => {
           <div>
             <h3 className="font-semibold">Support Bot</h3>
             <p className="text-xs opacity-90">
-              🟢 Connected
+              Connected
             </p>
           </div>
         </div>
@@ -229,7 +229,7 @@ const ChatBot = ({ onClose }) => {
             disabled={isLoading}
             className="bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 text-xs font-medium px-3 py-2 rounded-lg text-left disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-1"
           >
-            <span>📋</span>
+            <span></span>
             <span>Get My Ticket</span>
           </button>
           
@@ -238,7 +238,7 @@ const ChatBot = ({ onClose }) => {
             disabled={isLoading}
             className="bg-green-50 hover:bg-green-100 border border-green-200 text-green-700 text-xs font-medium px-3 py-2 rounded-lg text-left disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-1"
           >
-            <span>🤖</span>
+            <span></span>
             <span>AI Resolution</span>
           </button>
           
@@ -247,7 +247,7 @@ const ChatBot = ({ onClose }) => {
             disabled={isLoading}
             className="bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-700 text-xs font-medium px-3 py-2 rounded-lg text-left disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-1"
           >
-            <span>🧾</span>
+            <span></span>
             <span>Similar Ticket</span>
           </button>
           
@@ -256,7 +256,7 @@ const ChatBot = ({ onClose }) => {
             disabled={isLoading}
             className="bg-orange-50 hover:bg-orange-100 border border-orange-200 text-orange-700 text-xs font-medium px-3 py-2 rounded-lg text-left disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-1"
           >
-            <span>❓</span>
+            <span></span>
             <span>Get FAQ</span>
           </button>
         </div>

@@ -568,11 +568,11 @@ async def startup_event():
         print(f"⚠️ Warning: Could not initialize LLM service: {e}")
 
     # 3) Ensure MTTR timestamp columns exist on the ticket tables (idempotent migration).
-    #    RESOLVED_AT / CLOSED_AT / ASSIGNED_AT / TIME_SPENT_MINUTES power accurate
+    #    RESOLVED_AT / CLOSED_AT / ASSIGNED_AT / TIME_SPENT_HOURS power accurate
     #    Mean-Time-To-Resolution analytics (see /analytics/mttr).
     try:
         if ensure_mttr_columns():
-            print("✅ MTTR columns verified (RESOLVED_AT, CLOSED_AT, ASSIGNED_AT, TIME_SPENT_MINUTES)")
+            print("✅ MTTR columns verified (RESOLVED_AT, CLOSED_AT, ASSIGNED_AT, TIME_SPENT_HOURS)")
     except Exception as e:
         print(f"⚠️ Warning: Could not ensure MTTR columns: {e}")
 
@@ -874,7 +874,7 @@ class TicketUpdateRequest(BaseModel):
     status: Optional[str] = Field(None, description="New ticket status (Open, In Progress, Closed, Resolved, etc.)")
     priority: Optional[str] = Field(None, description="New ticket priority (Low, Medium, High, Critical)")
     work_note: Optional[str] = Field(None, description="Work note to append to the ticket resolution log")
-    time_spent: Optional[str] = Field(None, description="Time spent on the ticket (e.g. 45 mins, 2 hours)")
+    time_spent: Optional[str] = Field(None, description="Time spent on the ticket in hours (e.g. 0.5 hours, 2h)")
 
 class EmailCustomerRequest(BaseModel):
     """Model for emailing the customer from the technician ticket view"""
@@ -978,7 +978,7 @@ def get_all_tickets_realtime() -> List[Dict[str, Any]]:
                         "RESOLVED_AT": nt.get("resolved_at", ""),
                         "CLOSED_AT": nt.get("closed_at", ""),
                         "TIME_SPENT": nt.get("time_spent", ""),
-                        "TIME_SPENT_MINUTES": nt.get("time_spent_minutes", "")
+                        "TIME_SPENT_HOURS": nt.get("time_spent_hours", "")
                     }
         except Exception as e_kb:
             print(f"Notice: KB read: {e_kb}")
@@ -1063,13 +1063,13 @@ def get_mttr_analytics(
     Calculate Mean Time To Resolution (MTTR) and SLA metrics
     across all tickets, by priority, and per technician/user.
 
-    MTTR prefers the technician logged hands-on effort (TIME_SPENT_MINUTES) --
+    MTTR prefers the technician logged hands-on effort (TIME_SPENT_HOURS) --
     the actual resolution time he needed on site, falling back to the wall-clock
     wait (RESOLVED_AT - CREATED_AT) when no effort was logged. Resolved
     tickets with neither are excluded (counted in resolved_missing_timestamp_count).
 
     SLA compliance measures the customer wall-clock wait against priority targets;
-    Average Work Time = average(TIME_SPENT_MINUTES) --independent of wait time.
+    Average Work Time = average(TIME_SPENT_HOURS) --independent of wait time.
     """
     try:
         all_tickets = get_all_tickets_realtime()
@@ -1088,7 +1088,7 @@ def get_mttr_analytics(
         personal_durations = []
         priority_durations = {"Critical": [], "High": [], "Medium": [], "Low": []}
         category_durations = {}
-        work_minutes_total = []  # technician effort (minutes) per resolved ticket
+        work_hours_total = []  # technician effort (hours) per resolved ticket
         priority_work = {"Critical": [], "High": [], "Medium": [], "Low": []}
         resolved_missing_timestamp = 0
         sla_met_count = 0
@@ -1175,20 +1175,19 @@ def get_mttr_analytics(
                     pass
 
             # Technician work time (effort metric — independent of MTTR wait time)
-            work_minutes = parse_time_spent_minutes(t.get("TIME_SPENT_MINUTES", t.get("time_spent_minutes")))
-            if work_minutes is None:
-                work_minutes = parse_time_spent_minutes(t.get("TIME_SPENT", t.get("time_spent")))
-            if work_minutes is None:
-                work_minutes = extract_time_spent_from_resolution(t.get("RESOLUTION") or t.get("resolution") or "")
+            work_hours = parse_time_spent_hours(t.get("TIME_SPENT_HOURS", t.get("time_spent_hours")))
+            if work_hours is None:
+                work_hours = parse_time_spent_hours(t.get("TIME_SPENT", t.get("time_spent")))
+            if work_hours is None:
+                work_hours = extract_time_spent_from_resolution(t.get("RESOLUTION") or t.get("resolution") or "")
 
             target_hours = sla_targets.get(priority_key.lower(), 24.0)
 
             if status_val in resolved_statuses:
-                # MTTR source: technician logged hands-on effort (TIME_SPENT_MINUTES) takes precedence --
+                # MTTR source: technician logged hands-on effort (TIME_SPENT_HOURS) takes precedence --
                 # it is the actual resolution time he needed on site, ignoring queue wait.
 
-                effort_hours = round(work_minutes / 60.0, 1) if work_minutes is not None else None
-                mttr_hours = effort_hours if effort_hours is not None else duration_hours
+                mttr_hours = work_hours if work_hours is not None else duration_hours
 
                 if mttr_hours is not None:
                     total_durations.append(mttr_hours)
@@ -1210,9 +1209,9 @@ def get_mttr_analytics(
                     # Resolved but no reliable timestamps nor logged effort -> excluded
                     resolved_missing_timestamp += 1
 
-                if work_minutes is not None:
-                    work_minutes_total.append(work_minutes)
-                    priority_work[priority_key].append(work_minutes)
+                if work_hours is not None:
+                    work_hours_total.append(work_hours)
+                    priority_work[priority_key].append(work_hours)
             else:
                 # Active open ticket SLA evaluation
                 total_evaluated_sla += 1
@@ -1234,17 +1233,16 @@ def get_mttr_analytics(
         overall_mttr = round(sum(total_durations) / len(total_durations), 1) if total_durations else None
         personal_mttr = round(sum(personal_durations) / len(personal_durations), 1) if personal_durations else None
 
-        avg_work_minutes = round(sum(work_minutes_total) / len(work_minutes_total), 1) if work_minutes_total else None
-        avg_work_hours = round(avg_work_minutes / 60.0, 1) if avg_work_minutes is not None else None
+        avg_work_hours = round(sum(work_hours_total) / len(work_hours_total), 1) if work_hours_total else None
 
         by_priority_out = {}
         for p, durs in priority_durations.items():
-            wmins = priority_work[p]
+            whours = priority_work[p]
             by_priority_out[p] = {
                 "mttr_hours": round(sum(durs) / len(durs), 1) if durs else None,
                 "sla_target_hours": sla_targets.get(p.lower(), 24.0),
                 "resolved_count": len(durs),
-                "avg_work_time_hours": round((sum(wmins) / len(wmins)) / 60.0, 1) if wmins else None
+                "avg_work_time_hours": round(sum(whours) / len(whours), 1) if whours else None
             }
 
         by_category_out = {}
@@ -1262,8 +1260,7 @@ def get_mttr_analytics(
             "personal_mttr_hours": personal_mttr,
             "personal_resolved_count": len(personal_durations),
             "avg_work_time_hours": avg_work_hours,
-            "avg_work_time_minutes": avg_work_minutes,
-            "work_time_logged_count": len(work_minutes_total),
+            "work_time_logged_count": len(work_hours_total),
             "resolved_missing_timestamp_count": resolved_missing_timestamp,
             "sla_compliance_rate": sla_compliance_rate,
             "sla_targets_hours": {
@@ -1653,10 +1650,7 @@ def get_technician_analytics(technician_id: Optional[str] = "all"):
 
         if durations:
             avg_hours = sum(durations) / len(durations)
-            if avg_hours < 1.0:
-                avg_res_time_str = f"{int(avg_hours * 60)} mins"
-            else:
-                avg_res_time_str = f"{avg_hours:.1f} hours"
+            avg_res_time_str = f"{avg_hours:.1f} hours"
         else:
             avg_res_time_str = "0 hours"
 
@@ -2096,7 +2090,7 @@ def update_local_ticket_csv(ticket_number: str, status: Optional[str] = None, pr
                             nt.pop("resolved_at", None)
                             nt.pop("closed_at", None)
                             nt.pop("time_spent", None)
-                            nt.pop("time_spent_minutes", None)
+                            nt.pop("time_spent_hours", None)
                     if priority:
                         nt["priority"] = priority
                         if "classified_data" in nt and "PRIORITY" in nt["classified_data"]:
@@ -2110,9 +2104,9 @@ def update_local_ticket_csv(ticket_number: str, status: Optional[str] = None, pr
                         nt["technician_email"] = technician_email
                     if time_spent:
                         nt["time_spent"] = time_spent
-                        parsed_minutes = parse_time_spent_minutes(time_spent)
-                        if parsed_minutes is not None:
-                            nt["time_spent_minutes"] = parsed_minutes
+                        parsed_hours = parse_time_spent_hours(time_spent)
+                        if parsed_hours is not None:
+                            nt["time_spent_hours"] = parsed_hours
                     if work_note:
                         existing_res = nt.get("resolution_note") or ""
                         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
@@ -2136,7 +2130,7 @@ def update_local_ticket_csv(ticket_number: str, status: Optional[str] = None, pr
             with open(csv_path, "r", encoding="utf-8") as f:
                 reader = csv.DictReader(f)
                 fieldnames = list(reader.fieldnames or [])
-                for extra_col in ("TIME_SPENT", "CREATED_AT", "ASSIGNED_AT", "RESOLVED_AT", "CLOSED_AT", "TIME_SPENT_MINUTES"):
+                for extra_col in ("TIME_SPENT", "CREATED_AT", "ASSIGNED_AT", "RESOLVED_AT", "CLOSED_AT", "TIME_SPENT_HOURS"):
                     if extra_col not in fieldnames:
                         fieldnames.append(extra_col)
                 for row in reader:
@@ -2156,7 +2150,7 @@ def update_local_ticket_csv(ticket_number: str, status: Optional[str] = None, pr
                                 row["RESOLVED_AT"] = ""
                                 row["CLOSED_AT"] = ""
                                 row["TIME_SPENT"] = ""
-                                row["TIME_SPENT_MINUTES"] = ""
+                                row["TIME_SPENT_HOURS"] = ""
                         if priority:
                             row["PRIORITY"] = priority
                         if technician_id:
@@ -2165,9 +2159,9 @@ def update_local_ticket_csv(ticket_number: str, status: Optional[str] = None, pr
                             row["TECHNICIANEMAIL"] = technician_email
                         if time_spent:
                             row["TIME_SPENT"] = time_spent
-                            parsed_minutes = parse_time_spent_minutes(time_spent)
-                            if parsed_minutes is not None:
-                                row["TIME_SPENT_MINUTES"] = parsed_minutes
+                            parsed_hours = parse_time_spent_hours(time_spent)
+                            if parsed_hours is not None:
+                                row["TIME_SPENT_HOURS"] = parsed_hours
                         if work_note:
                             existing_res = row.get("RESOLUTION") or ""
                             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
@@ -2209,7 +2203,7 @@ def sync_ticket_to_closed_table_snowflake(ticket_number: str):
                 CREATED_AT AS ORIGINAL_CREATED_AT,
                 RESOLVED_AT,
                 COALESCE(CLOSED_AT, CURRENT_TIMESTAMP()) AS CLOSED_AT,
-                TIME_SPENT_MINUTES
+                TIME_SPENT_HOURS
             FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS
             WHERE (TICKETNUMBER = %s OR TICKETNUMBER = %s)
               AND LOWER(STATUS) IN ('closed', 'resolved', 'complete', 'completed')
@@ -2235,18 +2229,18 @@ def sync_ticket_to_closed_table_snowflake(ticket_number: str):
                 target.ORIGINAL_CREATED_AT = source.ORIGINAL_CREATED_AT,
                 target.RESOLVED_AT = source.RESOLVED_AT,
                 target.CLOSED_AT = source.CLOSED_AT,
-                target.TIME_SPENT_MINUTES = source.TIME_SPENT_MINUTES
+                target.TIME_SPENT_HOURS = source.TIME_SPENT_HOURS
         WHEN NOT MATCHED THEN
             INSERT (
                 TICKETNUMBER, TITLE, DESCRIPTION, TICKETTYPE, TICKETCATEGORY,
                 ISSUETYPE, SUBISSUETYPE, DUEDATETIME, PRIORITY, STATUS, RESOLUTION,
                 TECHNICIANEMAIL, TECHNICIAN_ID, USEREMAIL, USERID, PHONENUMBER,
-                CLOSED_AT, ORIGINAL_CREATED_AT, RESOLVED_AT, TIME_SPENT_MINUTES
+                CLOSED_AT, ORIGINAL_CREATED_AT, RESOLVED_AT, TIME_SPENT_HOURS
             ) VALUES (
                 source.TICKETNUMBER, source.TITLE, source.DESCRIPTION, source.TICKETTYPE, source.TICKETCATEGORY,
                 source.ISSUETYPE, source.SUBISSUETYPE, source.DUEDATETIME, source.PRIORITY, source.STATUS, source.RESOLUTION,
                 source.TECHNICIANEMAIL, source.TECHNICIAN_ID, source.USEREMAIL, source.USERID, source.PHONENUMBER,
-                source.CLOSED_AT, source.ORIGINAL_CREATED_AT, source.RESOLVED_AT, source.TIME_SPENT_MINUTES
+                source.CLOSED_AT, source.ORIGINAL_CREATED_AT, source.RESOLVED_AT, source.TIME_SPENT_HOURS
             )
         """
         snowflake_conn.execute_query(sync_sql, (ticket_dot, ticket_dash))
@@ -2421,8 +2415,8 @@ def update_ticket_status_priority(ticket_number: str, update_request: TicketUpda
                     # the ticket must already have effort logged (earlier form save).
                     new_status_l = (update_request.status or "").strip().lower()
                     if new_status_l in ("resolved", "complete", "completed", "closed"):
-                        existing_effort = parse_time_spent_minutes(
-                            ticket_dict.get('TIME_SPENT_MINUTES') or ticket_dict.get('TIME_SPENT')
+                        existing_effort = parse_time_spent_hours(
+                            ticket_dict.get('TIME_SPENT_HOURS') or ticket_dict.get('TIME_SPENT')
                         )
                         has_time_spent = bool(update_request.time_spent and str(update_request.time_spent.strip())) or existing_effort is not None
                         if not has_time_spent:
@@ -2481,24 +2475,24 @@ def update_ticket_status_priority(ticket_number: str, update_request: TicketUpda
                             update_parts.append("RESOLVED_AT = NULL")
                             update_parts.append("CLOSED_AT = NULL")
                             update_parts.append("TIME_SPENT = NULL")
-                            update_parts.append("TIME_SPENT_MINUTES = NULL")
+                            update_parts.append("TIME_SPENT_HOURS = NULL")
                             updated_fields['resolved_at'] = 'cleared (reopened)'
                             updated_fields['closed_at'] = 'cleared (reopened)'
                             updated_fields['time_spent'] = 'cleared (reopened)'
-                            updated_fields['time_spent_minutes'] = 'cleared (reopened)'
+                            updated_fields['time_spent_hours'] = 'cleared (reopened)'
 
-                    # Handle time_spent in Snowflake (VARCHAR for display + numeric minutes for analytics)
+                    # Handle time_spent in Snowflake (VARCHAR for display + numeric hours for analytics)
                     if update_request.time_spent:
                         updated_fields['time_spent'] = update_request.time_spent
                         try:
                             ensure_mttr_columns()
                             update_parts.append("TIME_SPENT = %s")
                             update_values.append(update_request.time_spent)
-                            parsed_minutes = parse_time_spent_minutes(update_request.time_spent)
-                            if parsed_minutes is not None:
-                                update_parts.append("TIME_SPENT_MINUTES = %s")
-                                update_values.append(parsed_minutes)
-                                updated_fields['time_spent_minutes'] = str(parsed_minutes)
+                            parsed_hours = parse_time_spent_hours(update_request.time_spent)
+                            if parsed_hours is not None:
+                                update_parts.append("TIME_SPENT_HOURS = %s")
+                                update_values.append(parsed_hours)
+                                updated_fields['time_spent_hours'] = str(parsed_hours)
                         except Exception as e_col:
                             print(f"Notice: Snowflake TIME_SPENT column: {e_col}")
 
@@ -2820,7 +2814,7 @@ def ensure_mttr_columns():
       - RESOLVED_AT        TIMESTAMP_NTZ  (first resolution timestamp — MTTR source)
       - CLOSED_AT          TIMESTAMP_NTZ  (final close timestamp)
       - ASSIGNED_AT        TIMESTAMP_NTZ  (assignment timestamp)
-      - TIME_SPENT_MINUTES NUMBER(8,0)    (technician effort in minutes — work-time metric)
+      - TIME_SPENT_HOURS   NUMBER(8,1)    (technician effort in hours — work-time metric)
       - TIME_SPENT         VARCHAR(255)   (free-text display value, pre-existing)
     """
     if not snowflake_conn or not snowflake_conn.is_connected():
@@ -2829,13 +2823,13 @@ def ensure_mttr_columns():
         f"ALTER TABLE {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS ADD COLUMN IF NOT EXISTS RESOLVED_AT TIMESTAMP_NTZ",
         f"ALTER TABLE {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS ADD COLUMN IF NOT EXISTS CLOSED_AT TIMESTAMP_NTZ",
         f"ALTER TABLE {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS ADD COLUMN IF NOT EXISTS ASSIGNED_AT TIMESTAMP_NTZ",
-        f"ALTER TABLE {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS ADD COLUMN IF NOT EXISTS TIME_SPENT_MINUTES NUMBER(8,0)",
+        f"ALTER TABLE {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS ADD COLUMN IF NOT EXISTS TIME_SPENT_HOURS NUMBER(8,1)",
         f"ALTER TABLE {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS ADD COLUMN IF NOT EXISTS TIME_SPENT VARCHAR(255)",
         f"ALTER TABLE {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS ADD COLUMN IF NOT EXISTS CREATED_AT TIMESTAMP_NTZ",
         f"ALTER TABLE {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_CLOSED_TICKETS ADD COLUMN IF NOT EXISTS RESOLVED_AT TIMESTAMP_NTZ",
         f"ALTER TABLE {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_CLOSED_TICKETS ADD COLUMN IF NOT EXISTS CLOSED_AT TIMESTAMP_NTZ",
         f"ALTER TABLE {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_CLOSED_TICKETS ADD COLUMN IF NOT EXISTS ORIGINAL_CREATED_AT TIMESTAMP_NTZ",
-        f"ALTER TABLE {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_CLOSED_TICKETS ADD COLUMN IF NOT EXISTS TIME_SPENT_MINUTES NUMBER(8,0)",
+        f"ALTER TABLE {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_CLOSED_TICKETS ADD COLUMN IF NOT EXISTS TIME_SPENT_HOURS NUMBER(8,1)",
     ]
     try:
         for stmt in statements:
@@ -2890,14 +2884,14 @@ def parse_created_at_from_ticket_number(t_num) -> Optional[datetime]:
     return None
 
 
-def parse_time_spent_minutes(raw) -> Optional[float]:
+def parse_time_spent_hours(raw) -> Optional[float]:
     """
-    Normalize a technician-entered time_spent value to minutes.
+    Normalize a technician-entered time_spent value to hours.
 
     Accepts:
-      - numbers                     → treated as minutes (e.g. TIME_SPENT_MINUTES column)
-      - '45 mins', '2 hours', '1.5 hrs', '90m', '2h'
-    Returns None when the value cannot be interpreted.
+      - numbers                     → treated as hours (e.g. TIME_SPENT_HOURS column)
+      - '2 hours', '1.5 hrs', '2h', '0.5h'
+    Returns None when the value cannot be interpreted or uses minutes.
     """
     if raw is None:
         return None
@@ -2907,35 +2901,33 @@ def parse_time_spent_minutes(raw) -> Optional[float]:
     if not text:
         return None
     try:
-        return float(text)  # pure number → minutes
+        return float(text)  # pure number → hours
     except ValueError:
         pass
-    match = re.search(r"(\d+(?:\.\d+)?)\s*(mins?|minutes?|m|hrs?|hours?|h)\b", text, re.IGNORECASE)
+    match = re.search(r"(\d+(?:\.\d+)?)\s*(hrs?|hours?|h)\b", text, re.IGNORECASE)
     if not match:
         return None
     value = float(match.group(1))
-    unit = match.group(2).lower()
-    return value * 60.0 if unit.startswith("h") else value
+    return value
 
 
 def extract_time_spent_from_resolution(resolution_text) -> Optional[float]:
     """
-    Scrape the time spent recorded inside a resolution log, mirroring the
-    frontend parser: '(2 hours)', 'Time Spent: 45 mins', 'Logged Time Spent: 1.5 hrs'.
-    Returns minutes or None.
+    Scrape the time spent recorded inside a resolution log.
+    Only accepts hour-based values: '(2 hours)', 'Time Spent: 1.5 hrs', 'Logged Time Spent: 0.5h'.
+    Returns hours or None.
     """
     if not resolution_text:
         return None
     match = re.search(
-        r"(?:\(|Time Spent:\s*|Logged Time Spent:\s*)(\d+(?:\.\d+)?)\s*(mins?|minutes?|hrs?|hours?)\b",
+        r"(?:\(|Time Spent:\s*|Logged Time Spent:\s*)(\d+(?:\.\d+)?)\s*(hrs?|hours?|h)\b",
         str(resolution_text),
         re.IGNORECASE,
     )
     if not match:
         return None
     value = float(match.group(1))
-    unit = match.group(2).lower()
-    return value * 60.0 if unit.startswith("h") else value
+    return value
 
 
 def ensure_technician_id_column():
@@ -3173,7 +3165,7 @@ def create_ticket(request: TicketCreateRequest):
                         "TICKETNUMBER", "TITLE", "DESCRIPTION", "TICKETTYPE", "TICKETCATEGORY",
                         "ISSUETYPE", "SUBISSUETYPE", "DUEDATETIME", "PRIORITY", "STATUS", "RESOLUTION",
                         "TECHNICIANEMAIL", "TECHNICIAN_ID", "USEREMAIL", "USERID", "PHONENUMBER",
-                        "TIME_SPENT", "CREATED_AT", "ASSIGNED_AT", "RESOLVED_AT", "CLOSED_AT", "TIME_SPENT_MINUTES"
+                        "TIME_SPENT", "CREATED_AT", "ASSIGNED_AT", "RESOLVED_AT", "CLOSED_AT", "TIME_SPENT_HOURS"
                     ]
                     writer = csv.DictWriter(f_csv, fieldnames=field_order)
                     writer.writerow({

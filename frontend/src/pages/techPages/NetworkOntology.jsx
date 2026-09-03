@@ -730,7 +730,7 @@ export default function NetworkOntology() {
                       <span>Alarms: <strong>29</strong></span>
                     </button>
                     <span className="text-slate-600">|</span>
-                    <span>⚡ Links: <strong className="text-slate-200">{displayedGraph.stats.totalRelationships}</strong></span>
+                    <span>Links: <strong className="text-slate-200">{displayedGraph.stats.totalRelationships}</strong></span>
                     <span className="text-slate-600">|</span>
                     <span className="text-emerald-400">{displayedGraph.stats.totalNodes} nodes ({queryExecutionTime}s)</span>
                   </div>

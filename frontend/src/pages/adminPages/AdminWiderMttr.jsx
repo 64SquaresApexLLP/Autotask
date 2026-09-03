@@ -214,7 +214,7 @@ ${(mttrData.technician_leaderboard || []).map((t, idx) => `  #${idx + 1} ${t.nam
             )}
 
             {/* Top 4 Executive KPI Metrics */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
 
               {/* 1. Global MTTR */}
               <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 flex items-center justify-between">
@@ -271,25 +271,12 @@ ${(mttrData.technician_leaderboard || []).map((t, idx) => `  #${idx + 1} ${t.nam
                 </div>
               </div>
 
-              {/* 4. Peak Velocity Shift — fully from API */}
-              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 flex items-center justify-between">
-                <div>
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Peak Velocity Shift</p>
-                  <h3 className="text-2xl font-bold text-amber-600 mt-1">
-                    {fastestShift ? fastestShift.shift : '—'}
-                  </h3>
-                  <p className="text-xs text-amber-600 font-medium mt-0.5">
-                    {fastestShift ? `${fmtMttrText(fastestShift.mttr_hours)} Average Turnaround` : 'No shift data yet'}
-                  </p>
-                </div>
-                <div className="w-11 h-11 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
-                  <Clock className="w-5 h-5" />
-                </div>
-              </div>
+            
+             
             </div>
 
             {/* Charts Grid */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-1 gap-6">
 
               {/* Bar Chart: Actual MTTR vs SLA Limit by Priority */}
               <div className="lg:col-span-7 bg-white rounded-xl shadow-sm border border-gray-200 p-5 lg:p-6 flex flex-col justify-between">
@@ -334,55 +321,12 @@ ${(mttrData.technician_leaderboard || []).map((t, idx) => `  #${idx + 1} ${t.nam
                 </div>
               </div>
 
-              {/* Shift Turnaround Performance */}
-              <div className="lg:col-span-5 bg-white rounded-xl shadow-sm border border-gray-200 p-5 lg:p-6 flex flex-col justify-between">
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <Clock className="w-5 h-5 text-[#00ABE4]" />
-                      <h3 className="text-base font-bold text-gray-900">Shift MTTR Velocity</h3>
-                    </div>
-                    <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700">
-                      {mttrData?.by_shift?.length ?? 0} Shifts
-                    </span>
-                  </div>
-                  <p className="text-xs text-gray-500 mb-4">
-                    Resolution velocity and SLA delivery performance grouped by working shift rotation.
-                  </p>
-                </div>
-
-                <div className="space-y-3.5">
-                  {(mttrData?.by_shift || []).length > 0 ? (
-                    (mttrData.by_shift).map((shift, idx) => (
-                      <div key={idx} className="p-3.5 rounded-xl border border-gray-100 bg-gray-50">
-                        <div className="flex items-center justify-between">
-                          <span className="font-semibold text-sm text-gray-900">{shift.shift}</span>
-                          <span className="text-xs font-bold text-purple-700 bg-purple-50 px-2 py-0.5 rounded">
-                            {fmtMttrShort(shift.mttr_hours)} MTTR
-                          </span>
-                        </div>
-                        <div className="flex items-center justify-between text-xs text-gray-500 mt-2">
-                          <span>{shift.tickets_resolved} Tickets Resolved</span>
-                          <span className="text-emerald-600 font-semibold">{shift.sla_rate}% SLA</span>
-                        </div>
-                        <div className="w-full bg-gray-200 rounded-full h-1.5 mt-1.5 overflow-hidden">
-                          <div
-                            className="bg-purple-600 h-1.5 rounded-full"
-                            style={{ width: `${Math.min(shift.sla_rate, 100)}%` }}
-                          />
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-sm text-gray-400 text-center py-6">No shift data available yet</p>
-                  )}
-                </div>
-              </div>
-
+            
+              
             </div>
 
             {/* Technician Performance Leaderboard & Category Breakdown */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-1 gap-6">
 
               {/* Leaderboard Table */}
               <div className="lg:col-span-7 bg-white rounded-xl shadow-sm border border-gray-200 p-5 lg:p-6">
@@ -435,36 +379,7 @@ ${(mttrData.technician_leaderboard || []).map((t, idx) => `  #${idx + 1} ${t.nam
                 </div>
               </div>
 
-              {/* Category MTTR Matrix */}
-              <div className="lg:col-span-5 bg-white rounded-xl shadow-sm border border-gray-200 p-5 lg:p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-2">
-                    <Layers className="w-5 h-5 text-indigo-600" />
-                    <h3 className="text-base font-bold text-gray-900">Category Turnaround Matrix</h3>
-                  </div>
-                  <span className="text-xs font-semibold text-gray-500">Domain Velocity</span>
-                </div>
-
-                <div className="space-y-3">
-                  {(mttrData?.by_category || []).length > 0 ? (
-                    mttrData.by_category.map((cat, idx) => (
-                      <div key={idx} className="p-3 rounded-lg border border-gray-100 bg-gray-50 flex items-center justify-between">
-                        <div>
-                          <h4 className="text-xs font-bold text-gray-800">{cat.category}</h4>
-                          <p className="text-[11px] text-gray-500">
-                            {cat.tickets} Closed Requests • {cat.sla_compliance}% On-Time
-                          </p>
-                        </div>
-                        <span className="px-2.5 py-1 rounded-md text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
-                          {fmtMttrShort(cat.mttr_hours)} MTTR
-                        </span>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-sm text-gray-400 text-center py-6">No category data available yet</p>
-                  )}
-                </div>
-              </div>
+        
 
             </div>
 
