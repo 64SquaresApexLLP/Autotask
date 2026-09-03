@@ -25,7 +25,7 @@ import {
 } from 'recharts';
 import Header from '../../components/Header';
 import Sidebar from '../../components/Sidebar';
-import { formatMttrValue } from '../../components/MttrCard';
+import MttrCard, { formatMttrValue } from '../../components/MttrCard';
 import { adminService } from '../../services/adminService';
 
 const AdminWiderMttr = () => {
@@ -60,6 +60,36 @@ const AdminWiderMttr = () => {
   const targetMttr    = mttrData?.target_mttr_hours ?? null;
   const slaRate       = mttrData?.sla_compliance_rate ?? null;
   const auditedCount  = mttrData?.total_audited_tickets ?? null;
+
+  // Normalize admin API data for MttrCard (which expects technician API field names)
+  const mttrCardData = mttrData ? {
+    overall_mttr_hours: mttrData.global_mttr_hours,
+    personal_mttr_hours: mttrData.global_mttr_hours,
+    sla_compliance_rate: mttrData.sla_compliance_rate,
+    sla_targets_hours: { Critical: 2.0, High: 8.0, Medium: 24.0, Low: 48.0 },
+    by_priority: {
+      Critical: {
+        mttr_hours: mttrData.by_priority?.Critical?.actual_mttr_hours ?? null,
+        sla_target_hours: mttrData.by_priority?.Critical?.target_hours ?? null,
+        resolved_count: mttrData.by_priority?.Critical?.tickets_count ?? null,
+      },
+      High: {
+        mttr_hours: mttrData.by_priority?.High?.actual_mttr_hours ?? null,
+        sla_target_hours: mttrData.by_priority?.High?.target_hours ?? null,
+        resolved_count: mttrData.by_priority?.High?.tickets_count ?? null,
+      },
+      Medium: {
+        mttr_hours: mttrData.by_priority?.Medium?.actual_mttr_hours ?? null,
+        sla_target_hours: mttrData.by_priority?.Medium?.target_hours ?? null,
+        resolved_count: mttrData.by_priority?.Medium?.tickets_count ?? null,
+      },
+      Low: {
+        mttr_hours: mttrData.by_priority?.Low?.actual_mttr_hours ?? null,
+        sla_target_hours: mttrData.by_priority?.Low?.target_hours ?? null,
+        resolved_count: mttrData.by_priority?.Low?.tickets_count ?? null,
+      },
+    },
+  } : null;
 
   // MTTR display helpers — sub-hour durations render as minutes.
   const fmtMttrText = (hours) => {
@@ -274,6 +304,9 @@ ${(mttrData.technician_leaderboard || []).map((t, idx) => `  #${idx + 1} ${t.nam
             
              
             </div>
+
+            {/* Priority Tier Speedometer — SLA vs MTTR */}
+            {mttrCardData && <MttrCard mttrData={mttrCardData} isTechnician={true} />}
 
             {/* Charts Grid */}
             <div className="grid grid-cols-1 lg:grid-cols-1 gap-6">

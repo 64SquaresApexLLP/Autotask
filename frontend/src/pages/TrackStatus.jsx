@@ -50,7 +50,7 @@ const TrackStatus = () => {
                  (userName && tReqName === userName) ||
                  (userName && tEmail === userName);
         });
-        userTickets = matching.length > 0 ? matching : allTickets;
+        userTickets = matching;
       }
 
       setTickets(userTickets || []);

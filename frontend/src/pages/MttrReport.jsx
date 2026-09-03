@@ -154,9 +154,12 @@ const MttrReport = () => {
     const apiHours = mttrData?.by_priority?.[pKey]?.mttr_hours ?? null;
     const actualHours = apiHours !== null ? Number(apiHours) : null;
 
+    const slaTarget = mttrData?.by_priority?.[pKey]?.sla_target_hours ?? null;
+
     return {
       priority: pKey,
       actual: actualHours,
+      slaTarget: slaTarget !== null ? Number(slaTarget) : null,
       resolved: !isTechnician ? resolvedUserPriority.length : (mttrData?.by_priority?.[pKey]?.resolved_count ?? 0)
     };
   }).filter(d => d.actual !== null);  // omit priorities with no real data
@@ -324,7 +327,7 @@ const MttrReport = () => {
               </div>
             )}
 
-            {/* MTTR Metrics Card (For Technicians) */}
+            {/* MTTR + SLA Metrics (For Technicians) */}
             {isTechnician && (
               <>
                 {loading && !mttrData ? (
@@ -333,10 +336,29 @@ const MttrReport = () => {
                     <p className="text-sm font-medium text-gray-600">Calculating MTTR Analytics...</p>
                   </div>
                 ) : (
-                  <MttrCard
-                    mttrData={mttrData}
-                    isTechnician={isTechnician}
-                  />
+                  <>
+                    {/* SLA Compliance Rate Card */}
+                    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 flex items-center justify-between">
+                      <div>
+                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">SLA Compliance</p>
+                        <h3 className={`text-2xl font-bold mt-1 ${mttrData?.sla_compliance_rate >= 95 ? 'text-emerald-600' : 'text-amber-500'}`}>
+                          {mttrData?.sla_compliance_rate != null ? `${mttrData.sla_compliance_rate}%` : '—'}
+                        </h3>
+                        <p className={`text-xs font-medium mt-0.5 ${mttrData?.sla_compliance_rate >= 95 ? 'text-emerald-600' : 'text-amber-500'}`}>
+                          {mttrData?.sla_compliance_rate != null
+                            ? mttrData.sla_compliance_rate >= 95 ? 'Above 95% target' : 'Below 95% target'
+                            : 'No data yet'}
+                        </p>
+                      </div>
+                      <div className="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                        <ShieldCheck className="w-5 h-5" />
+                      </div>
+                    </div>
+                    <MttrCard
+                      mttrData={mttrData}
+                      isTechnician={isTechnician}
+                    />
+                  </>
                 )}
               </>
             )}
@@ -400,6 +422,15 @@ const MttrReport = () => {
                         radius={[6, 6, 0, 0]} 
                         maxBarSize={38} 
                       />
+                      {isTechnician && (
+                        <Bar 
+                          dataKey="slaTarget" 
+                          name="SLA Limit" 
+                          fill="#F97316" 
+                          radius={[6, 6, 0, 0]} 
+                          maxBarSize={38} 
+                        />
+                      )}
                     </BarChart>
                   </ResponsiveContainer>
                   ) : (

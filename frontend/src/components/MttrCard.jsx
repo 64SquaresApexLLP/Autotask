@@ -264,14 +264,17 @@ const MttrCard = ({ mttrData, isTechnician = true, className = '' }) => {
             const data = by_priority[key] || {};
             // null means no resolved tickets yet — show "no data" state
             const hours = data.mttr_hours != null ? Number(data.mttr_hours) : null;
-            const percentage = hours !== null ? Math.min(Math.round((hours / maxMttrHours) * 100), 100) : 0;
-            
-            // SVG circular progress calculation
+            const slaTarget = data.sla_target_hours != null ? Number(data.sla_target_hours) : null;
+
+            // SVG circular progress — full circle = SLA, filled portion = MTTR
             const radius = 32;
             const circumference = 2 * Math.PI * radius;
-            const strokeDashoffset = circumference - (percentage / 100) * circumference;
+            const mttrPercent = (hours !== null && slaTarget !== null) ? Math.min((hours / slaTarget) * 100, 100) : 0;
+            const strokeDashoffset = circumference - (mttrPercent / 100) * circumference;
 
-            const strokeColor = key === 'Critical' ? '#EF4444' : key === 'High' ? '#F97316' : key === 'Medium' ? '#EAB308' : '#3B82F6';
+            // Red if MTTR breaches SLA, otherwise priority-colored
+            const isBreached = (hours !== null && slaTarget !== null) && hours > slaTarget;
+            const mttrColor = isBreached ? '#EF4444' : (key === 'Critical' ? '#F97316' : key === 'High' ? '#EAB308' : key === 'Medium' ? '#7C3AED' : '#166534');
 
             return (
               <div key={key} className={`p-4 rounded-xl border bg-white shadow-sm hover:shadow-md transition-all flex flex-col items-center text-center ${border}`}>
@@ -279,47 +282,51 @@ const MttrCard = ({ mttrData, isTechnician = true, className = '' }) => {
                   <span className={`text-xs font-bold ${text}`}>{label}</span>
                 </div>
 
-                {/* Circular Gauge Meter */}
+                {/* Circular Gauge — full ring = SLA target, filled = MTTR */}
                 <div className="relative w-20 h-20 my-1 flex items-center justify-center">
                   <svg className="w-20 h-20 transform -rotate-90" viewBox="0 0 80 80">
-                    {/* Background circle */}
+                    {/* SLA budget ring (full circle) */}
                     <circle
                       cx="40"
                       cy="40"
                       r={radius}
-                      className="stroke-gray-100"
+                      stroke="#93C5FD"
                       strokeWidth="6"
                       fill="transparent"
                     />
-                    {/* Progress circle */}
-                    <circle
-                      cx="40"
-                      cy="40"
-                      r={radius}
-                      stroke={strokeColor}
-                      strokeWidth="6"
-                      strokeDasharray={circumference}
-                      strokeDashoffset={strokeDashoffset}
-                      strokeLinecap="round"
-                      fill="transparent"
-                      className="transition-all duration-700 ease-out"
-                    />
+                    {/* MTTR progress — fills portion of SLA ring */}
+                    {hours !== null && (
+                      <circle
+                        cx="40"
+                        cy="40"
+                        r={radius}
+                        stroke={mttrColor}
+                        strokeWidth="6"
+                        strokeDasharray={circumference}
+                        strokeDashoffset={strokeDashoffset}
+                        strokeLinecap="round"
+                        fill="transparent"
+                        className="transition-all duration-700 ease-out"
+                      />
+                    )}
                   </svg>
                   {/* Center Text */}
                   <div className="absolute inset-0 flex flex-col items-center justify-center">
                     <span className="text-base font-extrabold text-gray-900 tracking-tight">
                       {hours !== null ? formatMttrValue(hours)?.short : '—'}
                     </span>
-                    <span className="text-[9px] font-semibold text-gray-400 uppercase">MTTR</span>
+                    <span className="text-[9px] font-semibold text-gray-400 uppercase">
+                      {slaTarget !== null ? `SLA ${formatMttrValue(slaTarget)?.short}` : 'MTTR'}
+                    </span>
                   </div>
                 </div>
 
                 {/* Resolved Count Badge */}
                 <div className="mt-2 w-full">
                   {hours !== null ? (
-                    <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full w-full justify-center">
+                    <span className={`inline-flex items-center gap-1 text-[11px] font-bold ${isBreached ? 'text-red-700 bg-red-50 border-red-200' : 'text-emerald-700 bg-emerald-50 border-emerald-200'} border px-2 py-0.5 rounded-full w-full justify-center`}>
                       <CheckCircle2 className="w-3 h-3" />
-                      <span>{data.resolved_count ?? 0} resolved</span>
+                      <span>{data.resolved_count ?? 0} resolved{isBreached ? ' ⚠ SLA breach' : ''}</span>
                     </span>
                   ) : (
                     <span className="inline-flex items-center text-[11px] font-medium text-gray-500 bg-gray-50 px-2 py-0.5 rounded-full w-full justify-center">

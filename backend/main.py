@@ -340,7 +340,7 @@ def authenticate_user_from_db(username: str, password: str) -> Optional[dict]:
         if snowflake_conn and snowflake_conn.is_connected():
             query = f"""
             SELECT * FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_USER_DATA
-            WHERE UPPER(USER_ID) = UPPER(%s) OR LOWER(USER_EMAIL) = LOWER(%s)
+            WHERE UPPER(USERID) = UPPER(%s) OR LOWER(USER_EMAIL) = LOWER(%s)
             """
             results = snowflake_conn.execute_query(query, (username, username))
             if results:
@@ -353,7 +353,7 @@ def authenticate_user_from_db(username: str, password: str) -> Optional[dict]:
                 )
                 if check_password_match(password, stored_pwd):
                     return {
-                        "username": user.get('USER_ID'),
+                        "username": user.get('USERID'),
                         "password": stored_pwd,
                         "role": "user",
                         "email": user.get('USER_EMAIL'),
@@ -3282,7 +3282,7 @@ def get_all_users():
         if snowflake_conn and snowflake_conn.is_connected():
             try:
                 query = f"""
-                SELECT USER_ID, NAME, USER_EMAIL, USER_PHONENUMBER
+                SELECT USERID, NAME, USER_EMAIL, USER_PHONENUMBER
                 FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_USER_DATA
                 ORDER BY NAME
                 """
@@ -3295,9 +3295,9 @@ def get_all_users():
             users = []
             for user in results:
                 users.append({
-                    "id": user.get('USER_ID'),
+                    "id": user.get('USERID'),
                     "name": user.get('NAME'),
-                    "username": user.get('USER_ID'),
+                    "username": user.get('USERID'),
                     "email": user.get('USER_EMAIL'),
                     "phone": user.get('USER_PHONENUMBER'),
                     "role": "user"
@@ -4176,7 +4176,7 @@ async def get_admin_users(role: Optional[str] = None):
             sf_users = snowflake_conn.execute_query(f"SELECT * FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_USER_DATA")
             if sf_users:
                 for row in sf_users:
-                    u_id = row.get("USER_ID") or row.get("ID") or ""
+                    u_id = row.get("USERID") or row.get("ID") or ""
                     u_name = row.get("NAME") or row.get("FULL_NAME") or u_id
                     u_email = row.get("USER_EMAIL") or row.get("EMAIL") or ""
                     u_phone = row.get("USER_PHONENUMBER") or row.get("PHONENUMBER") or row.get("PHONE") or ""
@@ -4210,7 +4210,7 @@ async def get_admin_users(role: Optional[str] = None):
     all_tickets = []
     if snowflake_conn and snowflake_conn.is_connected():
         try:
-            all_tickets = snowflake_conn.execute_query(f"SELECT TICKETNUMBER, USEREMAIL, USER_ID, STATUS, CREATED_AT FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS WHERE TICKETNUMBER IS NOT NULL") or []
+            all_tickets = snowflake_conn.execute_query(f"SELECT TICKETNUMBER, USEREMAIL, USERID, STATUS, CREATED_AT FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS WHERE TICKETNUMBER IS NOT NULL") or []
         except Exception as e:
             logger.warning(f"Could not load tickets for user mapping: {e}")
 
@@ -4396,7 +4396,7 @@ async def create_admin_user(user_data: dict):
     if snowflake_conn and snowflake_conn.is_connected():
         try:
             ins_sql = f"""
-                INSERT INTO {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_USER_DATA (USER_ID, NAME, USER_EMAIL, USER_PHONENUMBER, PASSWORD)
+                INSERT INTO {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_USER_DATA (USERID, NAME, USER_EMAIL, USER_PHONENUMBER, PASSWORD)
                 VALUES (%s, %s, %s, %s, %s)
             """
             snowflake_conn.execute_query(ins_sql, (
@@ -4426,7 +4426,7 @@ async def delete_admin_user(user_id: str):
     global ADMIN_USERS_STORE
     if snowflake_conn and snowflake_conn.is_connected():
         try:
-            del_sql = f"DELETE FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_USER_DATA WHERE USER_ID = %s OR USER_EMAIL = %s"
+            del_sql = f"DELETE FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_USER_DATA WHERE USERID = %s OR USER_EMAIL = %s"
             snowflake_conn.execute_query(del_sql, (user_id, user_id))
         except Exception as e:
             logger.warning(f"Error removing user from Snowflake: {e}")
@@ -4475,7 +4475,7 @@ async def get_admin_technicians():
                             "skill_sets": skill_list or ["Network Routing & EVPN", "Hardware Diagnostics"],
                             "experience_level": "Senior Specialist",
                             "status": "ACTIVE",
-                            "current_tickets_load": int(row.get("ACTIVE_TICKETS") or 0),
+                            "current_tickets_load": int(row.get("CURRENT_TICKETS_LOAD") or 0),
                             "resolved_tickets_count": int(row.get("RESOLVED_TICKETS") or 0),
                             "max_capacity": 10
                         })
@@ -4489,7 +4489,7 @@ async def get_admin_technicians():
     all_tickets = []
     if snowflake_conn and snowflake_conn.is_connected():
         try:
-            all_tickets = snowflake_conn.execute_query(f"SELECT TICKETNUMBER, TITLE, PRIORITY, CATEGORY, STATUS, TECHNICIAN_ID, ASSIGNED_TECHNICIAN FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS WHERE TICKETNUMBER IS NOT NULL") or []
+            all_tickets = snowflake_conn.execute_query(f"SELECT TICKETNUMBER, TITLE, PRIORITY, TICKETCATEGORY, STATUS, TECHNICIANEMAIL FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS WHERE TICKETNUMBER IS NOT NULL") or []
         except Exception as e:
             logger.warning(f"Could not load tickets for technician workload: {e}")
 
@@ -4509,7 +4509,7 @@ async def get_admin_technicians():
         resolved_count = 0
 
         for t in all_tickets:
-            assigned = str(t.get("ASSIGNED_TECHNICIAN") or t.get("assigned_technician") or t.get("TECHNICIAN_ID") or t.get("technician_id") or "").lower().strip()
+            assigned = str(t.get("TECHNICIANEMAIL") or t.get("technician_email") or t.get("ASSIGNED_TECHNICIAN") or t.get("assigned_technician") or "").lower().strip()
             status_lower = str(t.get("STATUS") or t.get("status") or "").lower().strip()
 
             if (t_name and t_name in assigned) or (t_uname and t_uname in assigned) or (t_id and t_id in assigned) or (assigned and assigned in t_name):
@@ -4521,7 +4521,7 @@ async def get_admin_technicians():
                         "title": t.get("TITLE") or t.get("title"),
                         "priority": t.get("PRIORITY") or t.get("priority", "Medium"),
                         "status": t.get("STATUS") or t.get("status", "Open"),
-                        "category": t.get("CATEGORY") or t.get("category", "General")
+                        "category": t.get("TICKETCATEGORY") or t.get("category", "General")
                     })
 
         tech["current_tickets_load"] = len(assigned_tickets) if assigned_tickets else tech.get("current_tickets_load", 0)
@@ -4575,8 +4575,8 @@ async def create_admin_technician(tech_data: dict):
 
             ins_sql = f"""
                 INSERT INTO {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TECHNICIAN_DATA 
-                (TECHNICIAN_ID, NAME, EMAIL, ROLE, SPECIALIZATIONS, SHIFT_START, SHIFT_END, IS_ON_CALL, SKILLS, CURRENT_WORKLOAD, TECHNICIAN_PASSWORD)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 0, %s)
+                (TECHNICIAN_ID, NAME, EMAIL, ROLE, SPECIALIZATIONS, SHIFT_START, SHIFT_END, IS_ON_CALL, SKILLS)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
             """
             snowflake_conn.execute_query(ins_sql, (
                 new_tech["username"],
@@ -4587,8 +4587,7 @@ async def create_admin_technician(tech_data: dict):
                 shift_start,
                 shift_end,
                 is_on_call,
-                ", ".join(new_tech["skill_sets"]),
-                plain_password
+                ", ".join(new_tech["skill_sets"])
             ))
         except Exception as e:
             logger.warning(f"Could not persist technician to Snowflake: {e}")
