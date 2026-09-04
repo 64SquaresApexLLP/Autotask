@@ -214,7 +214,7 @@ const TechnicianDashboard = () => {
 
               {/* Completed Today */}
               <div
-                onClick={() => navigate('/technician/all-tickets')}
+                onClick={() => navigate('/technician/my-tickets')}
                 className="bg-white rounded-xl shadow-sm border border-gray-200 hover:border-green-300 hover:shadow-md p-4 lg:p-6 transition-all cursor-pointer group"
                 title="Click to view all resolved tickets"
               >

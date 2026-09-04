@@ -298,7 +298,7 @@ const Analytics = () => {
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
                   {/* Tickets Resolved Card */}
                   <div
-                    onClick={() => navigate('/technician/all-tickets')}
+                    onClick={() => navigate('/technician/my-tickets')}
                     className="bg-white rounded-2xl shadow-sm border border-slate-200/80 p-5 relative overflow-hidden group hover:border-emerald-300 hover:shadow-md transition-all cursor-pointer transform hover:-translate-y-0.5 active:translate-y-0"
                     title="Click to view all resolved tickets"
                   >
@@ -412,7 +412,7 @@ const Analytics = () => {
                         {/* Top Throughput Summary Badges */}
                         <div className="flex items-center gap-2 text-xs font-semibold flex-wrap">
                           <button
-                            onClick={() => navigate('/technician/all-tickets')}
+                            onClick={() => navigate('/technician/my-tickets')}
                             className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 transition cursor-pointer"
                             title="View all resolved tickets"
                           >
@@ -494,7 +494,7 @@ const Analytics = () => {
                           return (
                             <div
                               key={item.priority}
-                              onClick={() => navigate(isUrgentTier ? '/technician/my-tickets' : '/technician/all-tickets')}
+                              onClick={() => navigate(isUrgentTier ? '/technician/my-tickets' : '/technician/my-tickets')}
                               className="p-2 rounded-xl hover:bg-slate-50 transition-all cursor-pointer group border border-transparent hover:border-slate-200/70"
                               title={`View ${item.priority} priority tickets`}
                             >
@@ -522,7 +522,7 @@ const Analytics = () => {
                     </div>
 
                     <div
-                      onClick={() => navigate('/technician/all-tickets')}
+                      onClick={() => navigate('/technician/my-tickets')}
                       className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500 hover:text-blue-600 transition cursor-pointer"
                     >
                       <span>Total Tracked Tickets</span>
@@ -547,7 +547,7 @@ const Analytics = () => {
                         <p className="text-xs text-slate-500 mt-0.5">Click any category card to view its corresponding tickets</p>
                       </div>
                       <button
-                        onClick={() => navigate('/technician/all-tickets')}
+                        onClick={() => navigate('/technician/my-tickets')}
                         className="text-xs font-semibold px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-full self-start sm:self-auto transition cursor-pointer"
                       >
                         {categoryData.length} Categories &bull; View All &rarr;
@@ -560,9 +560,9 @@ const Analytics = () => {
                         onClick={() => {
                           const cat = hoveredCategory ? hoveredCategory.category : sortedCategories[0]?.category;
                           if (cat) {
-                            navigate('/technician/all-tickets?category=' + encodeURIComponent(cat));
+                            navigate('/technician/my-tickets?category=' + encodeURIComponent(cat));
                           } else {
-                            navigate('/technician/all-tickets');
+                            navigate('/technician/my-tickets');
                           }
                         }}
                         className="lg:col-span-5 relative h-64 flex items-center justify-center cursor-pointer"
@@ -590,7 +590,7 @@ const Analytics = () => {
                                   strokeWidth={activeCategoryHover === index ? 3 : 1}
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    navigate('/technician/all-tickets?category=' + encodeURIComponent(entry.category));
+                                    navigate('/technician/my-tickets?category=' + encodeURIComponent(entry.category));
                                   }}
                                   className="transition-all duration-300 cursor-pointer"
                                 />
@@ -630,7 +630,7 @@ const Analytics = () => {
                           return (
                             <div
                               key={index}
-                              onClick={() => navigate('/technician/all-tickets?category=' + encodeURIComponent(item.category))}
+                              onClick={() => navigate('/technician/my-tickets?category=' + encodeURIComponent(item.category))}
                               onMouseEnter={() => setActiveCategoryHover(index)}
                               onMouseLeave={() => setActiveCategoryHover(null)}
                               className={`border rounded-xl p-3.5 transition-all cursor-pointer ${
@@ -696,7 +696,7 @@ const Analytics = () => {
 
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div
-                      onClick={() => navigate('/technician/all-tickets')}
+                      onClick={() => navigate('/technician/my-tickets')}
                       className="bg-white/5 hover:bg-white/10 border border-white/10 hover:border-indigo-400/50 rounded-xl p-4 backdrop-blur-sm transition-all cursor-pointer group"
                       title="Click to inspect Network & Access tickets"
                     >
@@ -728,7 +728,7 @@ const Analytics = () => {
                     </div>
 
                     <div
-                      onClick={() => navigate('/technician/all-tickets')}
+                      onClick={() => navigate('/technician/my-tickets')}
                       className="bg-white/5 hover:bg-white/10 border border-white/10 hover:border-indigo-400/50 rounded-xl p-4 backdrop-blur-sm transition-all cursor-pointer group"
                       title="Click to view AI-assisted resolved tickets"
                     >
@@ -762,7 +762,7 @@ const Analytics = () => {
 
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div
-                      onClick={() => navigate('/technician/all-tickets')}
+                      onClick={() => navigate('/technician/my-tickets')}
                       className="p-4 bg-slate-50 hover:bg-slate-100/80 rounded-xl border border-slate-200/70 hover:border-blue-300 transition-all cursor-pointer group"
                       title="Click to view ticket volume logs"
                     >

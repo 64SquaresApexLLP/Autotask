@@ -137,11 +137,11 @@ function App() {
             }
           />
           <Route
-            path="/technician/all-tickets"
+            path="/admin/all-tickets"
             element={
-              <ProtectedRoute>
+              <AdminRoute>
                 <AllTickets />
-              </ProtectedRoute>
+              </AdminRoute>
             }
           />
           <Route

@@ -874,7 +874,7 @@ export default function NetworkOntology() {
 
                         {/* Create Incident Ticket Action */}
                         <button
-                          onClick={() => navigate(`/technician/all-tickets?category=Hardware`)}
+                          onClick={() => navigate(user?.role === 'admin' ? '/admin/all-tickets?category=Hardware' : '/technician/my-tickets')}
                           className="w-full py-2.5 bg-red-600 hover:bg-red-500 text-white rounded-xl text-xs font-bold shadow-md transition flex items-center justify-center gap-2 cursor-pointer"
                         >
                           <Ticket className="w-4 h-4" />
@@ -1100,7 +1100,7 @@ export default function NetworkOntology() {
 
                         {/* Create / Link Ticket Button */}
                         <button
-                          onClick={() => navigate(`/technician/all-tickets?category=Hardware`)}
+                          onClick={() => navigate(user?.role === 'admin' ? '/admin/all-tickets?category=Hardware' : '/technician/my-tickets')}
                           className="w-full py-2.5 bg-[#00ABE4] hover:bg-[#0090c2] text-white rounded-xl text-xs font-bold shadow-md transition flex items-center justify-center gap-2 cursor-pointer"
                         >
                           <Ticket className="w-4 h-4" />
