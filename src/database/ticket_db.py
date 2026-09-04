@@ -114,7 +114,7 @@ class TicketDB:
 
     def get_tickets_for_user(self, user_id: str):
         query = f'''
-        SELECT * FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS WHERE USERID = %s
+        SELECT * FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS WHERE USER_ID = %s
         '''
         return self.conn.execute_query(query, (user_id,))
 

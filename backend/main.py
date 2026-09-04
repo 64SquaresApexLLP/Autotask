@@ -340,7 +340,7 @@ def authenticate_user_from_db(username: str, password: str) -> Optional[dict]:
         if snowflake_conn and snowflake_conn.is_connected():
             query = f"""
             SELECT * FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_USER_DATA
-            WHERE UPPER(USERID) = UPPER(%s) OR LOWER(USER_EMAIL) = LOWER(%s)
+            WHERE UPPER(USER_ID) = UPPER(%s) OR LOWER(USER_EMAIL) = LOWER(%s)
             """
             results = snowflake_conn.execute_query(query, (username, username))
             if results:
@@ -353,7 +353,7 @@ def authenticate_user_from_db(username: str, password: str) -> Optional[dict]:
                 )
                 if check_password_match(password, stored_pwd):
                     return {
-                        "username": user.get('USERID'),
+                        "username": user.get('USER_ID'),
                         "password": stored_pwd,
                         "role": "user",
                         "email": user.get('USER_EMAIL'),
@@ -4176,7 +4176,7 @@ async def get_admin_users(role: Optional[str] = None):
             sf_users = snowflake_conn.execute_query(f"SELECT * FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_USER_DATA")
             if sf_users:
                 for row in sf_users:
-                    u_id = row.get("USERID") or row.get("ID") or ""
+                    u_id = row.get("USER_ID") or row.get("ID") or ""
                     u_name = row.get("NAME") or row.get("FULL_NAME") or u_id
                     u_email = row.get("USER_EMAIL") or row.get("EMAIL") or ""
                     u_phone = row.get("USER_PHONENUMBER") or row.get("PHONENUMBER") or row.get("PHONE") or ""
@@ -4210,7 +4210,7 @@ async def get_admin_users(role: Optional[str] = None):
     all_tickets = []
     if snowflake_conn and snowflake_conn.is_connected():
         try:
-            all_tickets = snowflake_conn.execute_query(f"SELECT TICKETNUMBER, USEREMAIL, USERID, STATUS, CREATED_AT FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS WHERE TICKETNUMBER IS NOT NULL") or []
+            all_tickets = snowflake_conn.execute_query(f"SELECT TICKETNUMBER, USEREMAIL, USER_ID, STATUS, CREATED_AT FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS WHERE TICKETNUMBER IS NOT NULL") or []
         except Exception as e:
             logger.warning(f"Could not load tickets for user mapping: {e}")
 
@@ -4396,7 +4396,7 @@ async def create_admin_user(user_data: dict):
     if snowflake_conn and snowflake_conn.is_connected():
         try:
             ins_sql = f"""
-                INSERT INTO {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_USER_DATA (USERID, NAME, USER_EMAIL, USER_PHONENUMBER, PASSWORD)
+                INSERT INTO {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_USER_DATA (USER_ID, NAME, USER_EMAIL, USER_PHONENUMBER, PASSWORD)
                 VALUES (%s, %s, %s, %s, %s)
             """
             snowflake_conn.execute_query(ins_sql, (
@@ -4426,7 +4426,7 @@ async def delete_admin_user(user_id: str):
     global ADMIN_USERS_STORE
     if snowflake_conn and snowflake_conn.is_connected():
         try:
-            del_sql = f"DELETE FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_USER_DATA WHERE USERID = %s OR USER_EMAIL = %s"
+            del_sql = f"DELETE FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_USER_DATA WHERE USER_ID = %s OR USER_EMAIL = %s"
             snowflake_conn.execute_query(del_sql, (user_id, user_id))
         except Exception as e:
             logger.warning(f"Error removing user from Snowflake: {e}")
