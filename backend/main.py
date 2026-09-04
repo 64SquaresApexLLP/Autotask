@@ -377,6 +377,15 @@ async def startup_event():
     except Exception as e:
         print(f"⚠️ Warning: Could not ensure MTTR columns: {e}")
 
+    # 4) Ensure technician schedule/skill columns exist on CTTC_MOCK_TECHNICIAN_DATA
+    #    (idempotent migration). The admin "Edit Schedule & Skills" flow reads and
+    #    writes these columns; without them every technician UPDATE failed.
+    try:
+        if ensure_technician_schedule_columns():
+            print("✅ Technician schedule columns verified (PHONE, SHIFT, SHIFT_START, SHIFT_END, IS_ON_CALL, EXPERIENCE_LEVEL, MAX_CAPACITY, STATUS)")
+    except Exception as e:
+        print(f"⚠️ Warning: Could not ensure technician schedule columns: {e}")
+
 # --- CONFIGURATION ---
 import config
 
@@ -2390,6 +2399,57 @@ def ensure_mttr_columns():
         return False
 
 
+def _to_int(value, default=0):
+    """Best-effort int conversion for values coming back from Snowflake
+    (e.g. CURRENT_WORKLOAD is a VARCHAR on the mock table, so be defensive)."""
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+_technician_schedule_columns_ensured = False
+
+
+def ensure_technician_schedule_columns():
+    """
+    Ensure schedule/skill columns exist on CTTC_MOCK_TECHNICIAN_DATA (idempotent).
+
+    The admin technician endpoints (GET/POST/PUT /admin/technicians...) read and
+    write these columns, but the original mock table only shipped with
+    TECHNICIAN_ID / NAME / EMAIL / ROLE / SKILLS / CURRENT_WORKLOAD /
+    SPECIALIZATIONS / TECHNICIAN_PASSWORD. Without them every schedule/skills
+    UPDATE failed with an invalid-identifier error (silently swallowed by
+    execute_query), which made "Edit technician" fail on the admin page.
+
+    Adds: PHONE, SHIFT, SHIFT_START, SHIFT_END, IS_ON_CALL,
+          EXPERIENCE_LEVEL, MAX_CAPACITY, STATUS
+    """
+    global _technician_schedule_columns_ensured
+    if _technician_schedule_columns_ensured:
+        return True
+    if not snowflake_conn or not snowflake_conn.is_connected():
+        return False
+    statements = [
+        f"ALTER TABLE {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TECHNICIAN_DATA ADD COLUMN IF NOT EXISTS PHONE VARCHAR(64)",
+        f"ALTER TABLE {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TECHNICIAN_DATA ADD COLUMN IF NOT EXISTS SHIFT VARCHAR(64)",
+        f"ALTER TABLE {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TECHNICIAN_DATA ADD COLUMN IF NOT EXISTS SHIFT_START VARCHAR(32)",
+        f"ALTER TABLE {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TECHNICIAN_DATA ADD COLUMN IF NOT EXISTS SHIFT_END VARCHAR(32)",
+        f"ALTER TABLE {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TECHNICIAN_DATA ADD COLUMN IF NOT EXISTS IS_ON_CALL BOOLEAN",
+        f"ALTER TABLE {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TECHNICIAN_DATA ADD COLUMN IF NOT EXISTS EXPERIENCE_LEVEL VARCHAR(64)",
+        f"ALTER TABLE {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TECHNICIAN_DATA ADD COLUMN IF NOT EXISTS MAX_CAPACITY NUMBER(4,0) DEFAULT 10",
+        f"ALTER TABLE {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TECHNICIAN_DATA ADD COLUMN IF NOT EXISTS STATUS VARCHAR(32) DEFAULT 'ACTIVE'",
+    ]
+    try:
+        for stmt in statements:
+            snowflake_conn.execute_query(stmt)
+        _technician_schedule_columns_ensured = True
+        return True
+    except Exception as e:
+        print(f"Error ensuring technician schedule columns: {e}")
+        return False
+
+
 def parse_created_at_from_ticket_number(t_num) -> Optional[datetime]:
     """
     Derive the creation timestamp from a ticket number.
@@ -3837,9 +3897,9 @@ async def get_admin_technicians():
                             "skill_sets": skill_list or [],
                             "experience_level": str(row.get("EXPERIENCE_LEVEL") or ""),
                             "status": "ACTIVE",
-                            "current_tickets_load": int(row.get("CURRENT_TICKETS_LOAD") or 0),
-                            "resolved_tickets_count": int(row.get("RESOLVED_TICKETS") or 0),
-                            "max_capacity": int(row.get("MAX_CAPACITY") or 0)
+                            "current_tickets_load": _to_int(row.get("CURRENT_TICKETS_LOAD") or row.get("CURRENT_WORKLOAD"), 0),
+                            "resolved_tickets_count": _to_int(row.get("RESOLVED_TICKETS"), 0),
+                            "max_capacity": _to_int(row.get("MAX_CAPACITY"), 10)
                         })
         except Exception as e:
             logger.error(f"Error querying {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TECHNICIAN_DATA: {e}")
@@ -3895,7 +3955,7 @@ async def create_admin_technician(tech_data: dict):
         skills = [s.strip() for s in skills.split(",") if s.strip()]
         
     new_tech = {
-        "technician_id": f"tech-{datetime.now().strftime('%M%S')}",
+        "technician_id": username,
         "username": username,
         "full_name": tech_data.get("full_name", username).strip(),
         "email": tech_data.get("email", "").strip(),
@@ -3913,6 +3973,9 @@ async def create_admin_technician(tech_data: dict):
     # Insert into Snowflake SF_DATABASE.SF_SCHEMA.CTTC_MOCK_TECHNICIAN_DATA if connected
     if snowflake_conn and snowflake_conn.is_connected():
         try:
+            # Make sure the schedule/skill columns exist before inserting (idempotent)
+            ensure_technician_schedule_columns()
+
             # Parse shift
             shift_str = new_tech["primary_shift"]
             shift_start = ""
@@ -3924,22 +3987,23 @@ async def create_admin_technician(tech_data: dict):
                     shift_end = parts[1].strip()
 
             is_on_call = True if new_tech["on_call_status"].lower() == "active" else False
-            plain_password = tech_data.get("password", "").strip()
 
             ins_sql = f"""
                 INSERT INTO {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TECHNICIAN_DATA 
-                (TECHNICIAN_ID, NAME, EMAIL, ROLE, SPECIALIZATIONS, SHIFT_START, SHIFT_END, IS_ON_CALL, SKILLS)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                (TECHNICIAN_ID, NAME, EMAIL, ROLE, PHONE, SHIFT, SHIFT_START, SHIFT_END, IS_ON_CALL, SPECIALIZATIONS, SKILLS)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """
             snowflake_conn.execute_query(ins_sql, (
                 new_tech["username"],
                 new_tech["full_name"],
                 new_tech["email"],
                 new_tech["technician_role"],
-                ", ".join(new_tech["skill_sets"]),
+                new_tech["phone_number"],
+                new_tech["primary_shift"],
                 shift_start,
                 shift_end,
                 is_on_call,
+                ", ".join(new_tech["skill_sets"]),
                 ", ".join(new_tech["skill_sets"])
             ))
         except Exception as e:
@@ -3973,33 +4037,59 @@ async def delete_admin_technician(tech_id: str):
 @app.put("/admin/technicians/{tech_id}/schedule-skills")
 async def update_technician_schedule_and_skills(tech_id: str, update_data: dict):
     """Update technician working shift, on-call rotation, capacity, and skillsets in Snowflake SF_DATABASE.SF_SCHEMA.CTTC_MOCK_TECHNICIAN_DATA"""
-    # Fetch technician directly from Snowflake
+    # Make sure the schedule/skill columns exist before reading/writing them
+    # (idempotent; the original mock table did not ship with these columns).
+    if snowflake_conn and snowflake_conn.is_connected():
+        ensure_technician_schedule_columns()
+
+    # Fetch technician directly from Snowflake.
+    # NOTE: the table has no USERNAME column — technicians are keyed by
+    # TECHNICIAN_ID (falling back to EMAIL), matching the login/delete lookups.
     target = None
     if snowflake_conn and snowflake_conn.is_connected():
         try:
             rows = snowflake_conn.execute_query(
-                f"SELECT * FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TECHNICIAN_DATA WHERE TECHNICIAN_ID = %s OR USERNAME = %s",
+                f"SELECT * FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TECHNICIAN_DATA WHERE UPPER(TECHNICIAN_ID) = UPPER(%s) OR LOWER(EMAIL) = LOWER(%s)",
                 (tech_id, tech_id)
             )
             if rows:
                 row = rows[0]
+                skills_raw = row.get("SPECIALIZATIONS") or row.get("SKILLS") or ""
+                if isinstance(skills_raw, str):
+                    skill_list = [s.strip() for s in skills_raw.split(",") if s.strip()]
+                else:
+                    skill_list = list(skills_raw)
+                shift_start = str(row.get("SHIFT_START") or "")
+                shift_end = str(row.get("SHIFT_END") or "")
                 target = {
                     "technician_id": str(row.get("TECHNICIAN_ID") or tech_id),
-                    "username": str(row.get("USERNAME") or tech_id),
+                    "username": str(row.get("TECHNICIAN_ID") or tech_id),
                     "full_name": str(row.get("NAME") or row.get("FULL_NAME") or tech_id),
                     "email": str(row.get("EMAIL") or ""),
                     "phone_number": str(row.get("PHONE") or row.get("PHONENUMBER") or ""),
                     "technician_role": str(row.get("ROLE") or ""),
-                    "primary_shift": str(row.get("SHIFT") or ""),
+                    "primary_shift": str(row.get("SHIFT") or "") or (f"Custom ({shift_start} - {shift_end})" if shift_start or shift_end else ""),
                     "on_call_status": "Active" if row.get("IS_ON_CALL") else "Standby",
-                    "skill_sets": [s.strip() for s in str(row.get("SPECIALIZATIONS") or row.get("SKILLS") or "").split(",") if s.strip()],
+                    "skill_sets": skill_list or [],
                     "experience_level": str(row.get("EXPERIENCE_LEVEL") or ""),
                     "status": str(row.get("STATUS") or "ACTIVE"),
-                    "current_tickets_load": int(row.get("CURRENT_TICKETS_LOAD") or 0),
-                    "max_capacity": int(row.get("MAX_CAPACITY") or 0)
+                    "current_tickets_load": _to_int(row.get("CURRENT_WORKLOAD"), 0),
+                    "max_capacity": _to_int(row.get("MAX_CAPACITY"), 10)
                 }
         except Exception as e:
             logger.error(f"Error fetching technician from Snowflake for update: {e}")
+
+    # Degraded-mode fallback: if Snowflake is unavailable, still allow updating
+    # technicians created this session (kept in DEMO_USERS) instead of 404-ing.
+    if not target and tech_id in DEMO_USERS:
+        demo = DEMO_USERS[tech_id]
+        target = {
+            "technician_id": tech_id,
+            "username": tech_id,
+            "full_name": demo.get("full_name") or tech_id,
+            "email": demo.get("email") or "",
+            "skill_sets": []
+        }
 
     if not target:
         raise HTTPException(status_code=404, detail=f"Technician '{tech_id}' not found")
@@ -4016,38 +4106,49 @@ async def update_technician_schedule_and_skills(tech_id: str, update_data: dict)
     if "experience_level" in update_data:
         target["experience_level"] = update_data["experience_level"]
     if "max_capacity" in update_data:
-        target["max_capacity"] = int(update_data["max_capacity"])
+        target["max_capacity"] = _to_int(update_data["max_capacity"], 10)
     if "status" in update_data:
         target["status"] = update_data["status"]
 
-    # Update Snowflake SF_DATABASE.SF_SCHEMA.CTTC_MOCK_TECHNICIAN_DATA
+    # Persist to Snowflake SF_DATABASE.SF_SCHEMA.CTTC_MOCK_TECHNICIAN_DATA.
+    # Only columns that actually exist on the table are written (SHIFT /
+    # SHIFT_START / SHIFT_END / IS_ON_CALL / ... are ensured by
+    # ensure_technician_schedule_columns above).
     if snowflake_conn and snowflake_conn.is_connected():
         try:
-            # Parse shift
-            shift_str = target["primary_shift"]
-            shift_start = "09:00"
-            shift_end = "17:00"
+            # Parse "Morning (08:00 - 16:00)" / "Custom (09:00 - 17:00)" style labels
+            shift_str = str(target.get("primary_shift") or "")
+            shift_start = ""
+            shift_end = ""
             if "(" in shift_str and "-" in shift_str:
                 parts = shift_str.split("(")[1].replace(")", "").split("-")
                 if len(parts) == 2:
                     shift_start = parts[0].strip()
                     shift_end = parts[1].strip()
 
-            is_on_call = True if target["on_call_status"].lower() == "active" else False
-            skills_str = ", ".join(target["skill_sets"])
+            is_on_call = str(target.get("on_call_status") or "").lower() == "active"
+            skills_str = ", ".join(target.get("skill_sets") or [])
 
             upd_sql = f"""
                 UPDATE {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TECHNICIAN_DATA
-                SET SHIFT_START = %s, SHIFT_END = %s, IS_ON_CALL = %s, SPECIALIZATIONS = %s, SKILLS = %s
-                WHERE TECHNICIAN_ID = %s
+                SET SHIFT = %s, SHIFT_START = %s, SHIFT_END = %s, IS_ON_CALL = %s,
+                    SPECIALIZATIONS = %s, SKILLS = %s, EXPERIENCE_LEVEL = %s,
+                    MAX_CAPACITY = %s, STATUS = %s
+                WHERE UPPER(TECHNICIAN_ID) = UPPER(%s)
             """
             snowflake_conn.execute_query(upd_sql, (
+                shift_str,
                 shift_start,
                 shift_end,
                 is_on_call,
                 skills_str,
                 skills_str,
-                tech_id
+                str(target.get("experience_level") or ""),
+                _to_int(target.get("max_capacity"), 10),
+                str(target.get("status") or "ACTIVE"),
+                # Use the canonical TECHNICIAN_ID captured from the fetched row so
+                # lookups that matched by EMAIL still update the correct record.
+                str(target.get("technician_id") or tech_id)
             ))
         except Exception as e:
             logger.warning(f"Could not update technician in Snowflake: {e}")

@@ -192,10 +192,22 @@ const AdminTechnicians = () => {
     }
   };
 
+  const normalizeShift = (shift) => {
+    if (!shift) return 'Morning (08:00 - 16:00)';
+    if (SHIFT_OPTIONS.includes(shift)) return shift;
+    // Map stored "Custom (08:00 - 16:00)" labels back to a canonical option when the times match
+    const m = shift.match(/\((\d{1,2}:\d{2})\s*-\s*(\d{1,2}:\d{2})\)/);
+    if (m) {
+      const canonical = SHIFT_OPTIONS.find(opt => opt.includes(`(${m[1]} - ${m[2]})`));
+      if (canonical) return canonical;
+    }
+    return shift;
+  };
+
   const openScheduleModal = (tech) => {
     setSelectedTech(tech);
     setScheduleForm({
-      primary_shift: tech.primary_shift || 'Morning (08:00 - 16:00)',
+      primary_shift: normalizeShift(tech.primary_shift),
       on_call_status: tech.on_call_status || 'Standby',
       experience_level: tech.experience_level || 'L2 Specialist',
       max_capacity: tech.max_capacity || 10,
