@@ -64,13 +64,7 @@ const AllTickets = () => {
       setTechnicians(techList || []);
     } catch (error) {
       console.error('Failed to load technicians:', error);
-      // Use fallback technicians with real IDs if API fails
-      setTechnicians([
-        { id: 'T001', name: 'Technician T001', username: 'T001' },
-        { id: 'T103', name: 'Technician T103', username: 'T103' },
-        { id: 'T104', name: 'Technician T104', username: 'T104' },
-        { id: 'T106', name: 'Technician T106', username: 'T106' }
-      ]);
+      setTechnicians([]);
     }
   };
 

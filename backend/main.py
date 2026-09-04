@@ -56,7 +56,7 @@ from gmail_direct_integration import DirectGmailIntegration
 try:
     from config import MANAGER_EMAIL
 except ImportError:
-    MANAGER_EMAIL = os.getenv('MANAGER_EMAIL', 'anantlad66@gmail.com')
+    MANAGER_EMAIL = os.getenv('MANAGER_EMAIL')
 
 # Snowflake database/schema (env-driven via config; SQL queries must not hardcode DB names)
 try:
@@ -90,23 +90,10 @@ REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "7"))
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 security = HTTPBearer()
 
-# Demo / Fallback Users (allows robust login even if database is connecting/reconnecting)
-DEMO_USERS = {
-    # Admin
-    "admin": {"username": "admin", "password": "admin", "role": "admin", "email": "admin@example.com", "full_name": "Admin User"},
-    # User Demo Accounts
-    "user": {"username": "user", "password": "password", "role": "user", "email": "user@example.com", "full_name": "Demo User"},
-    "user1": {"username": "user1", "password": "password123", "role": "user", "email": "user1@example.com", "full_name": "Demo User 1"},
-    "AnantL": {"username": "AnantL", "password": "Autotask@123456", "role": "user", "email": "anant.lad@64-squares.com", "full_name": "Anant Lad"},
-    "anant.lad@64-squares.com": {"username": "AnantL", "password": "Autotask@123456", "role": "user", "email": "anant.lad@64-squares.com", "full_name": "Anant Lad"},
-    "venkatehp12@gmail.com": {"username": "venkatehp12@gmail.com", "password": "xuzzbgdwqwzrklrj", "role": "user", "email": "venkatehp12@gmail.com", "full_name": "Venkatesh P"},
-    "venkatehp12": {"username": "venkatehp12", "password": "xuzzbgdwqwzrklrj", "role": "user", "email": "venkatehp12@gmail.com", "full_name": "Venkatesh P"},
-    # Technician Demo Accounts
-    "tech": {"username": "tech", "password": "password", "role": "technician", "email": "tech@example.com", "full_name": "Demo Technician", "technician_role": "L1 Support"},
-    "tech1": {"username": "tech1", "password": "password123", "role": "technician", "email": "tech1@example.com", "full_name": "Alex Smith", "technician_role": "L2 Support"},
-    "technician": {"username": "technician", "password": "password", "role": "technician", "email": "technician@example.com", "full_name": "Support Technician", "technician_role": "Senior Technician"},
-    "tech_anant": {"username": "tech_anant", "password": "Autotask@123456", "role": "technician", "email": "anant.lad@64-squares.com", "full_name": "Anant Lad (Technician)", "technician_role": "Senior Technician"}
-}
+# Users cache - populated dynamically from Snowflake DB and CSV seed files at startup.
+# No hardcoded values; all entries come from the database.
+DEMO_USERS = {}
+
 
 def check_password_match(input_password: str, stored_hash_or_pwd: str) -> bool:
     """Helper to verify password whether stored as plain-text or bcrypt hash"""
@@ -119,9 +106,6 @@ def check_password_match(input_password: str, stored_hash_or_pwd: str) -> bool:
     if inp == stored:
         return True
 
-    # Standard default passwords
-    if inp in ["tech123", "user123", "password123", "TechPass001!", "UserPass001!", "password", "admin", "Autotask@123456"]:
-        return True
 
     # Bcrypt hash verification
     if stored.startswith("$2b$") or stored.startswith("$2a$") or stored.startswith("$2y$"):
@@ -132,131 +116,9 @@ def check_password_match(input_password: str, stored_hash_or_pwd: str) -> bool:
             pass
     return False
 
-def load_csv_users_into_demo():
-    """Load users and technicians from generated CSV files into local fallback DEMO_USERS dictionary."""
-    import csv
-    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
-    # 1. Load Technicians from CSV
-    tech_paths = [
-        os.path.join(base_dir, 'data', 'CTTC_MOCK_TECHNICIAN_DATA.csv'),
-        os.path.join(base_dir, 'data', 'technician_dummy_data.csv')
-    ]
-    for path in tech_paths:
-        if os.path.exists(path):
-            try:
-                with open(path, 'r', encoding='utf-8') as f:
-                    reader = csv.DictReader(f)
-                    for row in reader:
-                        t_id = (row.get('TECHNICIAN_ID') or '').strip()
-                        t_email = (row.get('EMAIL') or '').strip()
-                        t_pass = (row.get('PASSWORD_HASH') or row.get('TECHNICIAN_PASSWORD') or row.get('PASSWORD') or 'TechPass001!').strip()
-                        t_name = (row.get('NAME') or '').strip()
-                        t_role = (row.get('ROLE') or 'Technician').strip()
-
-                        if t_id:
-                            entry = {
-                                "username": t_id,
-                                "password": t_pass,
-                                "role": "technician",
-                                "email": t_email,
-                                "full_name": t_name,
-                                "technician_role": t_role
-                            }
-                            DEMO_USERS[t_id] = entry
-                            DEMO_USERS[t_id.lower()] = entry
-                            if t_email:
-                                DEMO_USERS[t_email.lower()] = entry
-                print(f" Loaded technician accounts from {os.path.basename(path)}")
-                break
-            except Exception as e:
-                logger.warning(f"Could not load technician CSV: {e}")
-
-    # 2. Load Users from CSV
-    user_paths = [
-        os.path.join(base_dir, 'data', 'CTTC_MOCK_USER_DATA.csv'),
-        os.path.join(base_dir, 'data', 'user_dummy_data.csv')
-    ]
-    for path in user_paths:
-        if os.path.exists(path):
-            try:
-                with open(path, 'r', encoding='utf-8') as f:
-                    reader = csv.DictReader(f)
-                    for row in reader:
-                        u_id = (row.get('USER_ID') or '').strip()
-                        u_email = (row.get('USER_EMAIL') or '').strip()
-                        u_pass = (row.get('PASSWORD_HASH') or row.get('USER_PASSWORD') or row.get('PASSWORD') or 'UserPass001!').strip()
-                        u_name = (row.get('NAME') or '').strip()
-                        u_phone = (row.get('USER_PHONENUMBER') or row.get('PHONENUMBER') or row.get('PHONE') or '').strip()
-
-                        if u_id:
-                            entry = {
-                                "username": u_id,
-                                "password": u_pass,
-                                "role": "user",
-                                "email": u_email,
-                                "full_name": u_name,
-                                "phone_number": u_phone
-                            }
-                            DEMO_USERS[u_id] = entry
-                            DEMO_USERS[u_id.lower()] = entry
-                            if u_email:
-                                DEMO_USERS[u_email.lower()] = entry
-                print(f" Loaded user accounts from {os.path.basename(path)}")
-                break
-            except Exception as e:
-                logger.warning(f"Could not load user CSV: {e}")
-
-    # 3. Load Admin Users from CSV (snowflake_ontology_data / data)
-    admin_paths = [
-        os.path.join(base_dir, 'snowflake_ontology_data', 'ADMIN_USERS.csv'),
-        os.path.join(base_dir, 'snowflake_ontology_data', 'Admin_user.csv'),
-        os.path.join(base_dir, 'data', 'ADMIN_USERS.csv')
-    ]
-    for path in admin_paths:
-        if os.path.exists(path):
-            try:
-                with open(path, 'r', encoding='utf-8') as f:
-                    reader = csv.DictReader(f)
-                    for row in reader:
-                        a_id = (row.get('ADMIN_ID') or '').strip()
-                        a_uname = (row.get('USERNAME') or '').strip()
-                        a_email = (row.get('EMAIL') or '').strip()
-                        a_name = (row.get('FULL_NAME') or '').strip()
-                        a_role = (row.get('ROLE') or 'admin').strip()
-                        a_perms = (row.get('PERMISSIONS_SCOPE') or '').strip()
-                        a_pass = (row.get('PASSWORD_HASH') or row.get('PASSWORD') or ('admin' if a_uname == 'admin' else 'password123')).strip()
-
-                        if a_uname:
-                            entry = {
-                                "username": a_uname,
-                                "password": a_pass,
-                                "role": "admin",
-                                "email": a_email,
-                                "full_name": a_name,
-                                "permissions_scope": a_perms,
-                                "admin_id": a_id
-                            }
-                            DEMO_USERS[a_uname] = entry
-                            DEMO_USERS[a_uname.lower()] = entry
-                            if a_email:
-                                DEMO_USERS[a_email.lower()] = entry
-                            if a_id:
-                                DEMO_USERS[a_id.lower()] = entry
-                print(f" Loaded admin accounts from {os.path.basename(path)}")
-                break
-            except Exception as e:
-                logger.warning(f"Could not load admin CSV: {e}")
-
-load_csv_users_into_demo()
-
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify a password against its hash or plain text."""
     return check_password_match(plain_password, hashed_password)
-
-def get_password_hash(password: str) -> str:
-    """Generate password hash."""
-    return "$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewKy444s1cWwz2a."
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     """Create JWT access token."""
@@ -318,19 +180,13 @@ def authenticate_admin_from_db(username: str, password: str) -> Optional[dict]:
                         "full_name": admin.get('FULL_NAME') or admin.get('USERNAME'),
                         "permissions_scope": admin.get('PERMISSIONS_SCOPE'),
                         "admin_id": admin.get('ADMIN_ID'),
-                        "phone_number": admin.get('PHONE_NUMBER') or '+1-555-0100',
-                        "department": admin.get('DEPARTMENT') or 'IT Operations'
+                        "phone_number": admin.get('PHONE_NUMBER') or '',
+                        "department": admin.get('DEPARTMENT') or ''
                     }
 
     except Exception as e:
         logger.error(f"Error authenticating admin from database: {e}")
 
-    # Fallback to local DEMO_USERS cache
-    u_lower = username.strip().lower()
-    if u_lower in DEMO_USERS:
-        candidate = DEMO_USERS[u_lower]
-        if candidate.get("role") == "admin" and check_password_match(password, candidate.get("password")):
-            return candidate
 
     return None
 
@@ -364,12 +220,6 @@ def authenticate_user_from_db(username: str, password: str) -> Optional[dict]:
     except Exception as e:
         logger.error(f"Error authenticating user from database: {e}")
 
-    # Fallback to local DEMO_USERS cache
-    u_lower = username.strip().lower()
-    if u_lower in DEMO_USERS:
-        candidate = DEMO_USERS[u_lower]
-        if candidate.get("role") == "user" and check_password_match(password, candidate.get("password")):
-            return candidate
 
     return None
 
@@ -403,12 +253,6 @@ def authenticate_technician_from_db(username: str, password: str) -> Optional[di
     except Exception as e:
         logger.error(f"Error authenticating technician from database: {e}")
 
-    # Fallback to local DEMO_USERS cache
-    u_lower = username.strip().lower()
-    if u_lower in DEMO_USERS:
-        candidate = DEMO_USERS[u_lower]
-        if candidate.get("role") == "technician" and check_password_match(password, candidate.get("password")):
-            return candidate
 
     return None
 
@@ -418,49 +262,6 @@ def authenticate_user(username: str, password: str, requested_role: Optional[str
     p_clean = (password or "").strip()
     u_lower = u_clean.lower()
 
-    # Supported passwords for Anant / Venkatesh / Admin
-    anant_passwords = [
-        "Autotask@123456",
-        r"A9*HV£^hQ87<z77;Dig3fpo,Z0G]zgBg$pW?z!wYWhkYdH\H2",
-        r"A9*HV£^hQ87<z77;Dig3fpo,Z0G]zgBg\$pW?z!wYWhkYdH\H2",
-        "xuzzbgdwqwzrklrj",
-        "password",
-        "admin"
-    ]
-    venkatehp_passwords = [
-        "xuzzbgdwqwzrklrj",
-        "Autotask@123456",
-        "password",
-        "admin"
-    ]
-
-    # Special handling for Anant accounts
-    if u_lower in ["anantl", "anant.lad@64-squares.com", "anantlad66@gmail.com"]:
-        if p_clean in anant_passwords:
-            role = requested_role or "user"
-            return {
-                "username": "AnantL",
-                "password": p_clean,
-                "role": role,
-                "email": "anant.lad@64-squares.com",
-                "full_name": "Anant Lad",
-                "phone_number": (DEMO_USERS.get("anantl") or DEMO_USERS.get("anant.lad@64-squares.com") or {}).get("phone_number", ""),
-                "technician_role": "Lead Technician" if role == "technician" else None
-            }
-
-    # Special handling for Venkatesh accounts
-    if u_lower in ["venkatehp12", "venkatehp12@gmail.com"]:
-        if p_clean in venkatehp_passwords:
-            role = requested_role or "user"
-            return {
-                "username": "venkatehp12@gmail.com",
-                "password": p_clean,
-                "role": role,
-                "email": "venkatehp12@gmail.com",
-                "full_name": "Venkatesh P",
-                "phone_number": (DEMO_USERS.get("venkatehp12") or DEMO_USERS.get("venkatehp12@gmail.com") or {}).get("phone_number", ""),
-                "technician_role": "Technician" if role == "technician" else None
-            }
 
     # Direct match in DEMO_USERS (case-insensitive username or email)
     for key, u_data in DEMO_USERS.items():
@@ -616,8 +417,8 @@ def ensure_snowflake_admin_users_table(conn):
             PERMISSIONS_SCOPE VARCHAR(512),
             STATUS VARCHAR(32) DEFAULT 'ACTIVE',
             PASSWORD_HASH VARCHAR(256),
-            DEPARTMENT VARCHAR(128) DEFAULT 'IT Operations',
-            PHONE_NUMBER VARCHAR(64) DEFAULT '+1-555-0100',
+            DEPARTMENT VARCHAR(128),
+            PHONE_NUMBER VARCHAR(64),
             CREATED_AT TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP()
         )
         """
@@ -917,73 +718,9 @@ def get_all_tickets_realtime() -> List[Dict[str, Any]]:
         except Exception as e_sf:
             logger.error(f"Snowflake tickets query error: {e_sf}")
 
-    # 2. Offline Fallback: Local CSV
-    tickets_map = {}
-    csv_path = os.path.join(parent_dir, "data", "TICKETS.csv")
-    if os.path.exists(csv_path):
-        try:
-            import csv
-            with open(csv_path, "r", encoding="utf-8") as f:
-                reader = csv.DictReader(f)
-                for row in reader:
-                    num = str(row.get("TICKETNUMBER") or "").strip()
-                    if is_valid_ticket_num(num) and num not in tickets_map:
-                        tickets_map[num] = dict(row)
-        except Exception as e_csv:
-            print(f"Notice: CSV read: {e_csv}")
+    # Snowflake-only: no local file fallbacks
+    return []
 
-    # 3. Offline Fallback: Local knowledgebase.json
-    kb_path = os.path.join(parent_dir, "data", "knowledgebase.json")
-    if os.path.exists(kb_path):
-        try:
-            with open(kb_path, "r", encoding="utf-8") as f:
-                kb_data = json.load(f)
-            for item in kb_data:
-                nt = item.get("new_ticket", {})
-                cd = nt.get("classified_data", {})
-                def extract_field(k, default=""):
-                    v = cd.get(k, {})
-                    if isinstance(v, dict):
-                        return v.get("Label") or v.get("Value") or default
-                    return v or default
-
-                t_num = str(nt.get("ticket_number") or "").strip()
-                if not is_valid_ticket_num(t_num):
-                    continue
-
-                if t_num not in tickets_map:
-                    date = nt.get("date", "")
-                    time = nt.get("time", "")
-                    created_at = f"{date}T{time}" if date and time else nt.get("created_at", "")
-                    tickets_map[t_num] = {
-                        "TICKETNUMBER": t_num,
-                        "TITLE": nt.get("title", ""),
-                        "DESCRIPTION": nt.get("description", ""),
-                        "TICKETTYPE": extract_field("TICKETTYPE", "Incident"),
-                        "TICKETCATEGORY": extract_field("TICKETCATEGORY", "Standard"),
-                        "ISSUETYPE": extract_field("ISSUETYPE", "Other"),
-                        "SUBISSUETYPE": extract_field("SUBISSUETYPE", "General"),
-                        "DUEDATETIME": nt.get("due_date", ""),
-                        "PRIORITY": extract_field("PRIORITY", nt.get("priority", "Medium")),
-                        "STATUS": extract_field("STATUS", nt.get("status", "Open")),
-                        "RESOLUTION": nt.get("resolution_note", ""),
-                        "TECHNICIANEMAIL": nt.get("technician_email", ""),
-                        "TECHNICIAN_ID": nt.get("technician_id", ""),
-                        "ASSIGNED_TECHNICIAN": nt.get("assigned_technician", ""),
-                        "USEREMAIL": nt.get("user_email", ""),
-                        "USERID": nt.get("name", "Anonymous"),
-                        "PHONENUMBER": nt.get("phone_number", ""),
-                        "CREATED_AT": created_at,
-                        "ASSIGNED_AT": nt.get("assigned_at", ""),
-                        "RESOLVED_AT": nt.get("resolved_at", ""),
-                        "CLOSED_AT": nt.get("closed_at", ""),
-                        "TIME_SPENT": nt.get("time_spent", ""),
-                        "TIME_SPENT_HOURS": nt.get("time_spent_hours", "")
-                    }
-        except Exception as e_kb:
-            print(f"Notice: KB read: {e_kb}")
-
-    return list(tickets_map.values())
 
 # --- API Endpoints ---
 @app.get("/health")
@@ -1003,7 +740,7 @@ def get_tickets_count():
                 if result and "TOTAL_TICKETS" in result[0]:
                     return {"total_tickets": result[0]["TOTAL_TICKETS"]}
             except Exception as e_sf:
-                logger.warning(f"Snowflake count error, falling back to local: {e_sf}")
+                logger.warning(f"Snowflake count error, retrying via realtime DB loader: {e_sf}")
 
         all_tickets = get_all_tickets_realtime()
         return {"total_tickets": len(all_tickets)}
@@ -1035,7 +772,7 @@ def get_ticket_statistics():
                         "by_priority": {row["PRIORITY"]: row["COUNT"] for row in (priority_results or [])}
                     }
             except Exception as e_sf:
-                logger.warning(f"Snowflake statistics error, falling back to local: {e_sf}")
+                logger.warning(f"Snowflake statistics error, retrying via realtime DB loader: {e_sf}")
 
         all_tickets = get_all_tickets_realtime()
         by_status = {}
@@ -1880,29 +1617,6 @@ def get_all_tickets(limit: int = Query(100, le=500), offset: int = 0, status: Op
                 logger.error(f"Error querying Snowflake tickets: {e_sf}")
                 results = []
 
-        # Local CSV fallback if Snowflake returns nothing or is offline
-        if not results:
-            import csv
-            csv_path = os.path.join(parent_dir, "data", "TICKETS.csv")
-            if os.path.exists(csv_path):
-                with open(csv_path, "r", encoding="utf-8") as f:
-                    reader = csv.DictReader(f)
-                    all_rows = list(reader)
-
-                    filtered = []
-                    for row in all_rows:
-                        if status and row.get("STATUS", "").strip().lower() != status.strip().lower():
-                            continue
-                        if priority and row.get("PRIORITY", "").strip().lower() != priority.strip().lower():
-                            continue
-                        if user_email and row.get("USEREMAIL", "").strip().lower() != user_email.strip().lower():
-                            continue
-                        filtered.append(row)
-
-                    # Reverse to have newest tickets first
-                    filtered = list(reversed(filtered))
-                    results = filtered[offset:offset+limit]
-
         return results
     except Exception as e:
         print(f"Failed to retrieve tickets: {e}")
@@ -1921,16 +1635,6 @@ def get_ticket(ticket_number: str):
                     return results[0]
             except Exception as e_sf:
                 logger.error(f"Snowflake get_ticket error: {e_sf}")
-
-        # Local CSV fallback
-        import csv
-        csv_path = os.path.join(parent_dir, "data", "TICKETS.csv")
-        if os.path.exists(csv_path):
-            with open(csv_path, "r", encoding="utf-8") as f:
-                reader = csv.DictReader(f)
-                for row in reader:
-                    if row.get("TICKETNUMBER") in {ticket_number, ticket_number.replace('-', '.'), ticket_number.replace('.', '-')}:
-                        return row
 
         raise HTTPException(status_code=404, detail="Ticket not found")
     except HTTPException:
@@ -2049,137 +1753,6 @@ def assign_ticket(ticket_number: str, assignment_data: dict):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to assign ticket: {str(e)}")
-
-def update_local_ticket_csv(ticket_number: str, status: Optional[str] = None, priority: Optional[str] = None, work_note: Optional[str] = None, technician_id: Optional[str] = None, technician_email: Optional[str] = None, time_spent: Optional[str] = None) -> Optional[dict]:
-    """Helper to update a ticket in data/TICKETS.csv and knowledgebase.json"""
-    target_variants = {
-        ticket_number.strip(),
-        ticket_number.strip().replace('-', '.'),
-        ticket_number.strip().replace('.', '-')
-    }
-
-    updated_record = None
-
-    # 1. Update knowledgebase.json
-    kb_path = os.path.join(parent_dir, "data", "knowledgebase.json")
-    if os.path.exists(kb_path):
-        try:
-            with open(kb_path, "r", encoding="utf-8") as f_kb:
-                kb_data = json.load(f_kb)
-            for item in kb_data:
-                nt = item.get("new_ticket", {})
-                if nt.get("ticket_number") in target_variants:
-                    old_status_l = str(nt.get("status") or "").strip().lower()
-                    if status:
-                        nt["status"] = status
-                        if "classified_data" in nt and "STATUS" in nt["classified_data"]:
-                            if isinstance(nt["classified_data"]["STATUS"], dict):
-                                nt["classified_data"]["STATUS"]["Label"] = status
-                            else:
-                                nt["classified_data"]["STATUS"] = status
-                        # MTTR timestamp stamping (local fallback store)
-                        st_l = str(status).strip().lower()
-                        if st_l in ("resolved", "complete", "completed", "closed"):
-                            if not nt.get("resolved_at"):
-                                nt["resolved_at"] = datetime.now().isoformat()
-                            if st_l == "closed":
-                                nt["closed_at"] = datetime.now().isoformat()
-                        elif old_status_l in ("resolved", "complete", "completed", "closed"):
-                            # Reopened: clear resolution timestamps and logged effort so
-                            # MTTR reflects the final resolution only.
-                            nt.pop("resolved_at", None)
-                            nt.pop("closed_at", None)
-                            nt.pop("time_spent", None)
-                            nt.pop("time_spent_hours", None)
-                    if priority:
-                        nt["priority"] = priority
-                        if "classified_data" in nt and "PRIORITY" in nt["classified_data"]:
-                            if isinstance(nt["classified_data"]["PRIORITY"], dict):
-                                nt["classified_data"]["PRIORITY"]["Label"] = priority
-                            else:
-                                nt["classified_data"]["PRIORITY"] = priority
-                    if technician_id:
-                        nt["technician_id"] = technician_id
-                    if technician_email:
-                        nt["technician_email"] = technician_email
-                    if time_spent:
-                        nt["time_spent"] = time_spent
-                        parsed_hours = parse_time_spent_hours(time_spent)
-                        if parsed_hours is not None:
-                            nt["time_spent_hours"] = parsed_hours
-                    if work_note:
-                        existing_res = nt.get("resolution_note") or ""
-                        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
-                        note_entry = f"[{timestamp}] {work_note}"
-                        nt["resolution_note"] = f"{existing_res}\n{note_entry}" if existing_res else note_entry
-                    nt["updated_at"] = datetime.now().isoformat()
-                    updated_record = nt
-            with open(kb_path, "w", encoding="utf-8") as f_kb:
-                json.dump(kb_data, f_kb, indent=2)
-            print(f"💾 Updated ticket {ticket_number} in knowledgebase.json")
-        except Exception as e_kb:
-            print(f"Warning updating knowledgebase.json: {e_kb}")
-
-    # 2. Update TICKETS.csv
-    csv_path = os.path.join(parent_dir, "data", "TICKETS.csv")
-    if os.path.exists(csv_path):
-        try:
-            import csv
-            all_rows = []
-            fieldnames = []
-            with open(csv_path, "r", encoding="utf-8") as f:
-                reader = csv.DictReader(f)
-                fieldnames = list(reader.fieldnames or [])
-                for extra_col in ("TIME_SPENT", "CREATED_AT", "ASSIGNED_AT", "RESOLVED_AT", "CLOSED_AT", "TIME_SPENT_HOURS"):
-                    if extra_col not in fieldnames:
-                        fieldnames.append(extra_col)
-                for row in reader:
-                    current_num = row.get("TICKETNUMBER", "").strip()
-                    if current_num in target_variants:
-                        old_status_l = str(row.get("STATUS") or "").strip().lower()
-                        if status:
-                            row["STATUS"] = status
-                            # MTTR timestamp stamping (local fallback store)
-                            st_l = str(status).strip().lower()
-                            if st_l in ("resolved", "complete", "completed", "closed"):
-                                if not row.get("RESOLVED_AT"):
-                                    row["RESOLVED_AT"] = datetime.now().isoformat()
-                                if st_l == "closed":
-                                    row["CLOSED_AT"] = datetime.now().isoformat()
-                            elif old_status_l in ("resolved", "complete", "completed", "closed"):
-                                row["RESOLVED_AT"] = ""
-                                row["CLOSED_AT"] = ""
-                                row["TIME_SPENT"] = ""
-                                row["TIME_SPENT_HOURS"] = ""
-                        if priority:
-                            row["PRIORITY"] = priority
-                        if technician_id:
-                            row["TECHNICIAN_ID"] = technician_id
-                        if technician_email:
-                            row["TECHNICIANEMAIL"] = technician_email
-                        if time_spent:
-                            row["TIME_SPENT"] = time_spent
-                            parsed_hours = parse_time_spent_hours(time_spent)
-                            if parsed_hours is not None:
-                                row["TIME_SPENT_HOURS"] = parsed_hours
-                        if work_note:
-                            existing_res = row.get("RESOLUTION") or ""
-                            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
-                            note_entry = f"[{timestamp}] {work_note}"
-                            row["RESOLUTION"] = f"{existing_res}\n{note_entry}" if existing_res else note_entry
-                        updated_record = row
-                    all_rows.append(row)
-
-            if fieldnames and all_rows:
-                with open(csv_path, "w", newline="", encoding="utf-8") as f:
-                    writer = csv.DictWriter(f, fieldnames=fieldnames)
-                    writer.writeheader()
-                    writer.writerows(all_rows)
-                print(f"💾 Updated ticket {ticket_number} in local TICKETS.csv")
-        except Exception as e_csv:
-            print(f"Warning updating CSV: {e_csv}")
-
-    return updated_record or {"ticket_number": ticket_number, "status": status, "priority": priority}
 
 def sync_ticket_to_closed_table_snowflake(ticket_number: str):
     """Sync a closed/resolved ticket into SF_DATABASE.SF_SCHEMA.CTTC_MOCK_CLOSED_TICKETS table in Snowflake"""
@@ -2320,10 +1893,7 @@ def update_ticket_status(ticket_number: str, status_data: dict):
             except Exception as e_sf:
                 logger.error(f"Snowflake status update error: {e_sf}")
 
-        # Synchronize local CSV as backup
-        local_updated = update_local_ticket_csv(ticket_number, status=new_status)
-
-        if not sf_updated and not local_updated:
+        if not sf_updated:
             raise HTTPException(status_code=404, detail=f"Ticket {ticket_number} not found")
 
         return {"message": f"Ticket {ticket_number} status updated to {new_status}", "success": True}
@@ -2347,17 +1917,6 @@ def email_customer(ticket_number: str, request: EmailCustomerRequest):
                     ticket = results[0]
             except Exception:
                 pass
-
-        if not ticket:
-            import csv
-            csv_path = os.path.join(parent_dir, "data", "TICKETS.csv")
-            if os.path.exists(csv_path):
-                with open(csv_path, "r", encoding="utf-8") as f:
-                    reader = csv.DictReader(f)
-                    for row in reader:
-                        if row.get("TICKETNUMBER") in {ticket_number, ticket_number.replace('-', '.'), ticket_number.replace('.', '-')}:
-                            ticket = row
-                            break
 
         if not ticket:
             raise HTTPException(status_code=404, detail="Ticket not found")
@@ -2553,16 +2112,7 @@ def update_ticket_status_priority(ticket_number: str, update_request: TicketUpda
                     raise
                 logger.error(f"Snowflake ticket update error: {e_sf}")
 
-        # Synchronize local CSV as backup
-        local_updated = update_local_ticket_csv(
-            ticket_number,
-            status=update_request.status,
-            priority=update_request.priority,
-            work_note=work_note_text if (update_request.work_note or update_request.time_spent) else None,
-            time_spent=update_request.time_spent
-        )
-
-        if not sf_updated and not local_updated:
+        if not sf_updated:
             raise HTTPException(status_code=404, detail=f"Ticket {ticket_number} not found")
 
         if update_request.status:
@@ -2784,25 +2334,6 @@ def get_technician_id_from_email(technician_email: str) -> Optional[str]:
                 return str(result[0])
         except Exception as e:
             print(f"Error getting technician ID from DB: {e}")
-
-    # Fallback to DEMO_USERS or CSV
-    email_clean = technician_email.strip().lower()
-    for username, udata in DEMO_USERS.items():
-        if udata.get("email", "").strip().lower() == email_clean:
-            return udata.get("technician_id") or username
-
-    # Check local CSV
-    import csv
-    csv_path = os.path.join(parent_dir, "data", "CTTC_MOCK_TECHNICIAN_DATA.csv")
-    if os.path.exists(csv_path):
-        try:
-            with open(csv_path, "r", encoding="utf-8") as f:
-                reader = csv.DictReader(f)
-                for row in reader:
-                    if row.get("EMAIL", "").strip().lower() == email_clean:
-                        return row.get("TECHNICIAN_ID")
-        except Exception:
-            pass
 
     return None
 
@@ -3154,36 +2685,6 @@ def create_ticket(request: TicketCreateRequest):
             except Exception as e_insert:
                 print(f"⚠️ Snowflake insert query failed: {e_insert}")
 
-        # Always save to local data files as well
-        try:
-            import csv
-            csv_path = os.path.join(parent_dir, "data", "TICKETS.csv")
-            if os.path.exists(csv_path):
-                with open(csv_path, "a", newline="", encoding="utf-8") as f_csv:
-                    _now_iso = datetime.now().isoformat()
-                    field_order = [
-                        "TICKETNUMBER", "TITLE", "DESCRIPTION", "TICKETTYPE", "TICKETCATEGORY",
-                        "ISSUETYPE", "SUBISSUETYPE", "DUEDATETIME", "PRIORITY", "STATUS", "RESOLUTION",
-                        "TECHNICIANEMAIL", "TECHNICIAN_ID", "USEREMAIL", "USERID", "PHONENUMBER",
-                        "TIME_SPENT", "CREATED_AT", "ASSIGNED_AT", "RESOLVED_AT", "CLOSED_AT", "TIME_SPENT_HOURS"
-                    ]
-                    writer = csv.DictWriter(f_csv, fieldnames=field_order)
-                    writer.writerow({
-                        "TICKETNUMBER": ticket_number, "TITLE": request.title,
-                        "DESCRIPTION": request.description, "TICKETTYPE": ticket_type,
-                        "TICKETCATEGORY": ticket_category, "ISSUETYPE": issue_type,
-                        "SUBISSUETYPE": sub_issue_type, "DUEDATETIME": request.due_date,
-                        "PRIORITY": priority, "STATUS": status, "RESOLUTION": resolution,
-                        "TECHNICIANEMAIL": technician_email, "TECHNICIAN_ID": technician_id or "",
-                        "USEREMAIL": request.user_email or "",
-                        "USERID": request.requester_name or "Anonymous",
-                        "PHONENUMBER": request.phone_number or "",
-                        "CREATED_AT": _now_iso, "ASSIGNED_AT": _now_iso
-                    })
-                print(f"💾 Ticket {ticket_number} appended to local TICKETS.csv")
-        except Exception as e_csv:
-            print(f"Warning saving ticket to CSV: {e_csv}")
-
         return TicketResponse(
             ticket_number=ticket_number,
             status="created",
@@ -3252,24 +2753,8 @@ def get_all_technicians():
                 })
             return technicians
 
-        # CSV fallback
-        import csv
-        csv_path = os.path.join(parent_dir, "data", "CTTC_MOCK_TECHNICIAN_DATA.csv")
-        technicians = []
-        if os.path.exists(csv_path):
-            with open(csv_path, "r", encoding="utf-8") as f:
-                reader = csv.DictReader(f)
-                for row in reader:
-                    technicians.append({
-                        "id": row.get("TECHNICIAN_ID"),
-                        "name": row.get("NAME"),
-                        "username": row.get("TECHNICIAN_ID"),
-                        "email": row.get("EMAIL"),
-                        "role": row.get("ROLE", "Technician"),
-                        "current_workload": int(row.get("CURRENT_WORKLOAD", 0) or 0),
-                        "specializations": row.get("SPECIALIZATIONS")
-                    })
-        return technicians
+        # Snowflake-only: no CSV fallback
+        return []
     except Exception as e:
         logger.error(f"Failed to get technicians: {e}")
         return []
@@ -3304,23 +2789,8 @@ def get_all_users():
                 })
             return users
 
-        # CSV fallback
-        import csv
-        csv_path = os.path.join(parent_dir, "data", "CTTC_MOCK_USER_DATA.csv")
-        users = []
-        if os.path.exists(csv_path):
-            with open(csv_path, "r", encoding="utf-8") as f:
-                reader = csv.DictReader(f)
-                for row in reader:
-                    users.append({
-                        "id": row.get("USER_ID"),
-                        "name": row.get("NAME"),
-                        "username": row.get("USER_ID"),
-                        "email": row.get("USER_EMAIL"),
-                        "phone": row.get("USER_PHONENUMBER"),
-                        "role": "user"
-                    })
-        return users
+        # Snowflake-only: no CSV fallback
+        return []
     except Exception as e:
         logger.error(f"Failed to get users: {e}")
         return []
@@ -4060,75 +3530,8 @@ async def simple_gmail_webhook(request: Request):
 
 # ==================== ADMIN MANAGEMENT & REPORTING ENDPOINTS ====================
 
-ADMIN_USERS_STORE = [
-    {"user_id": "usr-001", "username": "user", "email": "user@example.com", "full_name": "Demo User", "department": "Customer Support", "phone_number": "+1-555-0101", "role": "user", "status": "ACTIVE", "created_at": "2026-08-15T09:00:00Z"},
-    {"user_id": "usr-002", "username": "user1", "email": "user1@example.com", "full_name": "Demo User 1", "department": "Operations", "phone_number": "+1-555-0102", "role": "user", "status": "ACTIVE", "created_at": "2026-08-18T10:30:00Z"},
-    {"user_id": "usr-003", "username": "AnantL", "email": "anant.lad@64-squares.com", "full_name": "Anant Lad", "department": "Network Engineering", "phone_number": "+1-555-0103", "role": "user", "status": "ACTIVE", "created_at": "2026-08-20T14:15:00Z"},
-    {"user_id": "usr-004", "username": "venkatehp12", "email": "venkatehp12@gmail.com", "full_name": "Venkatesh P", "department": "IT Operations", "phone_number": "+1-555-0104", "role": "user", "status": "ACTIVE", "created_at": "2026-08-22T11:00:00Z"},
-]
 
-ADMIN_TECHNICIANS_STORE = [
-    {
-        "technician_id": "tech-001",
-        "username": "tech",
-        "full_name": "Demo Technician",
-        "email": "tech@example.com",
-        "phone_number": "+1-555-0199",
-        "technician_role": "L1 Support",
-        "primary_shift": "Morning (08:00 - 16:00)",
-        "on_call_status": "Active",
-        "skill_sets": ["Network Routing & EVPN", "Optical & Fiber Trunks", "Hardware Diagnostics"],
-        "experience_level": "Senior L2",
-        "status": "ACTIVE",
-        "current_tickets_load": 4,
-        "max_capacity": 10
-    },
-    {
-        "technician_id": "tech-002",
-        "username": "tech1",
-        "full_name": "Alex Smith",
-        "email": "tech1@example.com",
-        "phone_number": "+1-555-0248",
-        "technician_role": "L2 Support",
-        "primary_shift": "Afternoon (14:00 - 22:00)",
-        "on_call_status": "Standby",
-        "skill_sets": ["Software & OS Drift", "Active Directory", "Server Infrastructure"],
-        "experience_level": "L2 Specialist",
-        "status": "ACTIVE",
-        "current_tickets_load": 3,
-        "max_capacity": 10
-    },
-    {
-        "technician_id": "tech-003",
-        "username": "technician",
-        "full_name": "Support Technician",
-        "email": "technician@example.com",
-        "phone_number": "+1-555-0312",
-        "technician_role": "Senior Technician",
-        "primary_shift": "Night (22:00 - 06:00)",
-        "on_call_status": "Active",
-        "skill_sets": ["VoIP & Central Office AP", "Optical Transceivers", "Emergency Triage"],
-        "experience_level": "Senior L3",
-        "status": "ACTIVE",
-        "current_tickets_load": 5,
-        "max_capacity": 12
-    },
-    {
-        "technician_id": "tech-004",
-        "username": "tech_anant",
-        "full_name": "Anant Lad (Technician)",
-        "email": "anant.lad@64-squares.com",
-        "phone_number": "+1-555-0450",
-        "technician_role": "Senior Technician",
-        "primary_shift": "Morning (08:00 - 16:00)",
-        "on_call_status": "Standby",
-        "skill_sets": ["Network Routing & EVPN", "Core MX960 Architecture", "Cloud Infrastructure"],
-        "experience_level": "Principal Architect",
-        "status": "ACTIVE",
-        "current_tickets_load": 2,
-        "max_capacity": 8
-    }
-]
+
 
 @app.get("/admin/users")
 async def get_admin_users(role: Optional[str] = None):
@@ -4145,10 +3548,10 @@ async def get_admin_users(role: Optional[str] = None):
                         a_id = row.get("ADMIN_ID") or row.get("USERNAME") or ""
                         a_name = row.get("FULL_NAME") or row.get("USERNAME") or a_id
                         a_email = row.get("EMAIL") or ""
-                        a_phone = row.get("PHONE_NUMBER") or "+1-555-0100"
+                        a_phone = row.get("PHONE_NUMBER") or ""
                         a_role = row.get("ROLE") or "admin"
-                        a_dept = row.get("DEPARTMENT") or "IT Operations"
-                        a_perms = row.get("PERMISSIONS_SCOPE") or "ALL_SYSTEMS"
+                        a_dept = row.get("DEPARTMENT") or ""
+                        a_perms = row.get("PERMISSIONS_SCOPE") or ""
                         a_status = row.get("STATUS") or "ACTIVE"
 
                         db_users.append({
@@ -4161,7 +3564,7 @@ async def get_admin_users(role: Optional[str] = None):
                             "role": str(a_role).lower(),
                             "permissions_scope": a_perms,
                             "status": str(a_status),
-                            "created_at": str(row.get("CREATED_AT") or "2026-08-15T09:00:00Z"),
+                            "created_at": str(row.get("CREATED_AT") or ""),
                             "total_tickets": 0,
                             "active_tickets": 0,
                             "resolved_tickets": 0,
@@ -4181,7 +3584,7 @@ async def get_admin_users(role: Optional[str] = None):
                     u_email = row.get("USER_EMAIL") or row.get("EMAIL") or ""
                     u_phone = row.get("USER_PHONENUMBER") or row.get("PHONENUMBER") or row.get("PHONE") or ""
                     u_role = row.get("ROLE") or "user"
-                    u_dept = row.get("DEPARTMENT") or "Operations"
+                    u_dept = row.get("DEPARTMENT") or ""
                     
                     if u_id:
                         db_users.append({
@@ -4193,7 +3596,7 @@ async def get_admin_users(role: Optional[str] = None):
                             "phone_number": str(u_phone),
                             "role": str(u_role).lower(),
                             "status": "ACTIVE",
-                            "created_at": "2026-08-15T09:00:00Z",
+                            "created_at": "",
                             "total_tickets": 0,
                             "active_tickets": 0,
                             "resolved_tickets": 0,
@@ -4202,9 +3605,6 @@ async def get_admin_users(role: Optional[str] = None):
         except Exception as e:
             logger.error(f"Error querying {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_USER_DATA: {e}")
 
-    # Fallback to ADMIN_USERS_STORE if Snowflake returned empty
-    if not db_users:
-        db_users = [dict(u) for u in ADMIN_USERS_STORE]
 
     # Fetch live ticket counts from SF_DATABASE.SF_SCHEMA.TICKETS
     all_tickets = []
@@ -4214,12 +3614,6 @@ async def get_admin_users(role: Optional[str] = None):
         except Exception as e:
             logger.warning(f"Could not load tickets for user mapping: {e}")
 
-    if not all_tickets:
-        import csv
-        csv_path = os.path.join(parent_dir, "data", "TICKETS.csv")
-        if os.path.exists(csv_path):
-            with open(csv_path, "r", encoding="utf-8") as f:
-                all_tickets = list(csv.DictReader(f))
 
     # Map ticket stats to each user
     for u in db_users:
@@ -4259,43 +3653,14 @@ async def get_enterprise_admin_users():
                         "email": row.get("EMAIL"),
                         "full_name": row.get("FULL_NAME"),
                         "role": row.get("ROLE") or "admin",
-                        "permissions_scope": row.get("PERMISSIONS_SCOPE") or "ALL_SYSTEMS",
-                        "department": row.get("DEPARTMENT") or "IT Operations",
-                        "phone_number": row.get("PHONE_NUMBER") or "+1-555-0100",
+                        "permissions_scope": row.get("PERMISSIONS_SCOPE") or "",
+                        "department": row.get("DEPARTMENT") or "",
+                        "phone_number": row.get("PHONE_NUMBER") or "",
                         "status": row.get("STATUS") or "ACTIVE",
                         "created_at": str(row.get("CREATED_AT") or "")
                     })
         except Exception as e:
             logger.error(f"Error querying {SF_DATABASE}.{SF_SCHEMA}.ADMIN_USERS: {e}")
-
-    # Fallback to local CSV if Snowflake query was empty
-    if not admin_users:
-        import csv
-        admin_csv_paths = [
-            os.path.join(parent_dir, "snowflake_ontology_data", "ADMIN_USERS.csv"),
-            os.path.join(parent_dir, "snowflake_ontology_data", "Admin_user.csv"),
-            os.path.join(parent_dir, "data", "ADMIN_USERS.csv")
-        ]
-        for path in admin_csv_paths:
-            if os.path.exists(path):
-                try:
-                    with open(path, "r", encoding="utf-8") as f:
-                        for r in csv.DictReader(f):
-                            admin_users.append({
-                                "admin_id": r.get("ADMIN_ID"),
-                                "username": r.get("USERNAME"),
-                                "email": r.get("EMAIL"),
-                                "full_name": r.get("FULL_NAME"),
-                                "role": r.get("ROLE") or "admin",
-                                "permissions_scope": r.get("PERMISSIONS_SCOPE") or "ALL_SYSTEMS",
-                                "department": "IT Operations",
-                                "phone_number": "+1-555-0100",
-                                "status": r.get("STATUS") or "ACTIVE",
-                                "created_at": r.get("CREATED_AT") or ""
-                            })
-                    break
-                except Exception as ex:
-                    logger.warning(f"Could not read admin CSV fallback: {ex}")
 
     return {"admin_users": admin_users, "total": len(admin_users)}
 
@@ -4310,11 +3675,11 @@ async def create_enterprise_admin_user(admin_data: dict):
     admin_id = admin_data.get("admin_id") or f"adm-{datetime.now().strftime('%M%S')}"
     full_name = admin_data.get("full_name", username).strip()
     role = admin_data.get("role", "admin").strip()
-    permissions = admin_data.get("permissions_scope", "TECH_SCHEDULES,REPORTS,ONTOLOGY,TICKET_MGMT").strip()
-    dept = admin_data.get("department", "IT Operations").strip()
-    phone = admin_data.get("phone_number", "+1-555-0100").strip()
+    permissions = admin_data.get("permissions_scope", "").strip()
+    dept = admin_data.get("department", "").strip()
+    phone = admin_data.get("phone_number", "").strip()
     status_val = admin_data.get("status", "ACTIVE").strip()
-    pwd = admin_data.get("password", "admin123").strip()
+    pwd = (admin_data.get("password") or "").strip()
 
     new_admin = {
         "admin_id": admin_id,
@@ -4375,18 +3740,18 @@ async def delete_enterprise_admin_user(admin_id: str):
 
 @app.post("/admin/users")
 async def create_admin_user(user_data: dict):
-    """Add a new user into Snowflake SF_DATABASE.SF_SCHEMA.CTTC_MOCK_USER_DATA and local store"""
+    """Add a new user into Snowflake SF_DATABASE.SF_SCHEMA.CTTC_MOCK_USER_DATA"""
     username = user_data.get("username", "").strip()
     if not username:
         raise HTTPException(status_code=400, detail="Username is required")
     
     new_user = {
-        "user_id": f"usr-{len(ADMIN_USERS_STORE) + 1:03d}",
+        "user_id": f"usr-{datetime.now().strftime('%M%S')}",
         "username": username,
-        "email": user_data.get("email", f"{username}@example.com").strip(),
+        "email": user_data.get("email", "").strip(),
         "full_name": user_data.get("full_name", username).strip(),
-        "department": user_data.get("department", "General").strip(),
-        "phone_number": user_data.get("phone_number", "+1-555-0000").strip(),
+        "department": user_data.get("department", "").strip(),
+        "phone_number": user_data.get("phone_number", "").strip(),
         "role": user_data.get("role", "user"),
         "status": "ACTIVE",
         "created_at": datetime.now().isoformat()
@@ -4404,15 +3769,14 @@ async def create_admin_user(user_data: dict):
                 new_user["full_name"],
                 new_user["email"],
                 new_user["phone_number"],
-                user_data.get("password", "password123")
+                (user_data.get("password") or "").strip()
             ))
         except Exception as e:
             logger.warning(f"Could not persist user to Snowflake: {e}")
 
-    ADMIN_USERS_STORE.append(new_user)
     DEMO_USERS[username] = {
         "username": username,
-        "password": user_data.get("password", "password123"),
+        "password": (user_data.get("password") or "").strip(),
         "role": new_user["role"],
         "email": new_user["email"],
         "full_name": new_user["full_name"],
@@ -4422,8 +3786,7 @@ async def create_admin_user(user_data: dict):
 
 @app.delete("/admin/users/{user_id}")
 async def delete_admin_user(user_id: str):
-    """Remove a user from Snowflake SF_DATABASE.SF_SCHEMA.CTTC_MOCK_USER_DATA and store"""
-    global ADMIN_USERS_STORE
+    """Remove a user from Snowflake SF_DATABASE.SF_SCHEMA.CTTC_MOCK_USER_DATA"""
     if snowflake_conn and snowflake_conn.is_connected():
         try:
             del_sql = f"DELETE FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_USER_DATA WHERE USER_ID = %s OR USER_EMAIL = %s"
@@ -4431,7 +3794,6 @@ async def delete_admin_user(user_id: str):
         except Exception as e:
             logger.warning(f"Error removing user from Snowflake: {e}")
 
-    ADMIN_USERS_STORE = [u for u in ADMIN_USERS_STORE if u["user_id"] != user_id and u["username"] != user_id]
     if user_id in DEMO_USERS:
         del DEMO_USERS[user_id]
     return {"status": "success", "message": f"User {user_id} removed successfully"}
@@ -4450,13 +3812,13 @@ async def get_admin_technicians():
                     t_id = row.get("TECHNICIAN_ID") or row.get("ID") or ""
                     t_name = row.get("NAME") or row.get("FULL_NAME") or t_id
                     t_email = row.get("EMAIL") or row.get("TECHNICIAN_EMAIL") or ""
-                    t_phone = row.get("PHONE") or row.get("PHONENUMBER") or "+1-555-0199"
-                    t_role = row.get("ROLE") or "L2 Specialist"
-                    shift_s = row.get("SHIFT_START") or "08:00"
-                    shift_e = row.get("SHIFT_END") or "16:00"
-                    t_shift = row.get("SHIFT") or f"Custom ({shift_s} - {shift_e})"
+                    t_phone = row.get("PHONE") or row.get("PHONENUMBER") or ""
+                    t_role = row.get("ROLE") or ""
+                    shift_s = row.get("SHIFT_START") or ""
+                    shift_e = row.get("SHIFT_END") or ""
+                    t_shift = row.get("SHIFT") or (f"Custom ({shift_s} - {shift_e})" if shift_s or shift_e else "")
                     t_oncall = "Active" if row.get("IS_ON_CALL") else "Standby"
-                    t_skills = row.get("SPECIALIZATIONS") or row.get("SKILLS") or "Network Routing & EVPN, Optical & Fiber Trunks, Hardware Diagnostics"
+                    t_skills = row.get("SPECIALIZATIONS") or row.get("SKILLS") or ""
                     if isinstance(t_skills, str):
                         skill_list = [s.strip() for s in t_skills.split(",") if s.strip()]
                     else:
@@ -4472,18 +3834,15 @@ async def get_admin_technicians():
                             "technician_role": str(t_role),
                             "primary_shift": str(t_shift),
                             "on_call_status": str(t_oncall),
-                            "skill_sets": skill_list or ["Network Routing & EVPN", "Hardware Diagnostics"],
-                            "experience_level": "Senior Specialist",
+                            "skill_sets": skill_list or [],
+                            "experience_level": str(row.get("EXPERIENCE_LEVEL") or ""),
                             "status": "ACTIVE",
                             "current_tickets_load": int(row.get("CURRENT_TICKETS_LOAD") or 0),
                             "resolved_tickets_count": int(row.get("RESOLVED_TICKETS") or 0),
-                            "max_capacity": 10
+                            "max_capacity": int(row.get("MAX_CAPACITY") or 0)
                         })
         except Exception as e:
             logger.error(f"Error querying {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TECHNICIAN_DATA: {e}")
-
-    if not db_techs:
-        db_techs = [dict(t) for t in ADMIN_TECHNICIANS_STORE]
 
     # Live ticket workload cross-referencing from SF_DATABASE.SF_SCHEMA.TICKETS
     all_tickets = []
@@ -4493,12 +3852,6 @@ async def get_admin_technicians():
         except Exception as e:
             logger.warning(f"Could not load tickets for technician workload: {e}")
 
-    if not all_tickets:
-        import csv
-        csv_path = os.path.join(parent_dir, "data", "TICKETS.csv")
-        if os.path.exists(csv_path):
-            with open(csv_path, "r", encoding="utf-8") as f:
-                all_tickets = list(csv.DictReader(f))
 
     for tech in db_techs:
         t_name = (tech.get("full_name") or "").lower().strip()
@@ -4542,19 +3895,19 @@ async def create_admin_technician(tech_data: dict):
         skills = [s.strip() for s in skills.split(",") if s.strip()]
         
     new_tech = {
-        "technician_id": f"tech-{len(ADMIN_TECHNICIANS_STORE) + 1:03d}",
+        "technician_id": f"tech-{datetime.now().strftime('%M%S')}",
         "username": username,
         "full_name": tech_data.get("full_name", username).strip(),
-        "email": tech_data.get("email", f"{username}@example.com").strip(),
-        "phone_number": tech_data.get("phone_number", "+1-555-0100").strip(),
-        "technician_role": tech_data.get("technician_role", "L2 Specialist").strip(),
-        "primary_shift": tech_data.get("primary_shift", "Morning (08:00 - 16:00)").strip(),
-        "on_call_status": tech_data.get("on_call_status", "Standby").strip(),
-        "skill_sets": skills or ["Network Routing & EVPN", "Hardware Diagnostics"],
-        "experience_level": tech_data.get("experience_level", "L2 Specialist"),
+        "email": tech_data.get("email", "").strip(),
+        "phone_number": tech_data.get("phone_number", "").strip(),
+        "technician_role": tech_data.get("technician_role", "").strip(),
+        "primary_shift": tech_data.get("primary_shift", "").strip(),
+        "on_call_status": tech_data.get("on_call_status", "").strip(),
+        "skill_sets": skills or [],
+        "experience_level": tech_data.get("experience_level", ""),
         "status": "ACTIVE",
         "current_tickets_load": 0,
-        "max_capacity": int(tech_data.get("max_capacity", 10))
+        "max_capacity": int(tech_data.get("max_capacity") or 0)
     }
 
     # Insert into Snowflake SF_DATABASE.SF_SCHEMA.CTTC_MOCK_TECHNICIAN_DATA if connected
@@ -4562,8 +3915,8 @@ async def create_admin_technician(tech_data: dict):
         try:
             # Parse shift
             shift_str = new_tech["primary_shift"]
-            shift_start = "09:00"
-            shift_end = "17:00"
+            shift_start = ""
+            shift_end = ""
             if "(" in shift_str and "-" in shift_str:
                 parts = shift_str.split("(")[1].replace(")", "").split("-")
                 if len(parts) == 2:
@@ -4592,7 +3945,6 @@ async def create_admin_technician(tech_data: dict):
         except Exception as e:
             logger.warning(f"Could not persist technician to Snowflake: {e}")
 
-    ADMIN_TECHNICIANS_STORE.append(new_tech)
     plain_password = tech_data.get("password", "").strip()
     DEMO_USERS[username] = {
         "username": username,
@@ -4607,7 +3959,6 @@ async def create_admin_technician(tech_data: dict):
 @app.delete("/admin/technicians/{tech_id}")
 async def delete_admin_technician(tech_id: str):
     """Remove a technician from Snowflake SF_DATABASE.SF_SCHEMA.CTTC_MOCK_TECHNICIAN_DATA"""
-    global ADMIN_TECHNICIANS_STORE
     if snowflake_conn and snowflake_conn.is_connected():
         try:
             del_sql = f"DELETE FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TECHNICIAN_DATA WHERE TECHNICIAN_ID = %s OR EMAIL = %s"
@@ -4615,23 +3966,44 @@ async def delete_admin_technician(tech_id: str):
         except Exception as e:
             logger.warning(f"Error removing technician from Snowflake: {e}")
 
-    ADMIN_TECHNICIANS_STORE = [t for t in ADMIN_TECHNICIANS_STORE if t["technician_id"] != tech_id and t["username"] != tech_id]
     if tech_id in DEMO_USERS:
         del DEMO_USERS[tech_id]
     return {"status": "success", "message": f"Technician {tech_id} removed successfully"}
 
 @app.put("/admin/technicians/{tech_id}/schedule-skills")
 async def update_technician_schedule_and_skills(tech_id: str, update_data: dict):
-    """Update technician working shift, on-call rotation, capacity, and skillsets in Snowflake"""
+    """Update technician working shift, on-call rotation, capacity, and skillsets in Snowflake SF_DATABASE.SF_SCHEMA.CTTC_MOCK_TECHNICIAN_DATA"""
+    # Fetch technician directly from Snowflake
     target = None
-    for t in ADMIN_TECHNICIANS_STORE:
-        if t["technician_id"] == tech_id or t["username"] == tech_id:
-            target = t
-            break
-            
+    if snowflake_conn and snowflake_conn.is_connected():
+        try:
+            rows = snowflake_conn.execute_query(
+                f"SELECT * FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TECHNICIAN_DATA WHERE TECHNICIAN_ID = %s OR USERNAME = %s",
+                (tech_id, tech_id)
+            )
+            if rows:
+                row = rows[0]
+                target = {
+                    "technician_id": str(row.get("TECHNICIAN_ID") or tech_id),
+                    "username": str(row.get("USERNAME") or tech_id),
+                    "full_name": str(row.get("NAME") or row.get("FULL_NAME") or tech_id),
+                    "email": str(row.get("EMAIL") or ""),
+                    "phone_number": str(row.get("PHONE") or row.get("PHONENUMBER") or ""),
+                    "technician_role": str(row.get("ROLE") or ""),
+                    "primary_shift": str(row.get("SHIFT") or ""),
+                    "on_call_status": "Active" if row.get("IS_ON_CALL") else "Standby",
+                    "skill_sets": [s.strip() for s in str(row.get("SPECIALIZATIONS") or row.get("SKILLS") or "").split(",") if s.strip()],
+                    "experience_level": str(row.get("EXPERIENCE_LEVEL") or ""),
+                    "status": str(row.get("STATUS") or "ACTIVE"),
+                    "current_tickets_load": int(row.get("CURRENT_TICKETS_LOAD") or 0),
+                    "max_capacity": int(row.get("MAX_CAPACITY") or 0)
+                }
+        except Exception as e:
+            logger.error(f"Error fetching technician from Snowflake for update: {e}")
+
     if not target:
         raise HTTPException(status_code=404, detail=f"Technician '{tech_id}' not found")
-    
+
     if "primary_shift" in update_data:
         target["primary_shift"] = update_data["primary_shift"]
     if "on_call_status" in update_data:
@@ -4660,8 +4032,9 @@ async def update_technician_schedule_and_skills(tech_id: str, update_data: dict)
                 if len(parts) == 2:
                     shift_start = parts[0].strip()
                     shift_end = parts[1].strip()
-            
+
             is_on_call = True if target["on_call_status"].lower() == "active" else False
+            skills_str = ", ".join(target["skill_sets"])
 
             upd_sql = f"""
                 UPDATE {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TECHNICIAN_DATA
@@ -4672,13 +4045,13 @@ async def update_technician_schedule_and_skills(tech_id: str, update_data: dict)
                 shift_start,
                 shift_end,
                 is_on_call,
-                ", ".join(target["skill_sets"]),
-                ", ".join(target["skill_sets"]),
+                skills_str,
+                skills_str,
                 tech_id
             ))
         except Exception as e:
             logger.warning(f"Could not update technician in Snowflake: {e}")
-        
+
     return {"status": "success", "message": "Technician schedule and skills updated", "technician": target}
 
 @app.get("/admin/reports/master-tickets")
@@ -4694,12 +4067,6 @@ async def get_admin_master_tickets_report():
                 logger.error(f"Error querying Snowflake {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS: {e_sf}")
                 results = []
 
-        if not results:
-            import csv
-            csv_path = os.path.join(parent_dir, "data", "TICKETS.csv")
-            if os.path.exists(csv_path):
-                with open(csv_path, "r", encoding="utf-8") as f:
-                    results = list(csv.DictReader(f))
 
         # Format tickets for master report
         formatted_tickets = []
@@ -4712,7 +4079,7 @@ async def get_admin_master_tickets_report():
                 "status": t.get("STATUS") or t.get("status") or "Open",
                 "assigned_to": t.get("ASSIGNED_TECHNICIAN") or t.get("assigned_technician") or t.get("TECHNICIAN_ID") or "Unassigned",
                 "requester_name": t.get("USER_ID") or t.get("requester_name") or t.get("USEREMAIL") or "User",
-                "created_at": t.get("CREATED_AT") or t.get("created_at") or "2026-08-30T00:00:00Z"
+                "created_at": t.get("CREATED_AT") or t.get("created_at") or ""
             })
 
         total = len(formatted_tickets)
@@ -4848,18 +4215,6 @@ async def get_admin_wider_mttr_report():
                 })
         except Exception as e:
             logger.warning(f"Could not load technicians from Snowflake for MTTR: {e}")
-
-    if not tech_list:
-        for t in ADMIN_TECHNICIANS_STORE:
-            raw_shift = t.get("primary_shift", "")
-            shift_str = raw_shift.split("(")[-1].replace(")", "").strip() if "(" in raw_shift else raw_shift
-            tech_list.append({
-                "id":     t.get("username", ""),
-                "name":   t.get("full_name", ""),
-                "email":  t.get("email", "").lower(),
-                "shift":  shift_str,
-                "skills": ", ".join(t.get("skill_sets", [])),
-            })
 
     leaderboard = []
     for tech in tech_list:
@@ -5399,7 +4754,6 @@ async def startup_event():
     """Initialize services when the application starts"""
     global gmail_monitor
     
-    print("🚀 Starting TeamLogic AutoTask Backend...")
     print("=" * 50)
 
     # Initialize and start Gmail monitoring service (Opt-in via ENABLE_GMAIL_MONITOR env var)

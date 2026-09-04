@@ -57,7 +57,7 @@ class DirectGmailIntegration:
         print("   • Go to: https://myaccount.google.com/apppasswords")
         print("   • Select app: 'Mail'")
         print("   • Select device: 'Other (custom name)'")
-        print("   • Enter name: 'TeamLogic AutoTask'")
+        print("   • Enter name: 'AutoTask'")
         print("   • Click 'Generate'")
         print("")
         print("3️⃣  Copy the 16-character password:")

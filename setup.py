@@ -3,7 +3,7 @@ from setuptools import setup, find_packages
 setup(
     name="autotask",
     version="1.0.0",
-    description="TeamLogic AutoTask System",
+    description="AutoTask System",
     packages=find_packages(),
     python_requires=">=3.8",
     install_requires=[

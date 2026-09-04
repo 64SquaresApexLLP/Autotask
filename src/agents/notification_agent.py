@@ -56,7 +56,7 @@ class NotificationAgent:
         self.smtp_password = self._load_gmail_app_password()
 
         self.from_email = os.getenv('FROM_EMAIL', self.smtp_username)
-        self.from_name = os.getenv('FROM_NAME', 'TeamLogic AutoTask Support')
+        self.from_name = os.getenv('FROM_NAME', ' AutoTask Support')
 
         # LLM Configuration
         self.db_connection = db_connection

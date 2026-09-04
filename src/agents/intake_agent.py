@@ -274,33 +274,14 @@ class IntakeClassificationAgent:
         print(f"All fallback attempts failed, using timestamp-based sequence: {fallback_sequence}")
         return fallback_sequence
 
-    def _is_ticket_unique_locally(self, ticket_number: str) -> bool:
-        """Check ticket uniqueness in local files."""
-        try:
-            if os.path.exists("data/knowledgebase.json"):
-                with open("data/knowledgebase.json", "r", encoding="utf-8") as f:
-                    kb_data = json.load(f)
-                    for item in kb_data:
-                        if item.get("new_ticket", {}).get("ticket_number") == ticket_number:
-                            return False
-
-            if os.path.exists("data/TICKETS.csv"):
-                import csv
-                with open("data/TICKETS.csv", "r", encoding="utf-8") as f:
-                    reader = csv.DictReader(f)
-                    for row in reader:
-                        if row.get("TICKETNUMBER") == ticket_number:
-                            return False
-            return True
-        except Exception:
-            return True
-
     def _is_ticket_number_unique(self, ticket_number: str) -> bool:
         """
         Check if a ticket number is unique across both TICKETS and CTTC_MOCK_CLOSED_TICKETS tables.
+        Pure Snowflake — no local file checks.
         """
         if not self.db_connection or not self.db_connection.is_connected():
-            return self._is_ticket_unique_locally(ticket_number)
+            print("Warning: Snowflake unavailable — cannot verify ticket number uniqueness against database.")
+            return True
 
         try:
             # Check both TICKETS and CTTC_MOCK_CLOSED_TICKETS tables
@@ -319,10 +300,12 @@ class IntakeClassificationAgent:
                 count = result[0]['COUNT']
                 return count == 0
             else:
-                return self._is_ticket_unique_locally(ticket_number)
+                print("Warning: Uniqueness query returned no rows — cannot verify against database.")
+                return True
 
         except Exception as e:
-            return self._is_ticket_unique_locally(ticket_number)
+            print(f"Warning: Ticket uniqueness check failed against database: {e}")
+            return True
 
     def extract_metadata(self, title: str, description: str, model: str = 'llama3.1-70b') -> Optional[Dict]:
         """
