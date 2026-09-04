@@ -382,7 +382,7 @@ async def startup_event():
     #    writes these columns; without them every technician UPDATE failed.
     try:
         if ensure_technician_schedule_columns():
-            print("✅ Technician schedule columns verified (PHONE, SHIFT, SHIFT_START, SHIFT_END, IS_ON_CALL, EXPERIENCE_LEVEL, MAX_CAPACITY, STATUS)")
+            print("✅ Technician schedule columns verified (PHONE, SHIFT, SHIFT_START, SHIFT_END, IS_ON_CALL, EXPERIENCE_LEVEL, MAX_CAPACITY, STATUS, PASSWORD)")
     except Exception as e:
         print(f"⚠️ Warning: Could not ensure technician schedule columns: {e}")
 
@@ -836,6 +836,8 @@ def get_mttr_analytics(
         category_durations = {}
         work_hours_total = []  # technician effort (hours) per resolved ticket
         priority_work = {"Critical": [], "High": [], "Medium": [], "Low": []}
+        priority_sla_met = {"Critical": 0, "High": 0, "Medium": 0, "Low": 0}
+        priority_sla_total = {"Critical": 0, "High": 0, "Medium": 0, "Low": 0}
         resolved_missing_timestamp = 0
         sla_met_count = 0
         total_evaluated_sla = 0
@@ -947,6 +949,8 @@ def get_mttr_analytics(
                     if duration_hours is not None:
                         if duration_hours <= target_hours:
                             sla_met_count += 1
+                            priority_sla_met[priority_key] += 1
+                        priority_sla_total[priority_key] += 1
                         total_evaluated_sla += 1
 
                     # Every ticket in target_tickets is already scoped to this tech/user
@@ -984,11 +988,15 @@ def get_mttr_analytics(
         by_priority_out = {}
         for p, durs in priority_durations.items():
             whours = priority_work[p]
+            sla_evaluated = priority_sla_total[p]
             by_priority_out[p] = {
                 "mttr_hours": round(sum(durs) / len(durs), 1) if durs else None,
                 "sla_target_hours": sla_targets.get(p.lower(), 24.0),
                 "resolved_count": len(durs),
-                "avg_work_time_hours": round(sum(whours) / len(whours), 1) if whours else None
+                "avg_work_time_hours": round(sum(whours) / len(whours), 1) if whours else None,
+                "sla_met_count": priority_sla_met[p],
+                "sla_evaluated_count": sla_evaluated,
+                "sla_compliance_rate": round(priority_sla_met[p] / sla_evaluated * 100, 1) if sla_evaluated else None
             }
 
         by_category_out = {}
@@ -999,6 +1007,123 @@ def get_mttr_analytics(
             }
 
         sla_compliance_rate = round((sla_met_count / total_evaluated_sla * 100), 1) if total_evaluated_sla else None
+
+        # ── Team-wide SLA / MTTR comparison (all technicians — ignores the
+        #    personal scope so an individual can benchmark against the team) ──
+        team_stats = {}
+
+        def team_bucket(ticket: dict):
+            t_email = str(ticket.get("TECHNICIANEMAIL") or ticket.get("technician_email") or "").strip()
+            t_id = str(ticket.get("TECHNICIAN_ID") or ticket.get("technician_id") or "").strip()
+            t_name = str(ticket.get("ASSIGNED_TECHNICIAN") or ticket.get("assigned_technician") or "").strip()
+            key = (t_email or t_id or t_name).lower()
+            if not key:
+                return None
+            if key not in team_stats:
+                team_stats[key] = {
+                    "key": key,
+                    "name": t_name or t_id or t_email,
+                    "email": t_email,
+                    "id": t_id,
+                    "mttr": [],
+                    "priority_mttr": {"Critical": [], "High": [], "Medium": [], "Low": []},
+                    "sla_met": 0,
+                    "sla_total": 0,
+                }
+            return team_stats[key]
+
+        for t in all_tickets:
+            status_team = str(t.get("STATUS") or t.get("status") or "").strip().lower()
+            if status_team not in resolved_statuses:
+                continue
+            bucket = team_bucket(t)
+            if bucket is None:
+                continue
+            p_team = str(t.get("PRIORITY") or t.get("priority") or "Medium").strip().capitalize()
+            if p_team not in ("Critical", "High", "Medium", "Low"):
+                p_team = "Medium"
+
+            created_dt_team = None
+            raw_created_team = t.get("CREATED_AT") or t.get("created_at") or t.get("date")
+            if raw_created_team:
+                try:
+                    created_dt_team = datetime.fromisoformat(str(raw_created_team).replace("Z", "+00:00").split("+")[0])
+                except Exception:
+                    pass
+            if not created_dt_team:
+                created_dt_team = parse_created_at_from_ticket_number(
+                    t.get("TICKETNUMBER") or t.get("ticket_number"))
+
+            duration_hours_team = None
+            raw_resolved_team = (t.get("RESOLVED_AT") or t.get("resolved_at")
+                                 or t.get("COMPLETED_AT") or t.get("completed_at")
+                                 or t.get("CLOSED_AT") or t.get("closed_at"))
+            if raw_resolved_team and created_dt_team:
+                try:
+                    resolved_dt_team = datetime.fromisoformat(str(raw_resolved_team).replace("Z", "+00:00").split("+")[0])
+                    diff_h_team = (resolved_dt_team - created_dt_team).total_seconds() / 3600.0
+                    if diff_h_team >= 0:
+                        duration_hours_team = round(diff_h_team, 1)
+                except Exception:
+                    pass
+
+            work_hours_team = parse_time_spent_hours(t.get("TIME_SPENT_HOURS", t.get("time_spent_hours")))
+            if work_hours_team is None:
+                work_hours_team = parse_time_spent_hours(t.get("TIME_SPENT", t.get("time_spent")))
+            if work_hours_team is None:
+                work_hours_team = extract_time_spent_from_resolution(t.get("RESOLUTION") or t.get("resolution") or "")
+
+            mttr_hours_team = work_hours_team if work_hours_team is not None else duration_hours_team
+            if mttr_hours_team is not None:
+                bucket["mttr"].append(mttr_hours_team)
+                bucket["priority_mttr"][p_team].append(mttr_hours_team)
+
+            # SLA on customer wall-clock wait, same definition as the personal scope
+            if duration_hours_team is not None:
+                bucket["sla_total"] += 1
+                if duration_hours_team <= sla_targets.get(p_team.lower(), 24.0):
+                    bucket["sla_met"] += 1
+
+        team_technicians = []
+        all_team_mttr = []
+        team_sla_met_total = 0
+        team_sla_total = 0
+        for bucket in team_stats.values():
+            avg_mttr_team = round(sum(bucket["mttr"]) / len(bucket["mttr"]), 1) if bucket["mttr"] else None
+            comp_team = round(bucket["sla_met"] / bucket["sla_total"] * 100, 1) if bucket["sla_total"] else None
+            all_team_mttr.extend(bucket["mttr"])
+            team_sla_met_total += bucket["sla_met"]
+            team_sla_total += bucket["sla_total"]
+            team_technicians.append({
+                "key": bucket["key"],
+                "name": bucket["name"],
+                "email": bucket["email"],
+                "id": bucket["id"],
+                "resolved_count": len(bucket["mttr"]),
+                "avg_mttr_hours": avg_mttr_team,
+                "sla_compliance_rate": comp_team,
+            })
+        team_technicians.sort(key=lambda x: x["resolved_count"], reverse=True)
+
+        team_by_priority_out = {}
+        for p in ("Critical", "High", "Medium", "Low"):
+            durs_team = []
+            for b in team_stats.values():
+                durs_team.extend(b["priority_mttr"][p])
+            team_by_priority_out[p] = {
+                "avg_mttr_hours": round(sum(durs_team) / len(durs_team), 1) if durs_team else None,
+                "resolved_count": len(durs_team),
+                "sla_target_hours": sla_targets.get(p.lower(), 24.0),
+            }
+
+        team_comparison = {
+            "team_avg_mttr_hours": round(sum(all_team_mttr) / len(all_team_mttr), 1) if all_team_mttr else None,
+            "team_sla_compliance_rate": round(team_sla_met_total / team_sla_total * 100, 1) if team_sla_total else None,
+            "team_resolved_count": len(all_team_mttr),
+            "technician_count": len(team_technicians),
+            "technicians": team_technicians[:15],
+            "by_priority": team_by_priority_out,
+        }
 
         return {
             "overall_mttr_hours": overall_mttr,
@@ -1017,6 +1142,7 @@ def get_mttr_analytics(
             },
             "by_priority": by_priority_out,
             "by_category": by_category_out,
+            "team_comparison": team_comparison,
             "active_sla_status": {
                 "on_track": active_on_track,
                 "approaching": active_approaching,
@@ -1125,7 +1251,7 @@ def get_technician_credentials():
 
         # Get all technician credentials
         query = f"""
-            SELECT TECHNICIAN_ID, NAME, EMAIL, TECHNICIAN_PASSWORD
+            SELECT *
             FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TECHNICIAN_DATA
             ORDER BY TECHNICIAN_ID
         """
@@ -1138,7 +1264,9 @@ def get_technician_credentials():
                 "technician_id": tech.get("TECHNICIAN_ID"),
                 "name": tech.get("NAME"),
                 "email": tech.get("EMAIL"),
-                "password": tech.get("TECHNICIAN_PASSWORD")
+                # The password column is PASSWORD (some environments may still
+                # carry the legacy TECHNICIAN_PASSWORD name).
+                "password": tech.get("PASSWORD") or tech.get("TECHNICIAN_PASSWORD")
             })
 
         return {
@@ -2423,7 +2551,7 @@ def ensure_technician_schedule_columns():
     execute_query), which made "Edit technician" fail on the admin page.
 
     Adds: PHONE, SHIFT, SHIFT_START, SHIFT_END, IS_ON_CALL,
-          EXPERIENCE_LEVEL, MAX_CAPACITY, STATUS
+          EXPERIENCE_LEVEL, MAX_CAPACITY, STATUS (PASSWORD already exists)
     """
     global _technician_schedule_columns_ensured
     if _technician_schedule_columns_ensured:
@@ -2439,6 +2567,7 @@ def ensure_technician_schedule_columns():
         f"ALTER TABLE {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TECHNICIAN_DATA ADD COLUMN IF NOT EXISTS EXPERIENCE_LEVEL VARCHAR(64)",
         f"ALTER TABLE {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TECHNICIAN_DATA ADD COLUMN IF NOT EXISTS MAX_CAPACITY NUMBER(4,0) DEFAULT 10",
         f"ALTER TABLE {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TECHNICIAN_DATA ADD COLUMN IF NOT EXISTS STATUS VARCHAR(32) DEFAULT 'ACTIVE'",
+        f"ALTER TABLE {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TECHNICIAN_DATA ADD COLUMN IF NOT EXISTS PASSWORD VARCHAR(256)",
     ]
     try:
         for stmt in statements:
@@ -3970,6 +4099,8 @@ async def create_admin_technician(tech_data: dict):
         "max_capacity": int(tech_data.get("max_capacity") or 0)
     }
 
+    plain_password = (tech_data.get("password") or "").strip()
+
     # Insert into Snowflake SF_DATABASE.SF_SCHEMA.CTTC_MOCK_TECHNICIAN_DATA if connected
     if snowflake_conn and snowflake_conn.is_connected():
         try:
@@ -3990,8 +4121,8 @@ async def create_admin_technician(tech_data: dict):
 
             ins_sql = f"""
                 INSERT INTO {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TECHNICIAN_DATA 
-                (TECHNICIAN_ID, NAME, EMAIL, ROLE, PHONE, SHIFT, SHIFT_START, SHIFT_END, IS_ON_CALL, SPECIALIZATIONS, SKILLS)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                (TECHNICIAN_ID, NAME, EMAIL, ROLE, PHONE, SHIFT, SHIFT_START, SHIFT_END, IS_ON_CALL, SPECIALIZATIONS, SKILLS, PASSWORD)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """
             snowflake_conn.execute_query(ins_sql, (
                 new_tech["username"],
@@ -4004,12 +4135,15 @@ async def create_admin_technician(tech_data: dict):
                 shift_end,
                 is_on_call,
                 ", ".join(new_tech["skill_sets"]),
-                ", ".join(new_tech["skill_sets"])
+                ", ".join(new_tech["skill_sets"]),
+                # Persist the password so the technician can still log in after a
+                # backend restart (authenticate_technician_from_db reads the
+                # PASSWORD column via check_password_match).
+                plain_password
             ))
         except Exception as e:
             logger.warning(f"Could not persist technician to Snowflake: {e}")
 
-    plain_password = tech_data.get("password", "").strip()
     DEMO_USERS[username] = {
         "username": username,
         "password": plain_password,

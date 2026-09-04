@@ -11,7 +11,8 @@ import {
   AlertCircle,
   Eye,
   Lock,
-  FileText
+  FileText,
+  Users
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -21,7 +22,10 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  ResponsiveContainer
+  ResponsiveContainer,
+  Legend,
+  ReferenceLine,
+  Cell
 } from 'recharts';
 import Header from '../components/Header';
 import Sidebar from '../components/Sidebar';
@@ -163,6 +167,46 @@ const MttrReport = () => {
       resolved: !isTechnician ? resolvedUserPriority.length : (mttrData?.by_priority?.[pKey]?.resolved_count ?? 0)
     };
   }).filter(d => d.actual !== null);  // omit priorities with no real data
+
+  // ── SLA Comparison data (technician view) ─────────────────────────────────
+  // Individual: your MTTR vs the team average vs the SLA target, per priority
+  const individualSlaData = ['Critical', 'High', 'Medium', 'Low'].map(pKey => {
+    const mine = mttrData?.by_priority?.[pKey];
+    const team = mttrData?.team_comparison?.by_priority?.[pKey];
+    const target = mine?.sla_target_hours ?? team?.sla_target_hours ?? null;
+    return {
+      priority: pKey,
+      you: mine?.mttr_hours != null ? Number(mine.mttr_hours) : null,
+      team: team?.avg_mttr_hours != null ? Number(team.avg_mttr_hours) : null,
+      target: target != null ? Number(target) : null,
+      myCompliance: mine?.sla_compliance_rate ?? null
+    };
+  }).filter(d => d.you !== null || d.team !== null);
+
+  // Team leaderboard: every technician's SLA compliance rate, "You" highlighted
+  const matchesMe = (tech) => {
+    const key = (tech.key || '').trim().toLowerCase();
+    const email = (tech.email || '').trim().toLowerCase();
+    const id = (tech.id || '').trim().toLowerCase();
+    const name = (tech.name || '').trim().toLowerCase();
+    return (
+      (currentUserEmail && (email === currentUserEmail || key === currentUserEmail)) ||
+      (currentUserId && (id === currentUserId || key === currentUserId || name === currentUserId)) ||
+      (currentFullName && name === currentFullName)
+    );
+  };
+
+  const teamSlaData = (mttrData?.team_comparison?.technicians || [])
+    .filter(t => t.sla_compliance_rate != null)
+    .map(t => ({
+      name: t.name || t.key,
+      compliance: Number(t.sla_compliance_rate),
+      resolved: t.resolved_count ?? 0,
+      avgMttr: t.avg_mttr_hours,
+      isMe: matchesMe(t)
+    }));
+
+  const teamAvgCompliance = mttrData?.team_comparison?.team_sla_compliance_rate ?? null;
 
   const getPriorityBadgeClass = (priority) => {
     switch ((priority || '').toLowerCase()) {
@@ -441,6 +485,150 @@ const MttrReport = () => {
                 </div>
               </div>
             </div>
+
+            {/* SLA Comparison Graphs (For Technicians) */}
+            {isTechnician && (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+                {/* Individual SLA Comparison: You vs Team Avg vs SLA Target */}
+                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 lg:p-6 flex flex-col">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <ShieldCheck className="w-5 h-5 text-emerald-600" />
+                      <h3 className="text-base font-bold text-gray-900">Individual SLA Comparison</h3>
+                    </div>
+                    <span className="text-xs text-gray-500 font-medium">Hours</span>
+                  </div>
+                  <p className="text-xs text-gray-500 mb-4">
+                    Your resolution time vs the team average and the SLA target for each priority
+                  </p>
+
+                  <div className="h-72 w-full mt-2">
+                    {individualSlaData.length > 0 ? (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={individualSlaData} margin={{ top: 15, right: 15, left: -15, bottom: 5 }}>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                          <XAxis
+                            dataKey="priority"
+                            axisLine={false}
+                            tickLine={false}
+                            tick={{ fill: '#475569', fontSize: 12, fontWeight: 500 }}
+                          />
+                          <YAxis axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 11 }} />
+                          <Tooltip
+                            contentStyle={{
+                              backgroundColor: '#0f172a',
+                              borderRadius: '10px',
+                              border: 'none',
+                              color: '#fff',
+                              boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.2)'
+                            }}
+                            itemStyle={{ color: '#fff', fontSize: '12px' }}
+                            formatter={(value, name, item) => {
+                              const fmt = formatMttrValue(Number(value));
+                              let label = fmt ? `${fmt.value} ${fmt.unitLabel}` : `${value} hours`;
+                              const p = item?.payload || {};
+                              if (name === 'Your MTTR' && p.myCompliance != null) {
+                                label += ` (${p.myCompliance}% SLA met)`;
+                              }
+                              return [label, name];
+                            }}
+                          />
+                          <Legend wrapperStyle={{ fontSize: '11px' }} />
+                          <Bar dataKey="you" name="Your MTTR" fill="#00ABE4" radius={[6, 6, 0, 0]} maxBarSize={26} />
+                          <Bar dataKey="team" name="Team Avg" fill="#94a3b8" radius={[6, 6, 0, 0]} maxBarSize={26} />
+                          <Bar dataKey="target" name="SLA Target" fill="#F97316" radius={[6, 6, 0, 0]} maxBarSize={26} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="h-full flex items-center justify-center text-sm text-gray-400">
+                        No SLA comparison data available yet
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Team SLA Comparison: compliance rate across all technicians */}
+                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 lg:p-6 flex flex-col">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <Users className="w-5 h-5 text-[#00ABE4]" />
+                      <h3 className="text-base font-bold text-gray-900">Team SLA Comparison</h3>
+                    </div>
+                    <span className="text-xs text-gray-500 font-medium">Compliance %</span>
+                  </div>
+                  <p className="text-xs text-gray-500 mb-4">
+                    SLA compliance across all technicians — you are highlighted
+                  </p>
+
+                  <div className="h-72 w-full mt-2">
+                    {teamSlaData.length > 0 ? (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={teamSlaData} margin={{ top: 15, right: 15, left: -15, bottom: 5 }}>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                          <XAxis
+                            dataKey="name"
+                            interval={0}
+                            angle={-25}
+                            textAnchor="end"
+                            height={60}
+                            axisLine={false}
+                            tickLine={false}
+                            tick={{ fill: '#475569', fontSize: 10 }}
+                          />
+                          <YAxis
+                            domain={[0, 100]}
+                            axisLine={false}
+                            tickLine={false}
+                            tick={{ fill: '#94a3b8', fontSize: 11 }}
+                            unit="%"
+                          />
+                          <Tooltip
+                            contentStyle={{
+                              backgroundColor: '#0f172a',
+                              borderRadius: '10px',
+                              border: 'none',
+                              color: '#fff',
+                              boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.2)'
+                            }}
+                            itemStyle={{ color: '#fff', fontSize: '12px' }}
+                            formatter={(value, name, item) => {
+                              const p = item?.payload || {};
+                              const bits = [`${value}% SLA compliance`, `${p.resolved ?? 0} resolved`];
+                              if (p.avgMttr != null) bits.push(`Avg MTTR ${p.avgMttr}h`);
+                              return [bits.join(' • '), p.isMe ? 'You' : (p.name || name)];
+                            }}
+                          />
+                          <ReferenceLine
+                            y={95}
+                            stroke="#F97316"
+                            strokeDasharray="4 4"
+                            label={{ value: 'Goal 95%', position: 'insideTopRight', fill: '#F97316', fontSize: 10 }}
+                          />
+                          {teamAvgCompliance != null && (
+                            <ReferenceLine
+                              y={teamAvgCompliance}
+                              stroke="#00ABE4"
+                              strokeDasharray="4 4"
+                              label={{ value: `Team ${teamAvgCompliance}%`, position: 'insideTopLeft', fill: '#00ABE4', fontSize: 10 }}
+                            />
+                          )}
+                          <Bar dataKey="compliance" name="SLA Compliance" radius={[6, 6, 0, 0]} maxBarSize={34}>
+                            {teamSlaData.map((entry, idx) => (
+                              <Cell key={idx} fill={entry.isMe ? '#00ABE4' : '#cbd5e1'} />
+                            ))}
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="h-full flex items-center justify-center text-sm text-gray-400">
+                        No team comparison data yet
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Ticket Turnaround Table */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 lg:p-6 space-y-4">
