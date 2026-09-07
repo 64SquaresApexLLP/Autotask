@@ -28,6 +28,12 @@ import Sidebar from '../../components/Sidebar';
 import MttrCard, { formatMttrValue } from '../../components/MttrCard';
 import { adminService } from '../../services/adminService';
 
+const priorityColors = {
+  critical: 'bg-red-100 text-red-800 border-red-200',
+  high: 'bg-orange-100 text-orange-800 border-orange-200',
+  medium: 'bg-yellow-100 text-yellow-800 border-yellow-200',
+  low: 'bg-green-100 text-green-800 border-green-200',
+};
 const AdminWiderMttr = () => {
   const [mttrData, setMttrData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -72,21 +78,29 @@ const AdminWiderMttr = () => {
         mttr_hours: mttrData.by_priority?.Critical?.actual_mttr_hours ?? null,
         sla_target_hours: mttrData.by_priority?.Critical?.target_hours ?? null,
         resolved_count: mttrData.by_priority?.Critical?.tickets_count ?? null,
+        sla_breached: mttrData.by_priority?.Critical?.sla_breached ?? null,
+        sla_breached_tickets: mttrData.by_priority?.Critical?.sla_breached_tickets ?? [],
       },
       High: {
         mttr_hours: mttrData.by_priority?.High?.actual_mttr_hours ?? null,
         sla_target_hours: mttrData.by_priority?.High?.target_hours ?? null,
         resolved_count: mttrData.by_priority?.High?.tickets_count ?? null,
+        sla_breached: mttrData.by_priority?.High?.sla_breached ?? null,
+        sla_breached_tickets: mttrData.by_priority?.High?.sla_breached_tickets ?? [],
       },
       Medium: {
         mttr_hours: mttrData.by_priority?.Medium?.actual_mttr_hours ?? null,
         sla_target_hours: mttrData.by_priority?.Medium?.target_hours ?? null,
         resolved_count: mttrData.by_priority?.Medium?.tickets_count ?? null,
+        sla_breached: mttrData.by_priority?.Medium?.sla_breached ?? null,
+        sla_breached_tickets: mttrData.by_priority?.Medium?.sla_breached_tickets ?? [],
       },
       Low: {
         mttr_hours: mttrData.by_priority?.Low?.actual_mttr_hours ?? null,
         sla_target_hours: mttrData.by_priority?.Low?.target_hours ?? null,
         resolved_count: mttrData.by_priority?.Low?.tickets_count ?? null,
+        sla_breached: mttrData.by_priority?.Low?.sla_breached ?? null,
+        sla_breached_tickets: mttrData.by_priority?.Low?.sla_breached_tickets ?? [],
       },
     },
   } : null;
@@ -155,7 +169,17 @@ ${(mttrData.by_shift || []).map(s => `  * ${s.shift}: MTTR ${fmtMttrShort(s.mttr
 ${(mttrData.by_category || []).map(c => `  * ${c.category}: MTTR ${fmtMttrShort(c.mttr_hours)} | Tickets: ${c.tickets} | SLA: ${c.sla_compliance}%`).join('\n')}
 
 4. TOP TECHNICIAN PERFORMANCE LEADERBOARD
-${(mttrData.technician_leaderboard || []).map((t, idx) => `  #${idx + 1} ${t.name} (${t.shift}): MTTR ${fmtMttrShort(t.mttr_hours)} | Resolved: ${t.resolved} | SLA: ${t.sla_rate}% | Skills: ${t.skills}`).join('\n')}
+${(mttrData.technician_leaderboard || []).map((t, idx) => {
+    const statusBreakdown = Object.entries(t.resolved_by_status || {})
+      .map(([st, cnt]) => `${st.charAt(0).toUpperCase() + st.slice(1)}: ${cnt}`)
+      .join(', ');
+    const priorityBreakdown = Object.entries(t.resolved_by_priority || {})
+      .filter(([, cnt]) => cnt > 0)
+      .map(([p, cnt]) => `${p}: ${cnt}`)
+      .join(', ');
+    const breachTickets = (t.sla_breached_tickets || []).join(', ');
+    return `  #${idx + 1} ${t.name} (${t.shift}): MTTR ${fmtMttrShort(t.mttr_hours)} | Resolved (${t.resolved}): SLA ${t.sla_rate}% | SLA Breached: ${t.sla_breached || 0} [${breachTickets || 'None'}] | Status [${statusBreakdown || 'N/A'}] | Priority [${priorityBreakdown || 'N/A'}] | Skills: ${t.skills}`;
+  }).join('\n')}
 =====================================================`;
 
     const blob = new Blob([reportContent], { type: 'text/plain;charset=utf-8' });
@@ -366,9 +390,9 @@ ${(mttrData.technician_leaderboard || []).map((t, idx) => `  #${idx + 1} ${t.nam
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2">
                     <Award className="w-5 h-5 text-amber-500" />
-                    <h3 className="text-base font-bold text-gray-900">Technician MTTR Performance Leaderboard</h3>
+                    <h3 className="text-base font-bold text-gray-900">Performance Leaderboard</h3>
                   </div>
-                  <span className="text-xs font-semibold text-gray-500">Ranked by Velocity</span>
+                  {/* <span className="text-xs font-semibold text-gray-500">Ranked by Velocity</span> */}
                 </div>
 
                 <div className="overflow-x-auto">
@@ -380,8 +404,7 @@ ${(mttrData.technician_leaderboard || []).map((t, idx) => `  #${idx + 1} ${t.nam
                           <th className="py-2.5 px-3">Technician</th>
                           <th className="py-2.5 px-3">Shift</th>
                           <th className="py-2.5 px-3">Avg MTTR</th>
-                          <th className="py-2.5 px-3">Resolved</th>
-                          <th className="py-2.5 px-3">SLA %</th>
+                          <th className="py-2.5 px-3 min-w-[200px]">Resolved</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100 text-xs">
@@ -400,8 +423,22 @@ ${(mttrData.technician_leaderboard || []).map((t, idx) => `  #${idx + 1} ${t.nam
                             </td>
                             <td className="py-3 px-3 text-gray-700">{t.shift}</td>
                             <td className="py-3 px-3 font-bold text-purple-700">{fmtMttrShort(t.mttr_hours)}</td>
-                            <td className="py-3 px-3 text-gray-700">{t.resolved}</td>
-                            <td className="py-3 px-3 font-semibold text-emerald-600">{t.sla_rate}%</td>
+                            <td className="py-3 px-3 min-w-[240px]">
+                              <div className="flex flex-wrap gap-1">
+                                {Object.entries(t.resolved_by_status || {}).map(([status, count]) => (
+                                  <span key={status} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-green-50 text-[11px] font-semibold text-green-700 capitalize border border-green-200">
+                                    {status}: {count}
+                                  </span>
+                                ))}
+                              </div>
+                              <div className="flex flex-wrap gap-1 mt-1">
+                                {Object.entries(t.resolved_by_priority || {}).filter(([, count]) => count > 0).map(([priority, count]) => (
+                                  <span key={priority} className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[11px] font-semibold capitalize border ${priorityColors[priority.toLowerCase()] || 'bg-gray-100 text-gray-800 border-gray-200'}`}>
+                                    {priority}: {count}
+                                  </span>
+                                ))}
+                              </div>
+                            </td>
                           </tr>
                         ))}
                       </tbody>

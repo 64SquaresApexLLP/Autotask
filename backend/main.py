@@ -4381,6 +4381,8 @@ async def get_admin_wider_mttr_report():
     # ── Pass 1: compute global stats and by-priority from ALL resolved tickets ─
     global_durations = []
     priority_buckets: dict = {"Critical": [], "High": [], "Medium": [], "Low": []}
+    # Tickets that breached their priority SLA target — track ticket no. + assigned technician
+    priority_breached: dict = {"Critical": [], "High": [], "Medium": [], "Low": []}
     global_sla_met   = 0
 
     for t in all_tickets:
@@ -4399,6 +4401,15 @@ async def get_admin_wider_mttr_report():
             target = sla_targets.get(p_key.lower(), 24.0)
             if dur <= target:
                 global_sla_met += 1
+            else:
+                priority_breached[p_key].append({
+                    "ticket":   str(t.get("TICKETNUMBER") or t.get("ticket_number") or "N/A"),
+                    "assigned": str(
+                        t.get("ASSIGNED_TECHNICIAN") or t.get("assigned_technician") or
+                        t.get("TECHNICIAN_ID")       or t.get("technician_id") or
+                        t.get("TECHNICIANEMAIL")     or ""
+                    ).strip(),
+                })
 
     total_resolved = len(global_durations)
     global_mttr    = round(sum(global_durations) / total_resolved, 1) if global_durations else None
@@ -4422,6 +4433,8 @@ async def get_admin_wider_mttr_report():
             "target_hours":      priority_targets[p_key],
             "compliance_rate":   comp,
             "tickets_count":     len(priority_buckets[p_key]),
+            "sla_breached":      len(priority_breached[p_key]),
+            "sla_breached_tickets": priority_breached[p_key],
         }
 
     # ── Pass 2: per-technician leaderboard ────────────────────────────────────
@@ -4450,6 +4463,29 @@ async def get_admin_wider_mttr_report():
                 })
         except Exception as e:
             logger.warning(f"Could not load technicians from Snowflake for MTTR: {e}")
+
+    # Resolve technician display names for the fleet-wide breached tickets (speedometer)
+    def resolve_tech_name(assigned: str) -> str:
+        if not assigned:
+            return "Unassigned"
+        a = assigned.lower().strip()
+        for tech in tech_list:
+            t_id_l    = tech["id"].lower()
+            t_name_l  = tech["name"].lower()
+            t_email_l = tech["email"]
+            if (t_id_l    and (t_id_l    in a or a in t_id_l)) \
+               or (t_name_l  and (t_name_l  in a or a in t_name_l)) \
+               or (t_email_l and (t_email_l in a or a in t_email_l)):
+                return tech["name"]
+        return assigned or "Unassigned"
+
+    for p_key, entries in priority_breached.items():
+        resolved = [
+            {"ticket": e["ticket"], "technician": resolve_tech_name(e.get("assigned", ""))}
+            for e in entries
+        ]
+        if p_key in by_priority_out:
+            by_priority_out[p_key]["sla_breached_tickets"] = resolved
 
     leaderboard = []
     for tech in tech_list:
@@ -4495,13 +4531,40 @@ async def get_admin_wider_mttr_report():
         avg_mttr = round(sum(durations) / len(durations), 1)
         sla_rate = round((sla_met / len(durations)) * 100, 1)
 
+        # Breakdown of resolved tickets by exact status (Resolved / Closed / Completed...),
+        # by priority (Critical / High / Medium / Low) and which tickets breached SLA —
+        # powers the leaderboard Resolved column.
+        status_counts: dict = {}
+        priority_counts: dict = {"Critical": 0, "High": 0, "Medium": 0, "Low": 0}
+        breached_tickets: list = []
+        for t, d in zip(tech_resolved, durations):
+            st = str(t.get("STATUS") or t.get("status") or "unknown").strip().lower()
+            status_counts[st] = status_counts.get(st, 0) + 1
+
+            p_key = str(t.get("PRIORITY") or t.get("priority") or "Medium").strip().capitalize()
+            if p_key not in priority_counts:
+                p_key = "Medium"
+            priority_counts[p_key] += 1
+
+            target_h = sla_targets.get(
+                str(t.get("PRIORITY") or t.get("priority") or "medium").strip().lower(), 24.0
+            )
+            if d > target_h:
+                breached_tickets.append(
+                    str(t.get("TICKETNUMBER") or t.get("ticket_number") or "N/A")
+                )
+
         leaderboard.append({
-            "name":       tech["name"],
-            "shift":      tech["shift"],
-            "mttr_hours": avg_mttr,
-            "resolved":   len(tech_resolved),
-            "sla_rate":   sla_rate,
-            "skills":     tech["skills"],
+            "name":                 tech["name"],
+            "shift":                tech["shift"],
+            "mttr_hours":           avg_mttr,
+            "resolved":             len(tech_resolved),
+            "resolved_by_status":   status_counts,
+            "resolved_by_priority": priority_counts,
+            "sla_rate":             sla_rate,
+            "sla_breached":         len(breached_tickets),
+            "sla_breached_tickets": breached_tickets,
+            "skills":               tech["skills"],
         })
 
     leaderboard.sort(key=lambda x: x["mttr_hours"])

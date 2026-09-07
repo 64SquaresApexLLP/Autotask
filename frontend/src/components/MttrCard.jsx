@@ -253,10 +253,7 @@ const MttrCard = ({ mttrData, isTechnician = true, className = '' }) => {
       {/* Breakdown by Priority with Radial Gauge Speedometers */}
       <div className="border-t border-gray-100 pt-5">
         <div className="flex items-center justify-between mb-4">
-          <h4 className="text-xs font-bold uppercase tracking-wider text-gray-600 flex items-center gap-1.5">
-            <Timer className="w-3.5 h-3.5 text-[#00ABE4]" />
-            {isTechnician ? 'Priority Tier Speedometer' : 'Turnaround Time by Tier'}
-          </h4>
+         
         </div>
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -332,6 +329,25 @@ const MttrCard = ({ mttrData, isTechnician = true, className = '' }) => {
                     <span className="inline-flex items-center text-[11px] font-medium text-gray-500 bg-gray-50 px-2 py-0.5 rounded-full w-full justify-center">
                       No resolved tickets yet
                     </span>
+                  )}
+
+                  {/* SLA-breached ticket numbers with assigned technician, shown under the gauge */}
+                  {(data.sla_breached || 0) > 0 && (
+                    <div className="flex flex-wrap justify-center gap-1 mt-1 w-full">
+                      {(data.sla_breached_tickets || []).map((b) => {
+                        const isObj = typeof b === 'object' && b !== null;
+                        const tNo = isObj ? (b.ticket || 'N/A') : b;
+                        const techName = isObj ? (b.technician || '') : '';
+                        const chipTitle = techName
+                          ? `SLA breached ticket ${tNo} · ${techName}`
+                          : `SLA breached ticket ${tNo}`;
+                        return (
+                          <span key={tNo} className="inline-flex items-center px-1.5 py-0.5 rounded bg-red-100 text-red-800 text-[9px] font-mono font-semibold border border-red-200" title={chipTitle}>
+                            {tNo}{techName ? ` · ${techName}` : ''}
+                          </span>
+                        );
+                      })}
+                    </div>
                   )}
                 </div>
               </div>
