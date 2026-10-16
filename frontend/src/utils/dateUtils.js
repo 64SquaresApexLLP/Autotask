@@ -85,6 +85,32 @@ export const formatLocalDateTime = (dateVal, fallback = '—') => {
 };
 
 /**
+ * Format a date value into human-readable relative time (e.g. "Just now", "5m ago", "2h ago", "Yesterday")
+ */
+export const formatRelativeTime = (dateVal, fallback = 'Recently') => {
+  const d = parseIsoDate(dateVal);
+  if (!d) return fallback;
+  const now = new Date();
+  const diffMs = now.getTime() - d.getTime();
+
+  if (diffMs < 0) return 'Upcoming';
+  const diffSec = Math.floor(diffMs / 1000);
+  if (diffSec < 60) return 'Just now';
+
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `${diffMin}m ago`;
+
+  const diffHours = Math.floor(diffMin / 60);
+  if (diffHours < 24) return `${diffHours}h ago`;
+
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays === 1) return 'Yesterday';
+  if (diffDays < 7) return `${diffDays}d ago`;
+
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+};
+
+/**
  * Calculate elapsed duration in hours between creation and current time (or resolution).
  *
  * @param {string|Date} createdAt - Ticket creation timestamp
