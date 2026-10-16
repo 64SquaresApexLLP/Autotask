@@ -1,15 +1,8 @@
 import React from 'react';
 import { Timer, Zap, CheckCircle2, Clock } from 'lucide-react';
+import { SLA_TARGETS, calculateSlaStatus, parseIsoDate } from '../utils/dateUtils.js';
 
-/**
- * Priority SLA standard thresholds in hours
- */
-export const SLA_TARGETS = {
-  critical: 2.0,
-  high: 8.0,
-  medium: 24.0,
-  low: 48.0
-};
+export { SLA_TARGETS };
 
 /**
  * Formats an MTTR/turnaround value (in hours) for display.
@@ -29,105 +22,16 @@ export const formatMttrValue = (hours) => {
 };
 
 /**
- * Calculates current SLA status for an active ticket
+ * Calculates current SLA status for an active ticket using canonical UTC parsing
  */
 export const calculateTicketSla = (ticket) => {
   if (!ticket) return { status: 'on_track', text: 'On Track', color: 'green', elapsedPercent: 0, remainingHours: 0 };
-
-  const priority = (ticket.priority || 'medium').toLowerCase();
-  const targetHours = SLA_TARGETS[priority] || 24.0;
-
-  // Determine creation time
-  let createdAt = ticket.created_at ? new Date(ticket.created_at) : null;
-  if (!createdAt || isNaN(createdAt.getTime())) {
-    // Try parsing from ticket ID e.g. T20250804103000
-    const idStr = String(ticket.id || '');
-    if (/^T\d{8}\./.test(idStr)) {
-      // Current format T{YYYYMMDD}.{seq} — only the creation date is encoded
-      createdAt = new Date(`${idStr.substring(1, 5)}-${idStr.substring(5, 7)}-${idStr.substring(7, 9)}T00:00:00Z`);
-    } else if (idStr.startsWith('T20') && idStr.length >= 15) {
-      const yr = idStr.substring(1, 5);
-      const mo = idStr.substring(5, 7);
-      const dy = idStr.substring(7, 9);
-      const hr = idStr.substring(9, 11);
-      const mn = idStr.substring(11, 13);
-      createdAt = new Date(`${yr}-${mo}-${dy}T${hr}:${mn}:00Z`);
-    }
-  }
-
-  if (!createdAt || isNaN(createdAt.getTime())) {
-    return { status: 'on_track', text: 'On Track', color: 'green', elapsedPercent: 25, remainingHours: targetHours };
-  }
-
-  const isResolved = ['completed', 'resolved', 'closed'].includes((ticket.status || '').toLowerCase());
-  
-  if (isResolved) {
-    let resolvedAt = ticket.resolved_at ? new Date(ticket.resolved_at) : null;
-    let durationHours = null;
-    if (resolvedAt && !isNaN(resolvedAt.getTime())) {
-      durationHours = Math.max(0.1, (resolvedAt.getTime() - createdAt.getTime()) / (1000 * 60 * 60));
-    } else {
-      durationHours = 0;
-    }
-
-    if (durationHours <= targetHours) {
-      return { 
-        status: 'resolved', 
-        text: 'SLA Met', 
-        color: 'blue', 
-        isMet: true, 
-        elapsedPercent: 100, 
-        remainingHours: 0,
-        durationHours: durationHours.toFixed(1)
-      };
-    } else {
-      const overdue = Math.round(durationHours - targetHours);
-      return { 
-        status: 'breached', 
-        text: `SLA Breached (+${overdue}h)`, 
-        color: 'red', 
-        isMet: false, 
-        elapsedPercent: 100, 
-        remainingHours: 0,
-        durationHours: durationHours.toFixed(1)
-      };
-    }
-  }
-
-  const elapsedMs = Date.now() - createdAt.getTime();
-  const elapsedHours = Math.max(0.1, elapsedMs / (1000 * 60 * 60));
-  const elapsedPercent = Math.min(Math.round((elapsedHours / targetHours) * 100), 100);
-  const remainingHours = Math.max(0, targetHours - elapsedHours);
-
-  if (elapsedHours > targetHours) {
-    const overdueHours = Math.round(elapsedHours - targetHours);
-    return {
-      status: 'breached',
-      text: overdueHours > 0 ? `SLA Overdue (+${overdueHours}h)` : 'SLA Breached',
-      color: 'red',
-      isMet: false,
-      elapsedPercent: 100,
-      remainingHours: 0
-    };
-  } else if (elapsedPercent >= 70) {
-    return {
-      status: 'approaching',
-      text: `${remainingHours.toFixed(1)}h SLA remaining`,
-      color: 'amber',
-      isMet: true,
-      elapsedPercent,
-      remainingHours
-    };
-  } else {
-    return {
-      status: 'on_track',
-      text: `On Track (${remainingHours.toFixed(1)}h left)`,
-      color: 'green',
-      isMet: true,
-      elapsedPercent,
-      remainingHours
-    };
-  }
+  return calculateSlaStatus(
+    ticket.priority,
+    ticket.created_at || ticket.id,
+    ticket.resolved_at,
+    ticket.status
+  );
 };
 
 /**

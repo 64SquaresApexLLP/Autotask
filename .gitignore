@@ -66,13 +66,41 @@ credentials/
 !data/*.json
 !package*.json
 
-# Data files (optional - uncomment if you don't want to track data)
-# data/knowledgebase.json
-# data/ticket_sequence.json
-
-# Temporary files
+# Temporary and scratch files
 *.tmp
 *.temp
+scratch/
+*.backup
+*.backup.json
+
+# Database and Data Creation / Seeding Scripts
+scripts/clean_and_seed_tables.py
+scripts/generate_cttc_portal_tickets.py
+scripts/update_knowledgebase.py
+scripts/backup_*.py
+scripts/reconcile_*.py
+scripts/remediate_*.py
+scripts/audit_*.py
+scripts/analyze_*.py
+scripts/check_*.py
+scripts/dump_*.py
+scripts/order_tickets.py
+scripts/test_auth_boundaries.py
+scripts/test_platform_remediation.py
+scripts/test_resolution_confidentiality.py
+scripts/test_route_authorization_matrix.py
+scripts/verify_*.py
+
+# Mock, Generated, and Raw Data Files/Directories
+data/CTTC_MOCK_TECHNICIAN_DATA.csv
+data/*.backup*
+data/ticket_sequence.json
+data/ont_truck_roll/
+cttc_dummy_data.json
+CTTC Data/
+ONT Data/
+ont_truck_roll_data/
+snowflake_ontology_data/
 
 
 # Frontend

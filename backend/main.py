@@ -18,7 +18,7 @@ import hmac
 import json
 import re
 import requests
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import asyncio
 from jose import JWTError, jwt
 from passlib.context import CryptContext
@@ -47,16 +47,22 @@ from src.agents.notification_agent import NotificationAgent
 from src.database.snowflake_db import SnowflakeConnection
 from src.database.ticket_db import TicketDB
 from src.data.data_manager import DataManager
+from src.config.platform_policy import filter_resolution_for_role
 
 # Gmail Direct Integration (from parent directory)
 from gmail_direct_integration import DirectGmailIntegration
 # from src.integrations.gmail_realtime import gmail_service  # Disabled - using direct IMAP instead
 
-# Import config for manager email
+# Import config for manager email and Gmail feature flags
 try:
-    from config import MANAGER_EMAIL
+    from config import (
+        MANAGER_EMAIL, SKIP_GMAIL_SERVICES, ENABLE_GMAIL_SERVICES, ENABLE_GMAIL_MONITOR
+    )
 except ImportError:
     MANAGER_EMAIL = os.getenv('MANAGER_EMAIL', 'anantlad66@gmail.com')
+    SKIP_GMAIL_SERVICES = os.getenv('SKIP_GMAIL_SERVICES', 'true').strip().lower() in ('true', '1', 'yes')
+    ENABLE_GMAIL_SERVICES = (not SKIP_GMAIL_SERVICES) and (os.getenv('ENABLE_GMAIL_SERVICES', 'false').strip().lower() in ('true', '1', 'yes'))
+    ENABLE_GMAIL_MONITOR = (not SKIP_GMAIL_SERVICES) and (os.getenv('ENABLE_GMAIL_MONITOR', 'false').strip().lower() in ('true', '1', 'yes'))
 
 # Snowflake database/schema (env-driven via config; SQL queries must not hardcode DB names)
 try:
@@ -539,6 +545,93 @@ async def require_admin(current_user: dict = Depends(get_current_user)) -> dict:
         )
     return current_user
 
+async def get_optional_current_user(credentials: Optional[HTTPAuthorizationCredentials] = Depends(HTTPBearer(auto_error=False))) -> Optional[dict]:
+    """Extract authenticated user if bearer token is present, otherwise return None."""
+    if not credentials or not credentials.credentials:
+        return None
+    try:
+        payload = verify_token(credentials.credentials)
+        if not payload or not payload.get("sub"):
+            return None
+        username: str = payload.get("sub")
+        user = DEMO_USERS.get(username)
+        if user:
+            user_copy = user.copy()
+            if payload.get("role"):
+                user_copy["role"] = payload.get("role")
+            return user_copy
+        return {
+            "username": username,
+            "role": payload.get("role", "user"),
+            "email": payload.get("email", ""),
+            "full_name": payload.get("full_name", username),
+            "phone_number": payload.get("phone_number", ""),
+            "technician_role": payload.get("technician_role", "Technician")
+        }
+    except Exception:
+        return None
+
+
+async def require_technician_or_admin(current_user: dict = Depends(get_current_user)) -> dict:
+    """Enforce technician or admin role."""
+    if current_user.get("role") not in ["technician", "admin"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: Technician or Admin access required."
+        )
+    return current_user
+
+
+def serialize_ticket_row(row: Optional[dict], requester_role: Optional[str] = None) -> Optional[dict]:
+    """
+    Serializes a database ticket row to API response format, ensuring all timestamps
+    are strictly represented as canonical UTC ISO 8601 strings with explicit 'Z' suffix,
+    and enforcing resolution confidentiality / role-based note segregation at the boundary.
+    """
+    if not row:
+        return row
+    res = dict(row)
+    timestamp_keys = [
+        "CREATED_AT", "created_at", "ASSIGNED_AT", "assigned_at",
+        "RESOLVED_AT", "resolved_at", "CLOSED_AT", "closed_at",
+        "UPDATED_AT", "updated_at", "DUEDATETIME", "due_date"
+    ]
+    for key in timestamp_keys:
+        val = res.get(key)
+        if val is None:
+            continue
+        if isinstance(val, datetime):
+            if val.tzinfo is None:
+                val = val.replace(tzinfo=timezone.utc)
+            res[key] = val.isoformat().replace("+00:00", "Z")
+        elif isinstance(val, str) and val.strip():
+            s = val.strip()
+            if "-" in s and (":" in s or "T" in s):
+                s_iso = s.replace(" ", "T")
+                if not (s_iso.endswith("Z") or "+" in s_iso or "-" in s_iso[10:]):
+                    s_iso += "Z"
+                res[key] = s_iso
+
+    # Role-based resolution & notes confidentiality filtering
+    role_clean = (requester_role or "technician").strip().lower()
+    for res_key in ["RESOLUTION", "resolution"]:
+        if res_key in res and res[res_key]:
+            res[res_key] = filter_resolution_for_role(res[res_key], role_clean)
+
+    # Redact internal engineering fields from customer view
+    if role_clean == "user":
+        for internal_key in [
+            "INTERNAL_NOTES", "internal_notes",
+            "WORK_NOTES", "work_notes",
+            "WORK_NOTE", "work_note",
+            "ASSIGNMENT_REASONING", "assignment_reasoning",
+            "ASSIGNMENT_TIER", "assignment_tier"
+        ]:
+            res.pop(internal_key, None)
+
+    return res
+
+
 # Set database connection and LLM service for chatbot after initialization
 @app.on_event("startup")
 async def startup_event():
@@ -912,7 +1005,7 @@ def get_all_tickets_realtime() -> List[Dict[str, Any]]:
                 for t in sf_tickets:
                     num = str(t.get("TICKETNUMBER") or t.get("ticket_number") or "").strip()
                     if is_valid_ticket_num(num):
-                        valid_sf_tickets.append(dict(t))
+                        valid_sf_tickets.append(serialize_ticket_row(dict(t)))
                 return valid_sf_tickets
         except Exception as e_sf:
             logger.error(f"Snowflake tickets query error: {e_sf}")
@@ -1285,7 +1378,7 @@ def get_mttr_analytics(
         raise HTTPException(status_code=500, detail=f"Failed to get MTTR analytics: {str(e)}")
 
 @app.get("/debug/snowflake-tables")
-def debug_snowflake_tables():
+def debug_snowflake_tables(current_user: dict = Depends(require_admin)):
     """Debug endpoint to check both Snowflake tables"""
     try:
         if not snowflake_conn:
@@ -1318,7 +1411,7 @@ def debug_snowflake_tables():
         raise HTTPException(status_code=500, detail=f"Failed to query Snowflake tables: {str(e)}")
 
 @app.post("/admin/reset-workloads")
-def reset_technician_workloads():
+def reset_technician_workloads(current_user: dict = Depends(require_admin)):
     """Reset all technician workloads to match actual current tickets"""
     try:
         if not snowflake_conn:
@@ -1342,7 +1435,7 @@ def reset_technician_workloads():
             count_query = f"""
                 SELECT COUNT(*) as actual_workload
                 FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS
-                WHERE TECHNICIAN_ID = %s AND STATUS != 'resolved' AND STATUS != 'closed'
+                WHERE TECHNICIAN_ID = %s AND LOWER(STATUS) NOT IN ('resolved', 'closed', 'complete', 'completed')
             """
 
             count_result = snowflake_conn.execute_query(count_query, (tech_id,))
@@ -1374,7 +1467,7 @@ def reset_technician_workloads():
         raise HTTPException(status_code=500, detail=f"Failed to reset workloads: {str(e)}")
 
 @app.get("/admin/technician-credentials")
-def get_technician_credentials():
+def get_technician_credentials(current_user: dict = Depends(require_admin)):
     """Get all technician credentials for testing purposes"""
     try:
         if not snowflake_conn:
@@ -1409,7 +1502,7 @@ def get_technician_credentials():
         raise HTTPException(status_code=500, detail=f"Failed to get technician credentials: {str(e)}")
 
 @app.post("/admin/fix-workload-data-types")
-def fix_workload_data_types():
+def fix_workload_data_types(current_user: dict = Depends(require_admin)):
     """Fix workload data types and reset all workloads to correct values"""
     try:
         if not snowflake_conn:
@@ -1475,9 +1568,16 @@ def fix_workload_data_types():
 # Dummy ticket deletion completed successfully via external script
 
 @app.get("/tickets/closed", response_model=List[dict])
-def get_closed_tickets(limit: int = Query(50, le=100), offset: int = 0):
-    """Get closed/resolved tickets from CTTC_MOCK_CLOSED_TICKETS table"""
+def get_closed_tickets(
+    limit: int = Query(50, le=100),
+    offset: int = 0,
+    current_user: Optional[dict] = Depends(get_optional_current_user)
+):
+    """Get closed/resolved tickets from CTTC_MOCK_CLOSED_TICKETS table with role-based security"""
     try:
+        if not current_user:
+            raise HTTPException(status_code=401, detail="Authentication required to access closed tickets.")
+
         if not snowflake_conn:
             raise HTTPException(status_code=503, detail="Database connection unavailable")
 
@@ -1495,18 +1595,29 @@ def get_closed_tickets(limit: int = Query(50, le=100), offset: int = 0):
             cursor.close()
             return []
 
-        # Get closed tickets
+        # Enforce server-side role and tenant isolation
+        where_clauses = []
+        params = []
+        if current_user.get("role") == "user":
+            auth_email = (current_user.get("email") or "").strip().lower()
+            where_clauses.append("LOWER(USEREMAIL) = %s")
+            params.append(auth_email)
+
+        where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
+
         query = f"""
         SELECT
             TICKETNUMBER, TITLE, DESCRIPTION, TICKETTYPE, TICKETCATEGORY,
             ISSUETYPE, SUBISSUETYPE, DUEDATETIME, PRIORITY, STATUS, RESOLUTION,
             TECHNICIANEMAIL, TECHNICIAN_ID, USEREMAIL, USERID, PHONENUMBER, CLOSED_AT, ORIGINAL_CREATED_AT
         FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_CLOSED_TICKETS
+        {where_sql}
         ORDER BY CLOSED_AT DESC
         LIMIT %s OFFSET %s
         """
+        params.extend([limit, offset])
 
-        cursor.execute(query, (limit, offset))
+        cursor.execute(query, tuple(params))
         results = cursor.fetchall()
         cursor.close()
 
@@ -1535,8 +1646,10 @@ def get_closed_tickets(limit: int = Query(50, le=100), offset: int = 0):
             }
             tickets.append(ticket)
 
-        return tickets
+        return [serialize_ticket_row(t, requester_role=current_user.get("role")) for t in tickets]
 
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to retrieve closed tickets: {str(e)}")
 
@@ -1860,8 +1973,29 @@ def get_full_graph_dataset(refresh: bool = False):
 
 
 @app.get("/tickets", response_model=List[dict])
-def get_all_tickets(limit: int = Query(100, le=500), offset: int = 0, status: Optional[str] = None, priority: Optional[str] = None, user_email: Optional[str] = None):
+def get_all_tickets(
+    limit: int = Query(100, le=500),
+    offset: int = 0,
+    status: Optional[str] = None,
+    priority: Optional[str] = None,
+    user_email: Optional[str] = None,
+    current_user: Optional[dict] = Depends(get_optional_current_user)
+):
     try:
+        if not current_user:
+            raise HTTPException(status_code=401, detail="Authentication required to access tickets.")
+
+        # Enforce server-side role/tenant isolation:
+        # Regular users can only access their own tickets, preventing IDOR.
+        if current_user.get("role") == "user":
+            auth_email = (current_user.get("email") or "").strip().lower()
+            if user_email and user_email.strip().lower() != auth_email:
+                raise HTTPException(
+                    status_code=403,
+                    detail="Forbidden: You cannot access tickets belonging to other accounts."
+                )
+            user_email = auth_email
+
         results = []
         if snowflake_conn and snowflake_conn.is_connected():
             try:
@@ -1909,14 +2043,22 @@ def get_all_tickets(limit: int = Query(100, le=500), offset: int = 0, status: Op
                     filtered = list(reversed(filtered))
                     results = filtered[offset:offset+limit]
 
-        return results
+        return [serialize_ticket_row(r, requester_role=current_user.get("role")) for r in results]
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"Failed to retrieve tickets: {e}")
         return []
 
 @app.get("/tickets/{ticket_number}")
-def get_ticket(ticket_number: str):
+def get_ticket(
+    ticket_number: str,
+    current_user: Optional[dict] = Depends(get_optional_current_user)
+):
     try:
+        if not current_user:
+            raise HTTPException(status_code=401, detail="Authentication required to view ticket.")
+
         if snowflake_conn and snowflake_conn.is_connected():
             try:
                 ticket_dot = ticket_number.strip().replace('-', '.')
@@ -1924,7 +2066,18 @@ def get_ticket(ticket_number: str):
                 query = f"SELECT * FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS WHERE TICKETNUMBER = %s OR TICKETNUMBER = %s"
                 results = snowflake_conn.execute_query(query, (ticket_dot, ticket_dash))
                 if results:
-                    return results[0]
+                    row = results[0]
+                    if current_user and current_user.get("role") == "user":
+                        auth_email = (current_user.get("email") or "").strip().lower()
+                        owner_email = (row.get("USEREMAIL") or "").strip().lower()
+                        if owner_email and auth_email and owner_email != auth_email:
+                            raise HTTPException(
+                                status_code=403,
+                                detail="Forbidden: You are not authorized to view this ticket."
+                            )
+                    return serialize_ticket_row(row, requester_role=current_user.get("role"))
+            except HTTPException:
+                raise
             except Exception as e_sf:
                 logger.error(f"Snowflake get_ticket error: {e_sf}")
 
@@ -1936,7 +2089,15 @@ def get_ticket(ticket_number: str):
                 reader = csv.DictReader(f)
                 for row in reader:
                     if row.get("TICKETNUMBER") in {ticket_number, ticket_number.replace('-', '.'), ticket_number.replace('.', '-')}:
-                        return row
+                        if current_user and current_user.get("role") == "user":
+                            auth_email = (current_user.get("email") or "").strip().lower()
+                            owner_email = (row.get("USEREMAIL") or "").strip().lower()
+                            if owner_email and auth_email and owner_email != auth_email:
+                                raise HTTPException(
+                                    status_code=403,
+                                    detail="Forbidden: You are not authorized to view this ticket."
+                                )
+                        return serialize_ticket_row(row, requester_role=current_user.get("role"))
 
         raise HTTPException(status_code=404, detail="Ticket not found")
     except HTTPException:
@@ -1945,8 +2106,14 @@ def get_ticket(ticket_number: str):
         raise HTTPException(status_code=500, detail=f"Failed to retrieve ticket: {str(e)}")
 
 @app.get("/tickets/{ticket_number}/technician", response_model=TechnicianResponse)
-def get_technician(ticket_number: str):
+def get_technician(
+    ticket_number: str,
+    current_user: Optional[dict] = Depends(get_optional_current_user)
+):
     try:
+        if not current_user:
+            raise HTTPException(status_code=401, detail="Authentication required to view technician details.")
+
         if not snowflake_conn:
             raise HTTPException(status_code=503, detail="Database connection unavailable")
 
@@ -1961,6 +2128,16 @@ def get_technician(ticket_number: str):
             raise HTTPException(status_code=404, detail="Ticket not found")
 
         ticket = results[0]
+
+        # Enforce IDOR protection: Customers can only look up technician for their own tickets
+        if current_user.get("role") == "user":
+            auth_email = (current_user.get("email") or "").strip().lower()
+            owner_email = (ticket.get("USEREMAIL") or "").strip().lower()
+            if owner_email and auth_email and owner_email != auth_email:
+                raise HTTPException(
+                    status_code=403,
+                    detail="Forbidden: You are not authorized to view technician details for this ticket."
+                )
 
         technician_email = ticket.get('TECHNICIANEMAIL')
         if not technician_email:
@@ -1977,7 +2154,11 @@ def get_technician(ticket_number: str):
         raise HTTPException(status_code=500, detail=f"Failed to retrieve technician: {str(e)}")
 
 @app.post("/tickets/{ticket_number}/assign")
-def assign_ticket(ticket_number: str, assignment_data: dict):
+def assign_ticket(
+    ticket_number: str,
+    assignment_data: dict,
+    current_user: dict = Depends(require_technician_or_admin)
+):
     """Assign a ticket to a technician with proper workload management directly in Snowflake"""
     try:
         if not snowflake_conn:
@@ -2266,9 +2447,16 @@ def remove_from_closed_table_snowflake(ticket_number: str):
         logger.error(f"Error removing ticket from CTTC_MOCK_CLOSED_TICKETS: {e}")
 
 @app.patch("/tickets/{ticket_number}/status")
-def update_ticket_status(ticket_number: str, status_data: dict):
+def update_ticket_status(
+    ticket_number: str,
+    status_data: dict,
+    current_user: Optional[dict] = Depends(get_optional_current_user)
+):
     """Update ticket status and handle workload changes directly in Snowflake"""
     try:
+        if not current_user:
+            raise HTTPException(status_code=401, detail="Authentication required to update ticket status.")
+
         new_status = status_data.get('status')
         if not new_status:
             raise HTTPException(status_code=400, detail="status is required")
@@ -2279,9 +2467,9 @@ def update_ticket_status(ticket_number: str, status_data: dict):
                 ticket_dot = ticket_number.strip().replace('-', '.')
                 ticket_dash = ticket_number.strip().replace('.', '-')
 
-                # Get current ticket data to check technician assignment
+                # Get current ticket data to check permissions & technician assignment
                 get_ticket_query = f"""
-                SELECT TECHNICIAN_ID, STATUS FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS
+                SELECT TECHNICIAN_ID, STATUS, USEREMAIL FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS
                 WHERE TICKETNUMBER = %s OR TICKETNUMBER = %s
                 """
                 ticket_result = snowflake_conn.execute_query(get_ticket_query, (ticket_dot, ticket_dash))
@@ -2289,13 +2477,45 @@ def update_ticket_status(ticket_number: str, status_data: dict):
                     current_ticket = ticket_result[0]
                     current_status = current_ticket.get('STATUS')
                     technician_id = current_ticket.get('TECHNICIAN_ID')
+                    owner_email = (current_ticket.get('USEREMAIL') or '').strip().lower()
 
-                    # Update the ticket status directly in Snowflake
-                    update_query = f"""
-                    UPDATE {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS
-                    SET STATUS = %s
-                    WHERE TICKETNUMBER = %s OR TICKETNUMBER = %s
-                    """
+                    # Role-based authorization
+                    if current_user.get("role") == "user":
+                        auth_email = (current_user.get("email") or "").strip().lower()
+                        if owner_email and auth_email and owner_email != auth_email:
+                            raise HTTPException(
+                                status_code=403,
+                                detail="Forbidden: You are not authorized to update tickets belonging to other accounts."
+                            )
+                        if new_status.lower() in ['resolved', 'closed', 'complete', 'completed', 'in progress', 'in-progress']:
+                            raise HTTPException(
+                                status_code=403,
+                                detail="Forbidden: Customers cannot resolve or progress tickets; only assigned technicians or administrators may do so."
+                            )
+
+                    # Update status and timestamps with canonical UTC
+                    new_st_l = new_status.lower()
+                    if new_st_l in ['resolved', 'closed', 'complete', 'completed']:
+                        update_query = f"""
+                        UPDATE {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS
+                        SET STATUS = %s,
+                            RESOLVED_AT = COALESCE(RESOLVED_AT, CONVERT_TIMEZONE('UTC', CURRENT_TIMESTAMP())),
+                            CLOSED_AT = CONVERT_TIMEZONE('UTC', CURRENT_TIMESTAMP())
+                        WHERE TICKETNUMBER = %s OR TICKETNUMBER = %s
+                        """
+                    elif new_st_l in ['open', 'new', 'in progress', 'in-progress']:
+                        # Reopening or in-progress clears close timestamp
+                        update_query = f"""
+                        UPDATE {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS
+                        SET STATUS = %s, CLOSED_AT = NULL
+                        WHERE TICKETNUMBER = %s OR TICKETNUMBER = %s
+                        """
+                    else:
+                        update_query = f"""
+                        UPDATE {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS
+                        SET STATUS = %s
+                        WHERE TICKETNUMBER = %s OR TICKETNUMBER = %s
+                        """
                     snowflake_conn.execute_query(update_query, (new_status, ticket_dot, ticket_dash))
 
                     # Synchronize with SF_DATABASE.SF_SCHEMA.CTTC_MOCK_CLOSED_TICKETS table
@@ -2323,6 +2543,8 @@ def update_ticket_status(ticket_number: str, status_data: dict):
                             """
                             snowflake_conn.execute_query(increment_workload_query, (technician_id,))
                     sf_updated = True
+            except HTTPException:
+                raise
             except Exception as e_sf:
                 logger.error(f"Snowflake status update error: {e_sf}")
 
@@ -2339,7 +2561,11 @@ def update_ticket_status(ticket_number: str, status_data: dict):
         raise HTTPException(status_code=500, detail=f"Failed to update ticket status: {str(e)}")
 
 @app.post("/tickets/{ticket_number}/email-customer")
-def email_customer(ticket_number: str, request: EmailCustomerRequest):
+def email_customer(
+    ticket_number: str,
+    request: EmailCustomerRequest,
+    current_user: dict = Depends(require_technician_or_admin)
+):
     """Send a status/work-note update email to the ticket's customer."""
     try:
         ticket = None
@@ -2388,14 +2614,20 @@ def email_customer(ticket_number: str, request: EmailCustomerRequest):
         raise HTTPException(status_code=500, detail=f"Failed to email customer: {str(e)}")
 
 @app.patch("/tickets/{ticket_number}", response_model=TicketUpdateResponse)
-def update_ticket_status_priority(ticket_number: str, update_request: TicketUpdateRequest):
+def update_ticket_status_priority(
+    ticket_number: str,
+    update_request: TicketUpdateRequest,
+    current_user: Optional[dict] = Depends(get_optional_current_user)
+):
     """
     Update ticket status, priority, time spent, and/or work note directly in Snowflake.
     """
     try:
+        if not current_user:
+            raise HTTPException(status_code=401, detail="Authentication required to update ticket.")
+
         if not update_request.status and not update_request.priority and not update_request.work_note and not update_request.time_spent:
             raise HTTPException(status_code=400, detail="At least one field (status, priority, work_note, or time_spent) must be provided")
- 
 
         updated_fields = {}
         moved_to_closed = False
@@ -2416,6 +2648,28 @@ def update_ticket_status_priority(ticket_number: str, update_request: TicketUpda
                     technician_email = ticket_dict.get('TECHNICIANEMAIL')
                     technician_id = ticket_dict.get('TECHNICIAN_ID')
                     current_status = ticket_dict.get('STATUS')
+                    owner_email = (ticket_dict.get('USEREMAIL') or '').strip().lower()
+
+                    # Enforce RBAC
+                    if current_user.get("role") == "user":
+                        auth_email = (current_user.get("email") or "").strip().lower()
+                        if owner_email and auth_email and owner_email != auth_email:
+                            raise HTTPException(
+                                status_code=403,
+                                detail="Forbidden: You cannot modify tickets belonging to other accounts."
+                            )
+                        if update_request.priority or update_request.time_spent:
+                            raise HTTPException(
+                                status_code=403,
+                                detail="Forbidden: Customers cannot alter priority or logged work time."
+                            )
+                        new_st_check = (update_request.status or "").strip().lower()
+                        if new_st_check in ("resolved", "complete", "completed", "closed", "in progress", "in-progress"):
+                            raise HTTPException(
+                                status_code=403,
+                                detail="Forbidden: Customers cannot resolve or progress tickets."
+                            )
+
                     # Resolving/closing requires logged effort (Time Spent) -- the
                     # source for MTTR analytics. Either this update provides it, or
                     # the ticket must already have effort logged (earlier form save).
@@ -2457,7 +2711,7 @@ def update_ticket_status_priority(ticket_number: str, update_request: TicketUpda
                         update_values.append(update_request.priority)
                         updated_fields['priority'] = update_request.priority
 
-                    # MTTR timestamp stamping: keep RESOLVED_AT / CLOSED_AT accurate for analytics.
+                    # MTTR timestamp stamping: keep RESOLVED_AT / CLOSED_AT accurate in UTC.
                     resolved_set = ('resolved', 'complete', 'completed', 'closed')
                     if update_request.status:
                         new_st_l = update_request.status.strip().lower()
@@ -2467,12 +2721,11 @@ def update_ticket_status_priority(ticket_number: str, update_request: TicketUpda
                         except Exception:
                             pass
                         if new_st_l in resolved_set and new_st_l != 'closed':
-                            # First resolution time is preserved even if the ticket is resolved again
-                            update_parts.append("RESOLVED_AT = COALESCE(RESOLVED_AT, CURRENT_TIMESTAMP())")
+                            update_parts.append("RESOLVED_AT = COALESCE(RESOLVED_AT, CONVERT_TIMEZONE('UTC', CURRENT_TIMESTAMP()))")
                             updated_fields['resolved_at'] = 'set (first resolution)'
                         elif new_st_l == 'closed':
-                            update_parts.append("RESOLVED_AT = COALESCE(RESOLVED_AT, CURRENT_TIMESTAMP())")
-                            update_parts.append("CLOSED_AT = CURRENT_TIMESTAMP()")
+                            update_parts.append("RESOLVED_AT = COALESCE(RESOLVED_AT, CONVERT_TIMEZONE('UTC', CURRENT_TIMESTAMP()))")
+                            update_parts.append("CLOSED_AT = CONVERT_TIMEZONE('UTC', CURRENT_TIMESTAMP())")
                             updated_fields['resolved_at'] = 'set (first resolution)'
                             updated_fields['closed_at'] = 'set'
                         elif old_st_l in resolved_set and new_st_l not in resolved_set:
@@ -2606,7 +2859,11 @@ class EscalationResponse(BaseModel):
     manager_email: str
 
 @app.post("/tickets/{ticket_number}/escalate", response_model=EscalationResponse)
-def escalate_ticket(ticket_number: str, escalation_data: EscalationRequest):
+def escalate_ticket(
+    ticket_number: str,
+    escalation_data: EscalationRequest,
+    current_user: dict = Depends(require_technician_or_admin)
+):
     """
     Escalate a ticket to management with email notification.
     
@@ -3011,9 +3268,24 @@ def ensure_technician_id_column():
         return False
 
 @app.post("/tickets", status_code=201, response_model=TicketResponse)
-def create_ticket(request: TicketCreateRequest):
+def create_ticket(
+    request: TicketCreateRequest,
+    current_user: Optional[dict] = Depends(get_optional_current_user)
+):
     try:
-        print(f"🎫 Creating ticket with title: {request.title}")
+        if not current_user:
+            raise HTTPException(status_code=401, detail="Authentication required to create tickets.")
+
+        # Enforce server-side requester ownership:
+        # Regular users are strictly bound to their authenticated email/name, preventing identity spoofing.
+        if current_user.get("role") == "user":
+            effective_email = current_user.get("email")
+            effective_name = current_user.get("full_name") or current_user.get("username")
+        else:
+            effective_email = request.user_email or current_user.get("email")
+            effective_name = request.requester_name or current_user.get("full_name") or current_user.get("username")
+
+        print(f"🎫 Creating ticket for {effective_email} with title: {request.title}")
 
         # Check if intake agent is available
         if not intake_agent:
@@ -3024,12 +3296,12 @@ def create_ticket(request: TicketCreateRequest):
 
         # Process the ticket through the complete agentic workflow
         result = intake_agent.process_new_ticket(
-            ticket_name=request.requester_name or "Anonymous",
+            ticket_name=effective_name or "Anonymous",
             ticket_description=request.description,
             ticket_title=request.title,
             due_date=request.due_date,
             priority_initial=request.priority or "Medium",
-            user_email=request.user_email,
+            user_email=effective_email,
             phone_number=request.phone_number
         )
 
@@ -3128,7 +3400,7 @@ def create_ticket(request: TicketCreateRequest):
                 TECHNICIANEMAIL, TECHNICIAN_ID, USEREMAIL, USERID, PHONENUMBER,
                 CREATED_AT, ASSIGNED_AT
             ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                      CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP())
+                      CONVERT_TIMEZONE('UTC', CURRENT_TIMESTAMP()), CONVERT_TIMEZONE('UTC', CURRENT_TIMESTAMP()))
         """
         params = (
             ticket_number,
@@ -3144,8 +3416,8 @@ def create_ticket(request: TicketCreateRequest):
             resolution,
             technician_email,
             technician_id,  # TECHNICIAN_ID from lookup
-            request.user_email or "",
-            request.requester_name or "Anonymous",
+            effective_email or "",
+            effective_name or "Anonymous",
             request.phone_number or ""  # PHONENUMBER from request
         )
 
@@ -3221,9 +3493,13 @@ def create_ticket(request: TicketCreateRequest):
 # --- TECHNICIAN ENDPOINTS ---
 
 @app.get("/technicians")
-def get_all_technicians():
-    """Get all available technicians from Snowflake database or local CSV fallback"""
+def get_all_technicians(current_user: Optional[dict] = Depends(get_optional_current_user)):
+    """Get all available technicians from Snowflake database or local CSV fallback with role filtering"""
     try:
+        if not current_user:
+            raise HTTPException(status_code=401, detail="Authentication required to view technician directory.")
+
+        is_customer = current_user.get("role") == "user"
         results = []
         if snowflake_conn and snowflake_conn.is_connected():
             try:
@@ -3249,15 +3525,17 @@ def get_all_technicians():
                 else:
                     workload = 0
 
-                technicians.append({
+                tech_item = {
                     "id": tech.get('TECHNICIAN_ID'),
                     "name": tech.get('NAME'),
                     "username": tech.get('TECHNICIAN_ID'),
-                    "email": tech.get('EMAIL'),
                     "role": tech.get('ROLE'),
-                    "current_workload": workload,
-                    "specializations": tech.get('SPECIALIZATIONS')
-                })
+                }
+                if not is_customer:
+                    tech_item["email"] = tech.get('EMAIL')
+                    tech_item["current_workload"] = workload
+                    tech_item["specializations"] = tech.get('SPECIALIZATIONS')
+                technicians.append(tech_item)
             return technicians
 
         # CSV fallback
@@ -3268,23 +3546,27 @@ def get_all_technicians():
             with open(csv_path, "r", encoding="utf-8") as f:
                 reader = csv.DictReader(f)
                 for row in reader:
-                    technicians.append({
+                    tech_item = {
                         "id": row.get("TECHNICIAN_ID"),
                         "name": row.get("NAME"),
                         "username": row.get("TECHNICIAN_ID"),
-                        "email": row.get("EMAIL"),
                         "role": row.get("ROLE", "Technician"),
-                        "current_workload": int(row.get("CURRENT_WORKLOAD", 0) or 0),
-                        "specializations": row.get("SPECIALIZATIONS")
-                    })
+                    }
+                    if not is_customer:
+                        tech_item["email"] = row.get("EMAIL")
+                        tech_item["current_workload"] = int(row.get("CURRENT_WORKLOAD", 0) or 0)
+                        tech_item["specializations"] = row.get("SPECIALIZATIONS")
+                    technicians.append(tech_item)
         return technicians
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to get technicians: {e}")
         return []
 
 @app.get("/users")
-def get_all_users():
-    """Get all available users from Snowflake CTTC_MOCK_USER_DATA table or CSV fallback"""
+def get_all_users(current_user: dict = Depends(require_admin)):
+    """Get all available users from Snowflake CTTC_MOCK_USER_DATA table or CSV fallback (Admin only)"""
     try:
         results = []
         if snowflake_conn and snowflake_conn.is_connected():
@@ -3329,12 +3611,17 @@ def get_all_users():
                         "role": "user"
                     })
         return users
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to get users: {e}")
         return []
 
 @app.get("/debug/tickets/{technician_id}")
-def debug_technician_tickets(technician_id: str):
+def debug_technician_tickets(
+    technician_id: str,
+    current_user: dict = Depends(require_technician_or_admin)
+):
     """Debug endpoint to check tickets for a technician"""
     try:
         if not snowflake_conn:
@@ -3913,6 +4200,19 @@ async def test_gmail_webhook():
 async def get_gmail_status():
     """Get Gmail integration status"""
     try:
+        if SKIP_GMAIL_SERVICES or not ENABLE_GMAIL_SERVICES:
+            return {
+                "gmail_integration": {
+                    "method": "direct_imap",
+                    "status": "disabled",
+                    "authenticated": False,
+                    "watch_active": False,
+                    "webhook_url": "http://localhost:8001/webhooks/gmail/simple",
+                    "note": "Gmail services are currently skipped / disabled via SKIP_GMAIL_SERVICES"
+                },
+                "intake_agent_available": intake_agent is not None,
+                "webhook_endpoint": "/webhooks/gmail/simple"
+            }
         return {
             "gmail_integration": {
                 "method": "direct_imap",
@@ -3952,10 +4252,10 @@ async def gmail_monitoring_status():
     """Get the status of Gmail monitoring service"""
     global gmail_monitor
     
-    if not gmail_monitor:
+    if SKIP_GMAIL_SERVICES or not ENABLE_GMAIL_SERVICES or not gmail_monitor:
         return {
             "status": "disabled",
-            "message": "Gmail monitoring service is not initialized",
+            "message": "Gmail monitoring service is disabled / skipped",
             "monitoring": False,
             "email_address": None
         }
@@ -3976,6 +4276,12 @@ async def simple_gmail_webhook(request: Request):
     Simple webhook endpoint for Gmail integration using token.json
     Receives email data and processes through intake workflow
     """
+    if SKIP_GMAIL_SERVICES or not ENABLE_GMAIL_SERVICES:
+        print("ℹ️ Gmail webhook called but Gmail services are currently disabled / skipped")
+        return {
+            "status": "skipped",
+            "message": "Gmail services are currently disabled / skipped. Email was not processed."
+        }
     try:
         # Get the email data
         body = await request.body()
@@ -4139,7 +4445,7 @@ ADMIN_TECHNICIANS_STORE = [
 ]
 
 @app.get("/admin/users")
-async def get_admin_users(role: Optional[str] = None):
+async def get_admin_users(role: Optional[str] = None, current_user: dict = Depends(require_admin)):
     """Retrieve users directly from Snowflake SF_DATABASE.SF_SCHEMA (CTTC_MOCK_USER_DATA / ADMIN_USERS) with live ticket mappings"""
     db_users = []
     
@@ -4253,7 +4559,7 @@ async def get_admin_users(role: Optional[str] = None):
     return {"users": db_users, "total": len(db_users)}
 
 @app.get("/admin/admin-users")
-async def get_enterprise_admin_users():
+async def get_enterprise_admin_users(current_user: dict = Depends(require_admin)):
     """Retrieve all enterprise administrator accounts directly from Snowflake SF_DATABASE.SF_SCHEMA.ADMIN_USERS"""
     admin_users = []
     if snowflake_conn and snowflake_conn.is_connected():
@@ -4308,7 +4614,7 @@ async def get_enterprise_admin_users():
     return {"admin_users": admin_users, "total": len(admin_users)}
 
 @app.post("/admin/admin-users")
-async def create_enterprise_admin_user(admin_data: dict):
+async def create_enterprise_admin_user(admin_data: dict, current_user: dict = Depends(require_admin)):
     """Add a new administrator into Snowflake SF_DATABASE.SF_SCHEMA.ADMIN_USERS"""
     username = admin_data.get("username", "").strip()
     email = admin_data.get("email", "").strip()
@@ -4367,7 +4673,7 @@ async def create_enterprise_admin_user(admin_data: dict):
     return {"status": "success", "message": "Administrator created successfully", "admin_user": new_admin}
 
 @app.delete("/admin/admin-users/{admin_id}")
-async def delete_enterprise_admin_user(admin_id: str):
+async def delete_enterprise_admin_user(admin_id: str, current_user: dict = Depends(require_admin)):
     """Remove/deactivate an administrator from Snowflake SF_DATABASE.SF_SCHEMA.ADMIN_USERS"""
     if snowflake_conn and snowflake_conn.is_connected():
         try:
@@ -4382,7 +4688,7 @@ async def delete_enterprise_admin_user(admin_id: str):
     return {"status": "success", "message": f"Administrator {admin_id} removed successfully"}
 
 @app.post("/admin/users")
-async def create_admin_user(user_data: dict):
+async def create_admin_user(user_data: dict, current_user: dict = Depends(require_admin)):
     """Add a new user into Snowflake SF_DATABASE.SF_SCHEMA.CTTC_MOCK_USER_DATA and local store"""
     username = user_data.get("username", "").strip()
     if not username:
@@ -4429,7 +4735,7 @@ async def create_admin_user(user_data: dict):
     return {"status": "success", "message": "User created successfully", "user": new_user}
 
 @app.delete("/admin/users/{user_id}")
-async def delete_admin_user(user_id: str):
+async def delete_admin_user(user_id: str, current_user: dict = Depends(require_admin)):
     """Remove a user from Snowflake SF_DATABASE.SF_SCHEMA.CTTC_MOCK_USER_DATA and store"""
     global ADMIN_USERS_STORE
     if snowflake_conn and snowflake_conn.is_connected():
@@ -4445,7 +4751,7 @@ async def delete_admin_user(user_id: str):
     return {"status": "success", "message": f"User {user_id} removed successfully"}
 
 @app.get("/admin/technicians")
-async def get_admin_technicians():
+async def get_admin_technicians(current_user: dict = Depends(require_admin)):
     """Retrieve all technicians directly from Snowflake SF_DATABASE.SF_SCHEMA.CTTC_MOCK_TECHNICIAN_DATA with live workload and shift mapping"""
     db_techs = []
     
@@ -4539,7 +4845,7 @@ async def get_admin_technicians():
     return {"technicians": db_techs, "total": len(db_techs)}
 
 @app.post("/admin/technicians")
-async def create_admin_technician(tech_data: dict):
+async def create_admin_technician(tech_data: dict, current_user: dict = Depends(require_admin)):
     """Add a new technician into Snowflake SF_DATABASE.SF_SCHEMA.CTTC_MOCK_TECHNICIAN_DATA"""
     username = tech_data.get("username", "").strip()
     if not username:
@@ -4614,7 +4920,7 @@ async def create_admin_technician(tech_data: dict):
     return {"status": "success", "message": "Technician added successfully", "technician": new_tech}
 
 @app.delete("/admin/technicians/{tech_id}")
-async def delete_admin_technician(tech_id: str):
+async def delete_admin_technician(tech_id: str, current_user: dict = Depends(require_admin)):
     """Remove a technician from Snowflake SF_DATABASE.SF_SCHEMA.CTTC_MOCK_TECHNICIAN_DATA"""
     global ADMIN_TECHNICIANS_STORE
     if snowflake_conn and snowflake_conn.is_connected():
@@ -4630,7 +4936,7 @@ async def delete_admin_technician(tech_id: str):
     return {"status": "success", "message": f"Technician {tech_id} removed successfully"}
 
 @app.put("/admin/technicians/{tech_id}/schedule-skills")
-async def update_technician_schedule_and_skills(tech_id: str, update_data: dict):
+async def update_technician_schedule_and_skills(tech_id: str, update_data: dict, current_user: dict = Depends(require_admin)):
     """Update technician working shift, on-call rotation, capacity, and skillsets in Snowflake"""
     target = None
     for t in ADMIN_TECHNICIANS_STORE:
@@ -4691,7 +4997,7 @@ async def update_technician_schedule_and_skills(tech_id: str, update_data: dict)
     return {"status": "success", "message": "Technician schedule and skills updated", "technician": target}
 
 @app.get("/admin/reports/master-tickets")
-async def get_admin_master_tickets_report():
+async def get_admin_master_tickets_report(current_user: dict = Depends(require_technician_or_admin)):
     """Master tickets report querying directly from Snowflake SF_DATABASE.SF_SCHEMA.TICKETS and CTTC_MOCK_CLOSED_TICKETS"""
     try:
         results = []
@@ -4741,7 +5047,7 @@ async def get_admin_master_tickets_report():
         return {"total_tickets": 0, "resolved_count": 0, "active_count": 0, "resolution_rate": 100, "tickets": []}
 
 @app.get("/admin/reports/wider-mttr")
-async def get_admin_wider_mttr_report():
+async def get_admin_wider_mttr_report(current_user: dict = Depends(require_technician_or_admin)):
     """Wider Executive MTTR and SLA Analytics across departments, shifts, categories, and technicians"""
 
     all_tickets = get_all_tickets_realtime()
@@ -5411,8 +5717,8 @@ async def startup_event():
     print("🚀 Starting TeamLogic AutoTask Backend...")
     print("=" * 50)
 
-    # Initialize and start Gmail monitoring service (Opt-in via ENABLE_GMAIL_MONITOR env var)
-    enable_gmail = os.getenv("ENABLE_GMAIL_MONITOR", "false").strip().lower() in ("true", "1", "yes")
+    # Initialize and start Gmail monitoring service (Opt-in via ENABLE_GMAIL_MONITOR env var, skipped if SKIP_GMAIL_SERVICES)
+    enable_gmail = (not SKIP_GMAIL_SERVICES) and ENABLE_GMAIL_MONITOR and (os.getenv("ENABLE_GMAIL_MONITOR", "false").strip().lower() in ("true", "1", "yes"))
     if enable_gmail:
         try:
             print("📧 Initializing Gmail monitoring service...")
@@ -5436,7 +5742,10 @@ async def startup_event():
             print(f"⚠️ Gmail monitoring initialization failed: {e}")
             gmail_monitor = None
     else:
-        print("ℹ️ Gmail background monitoring is DISABLED (set ENABLE_GMAIL_MONITOR=true to enable)")
+        if SKIP_GMAIL_SERVICES:
+            print("ℹ️ Gmail background monitoring is DISABLED / SKIPPED (SKIP_GMAIL_SERVICES=true)")
+        else:
+            print("ℹ️ Gmail background monitoring is DISABLED (set ENABLE_GMAIL_MONITOR=true to enable)")
         gmail_monitor = None
 
     print("=" * 50)
@@ -5447,7 +5756,7 @@ async def startup_event():
     if gmail_monitor and gmail_monitor.is_monitoring:
         print(f"📨 Email monitoring: ACTIVE (checking every 30 seconds)")
     else:
-        print(f"📨 Email monitoring: DISABLED (set ENABLE_GMAIL_MONITOR=true to enable)")
+        print(f"📨 Email monitoring: DISABLED / SKIPPED")
 
 
 @app.on_event("shutdown")

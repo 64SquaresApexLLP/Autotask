@@ -13,6 +13,11 @@ import logging
 from typing import Dict, Optional
 from datetime import datetime
 
+try:
+    from src.config.platform_policy import inspect_resolution_safety, sanitize_customer_resolution
+except ImportError:
+    from config.platform_policy import inspect_resolution_safety, sanitize_customer_resolution
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -68,21 +73,35 @@ class ResolutionAgent:
         """
         logger.info(f"📝 Generating resolution for ticket {ticket_number}")
 
+        raw_resolution = None
         if not self.enabled:
             logger.warning(f"❌ DB Connection not available - using fallback resolution")
-            return self._generate_fallback_resolution(extracted_metadata, classified_data)
+            raw_resolution = self._generate_fallback_resolution(extracted_metadata, classified_data)
+        else:
+            for attempt in range(self.max_retries):
+                try:
+                    raw_resolution = self._generate_llm_resolution(ticket_data, classified_data, extracted_metadata)
+                    break
+                except Exception as e:
+                    logger.warning(f"Attempt {attempt + 1}/{self.max_retries} failed: {str(e)}")
+                    if attempt < self.max_retries - 1:
+                        import time
+                        time.sleep(self.retry_delay)
+                    else:
+                        logger.error(f"❌ All resolution generation attempts failed for {ticket_number}: {str(e)}")
+                        raw_resolution = self._generate_fallback_resolution(extracted_metadata, classified_data)
 
-        for attempt in range(self.max_retries):
-            try:
-                return self._generate_llm_resolution(ticket_data, classified_data, extracted_metadata)
-            except Exception as e:
-                logger.warning(f"Attempt {attempt + 1}/{self.max_retries} failed: {str(e)}")
-                if attempt < self.max_retries - 1:
-                    import time
-                    time.sleep(self.retry_delay)
-                else:
-                    logger.error(f"❌ All resolution generation attempts failed for {ticket_number}: {str(e)}")
-                    return self._generate_fallback_resolution(extracted_metadata, classified_data)
+        # Post-generation output safety validation
+        is_safe, violations = inspect_resolution_safety(raw_resolution, audience="subscriber")
+        if not is_safe:
+            logger.warning(f"⚠️ Resolution output contains hazardous customer instructions: {violations}. Auto-sanitizing.")
+            raw_resolution = sanitize_customer_resolution(
+                raw_resolution,
+                ticket_title=ticket_data.get('title', ''),
+                category=classified_data.get('TICKETCATEGORY', 'Carrier')
+            )
+
+        return raw_resolution
 
     def _generate_llm_resolution(self, ticket_data: Dict, classified_data: Dict,
                                extracted_metadata: Dict) -> str:
@@ -102,7 +121,7 @@ class ResolutionAgent:
         """
         logger.debug("Calling Cortex LLM for resolution generation...")
 
-        prompt = self._build_resolution_prompt(extracted_metadata)
+        prompt = self._build_resolution_prompt(extracted_metadata, ticket_data, classified_data)
 
         try:
             llm_response = self.db_connection.call_cortex_llm(
@@ -122,26 +141,62 @@ class ResolutionAgent:
             logger.error(f"❌ LLM call failed: {type(e).__name__}: {str(e)}")
             raise
 
-    def _build_resolution_prompt(self, extracted_metadata: Dict) -> str:
+    def _build_resolution_prompt(self, extracted_metadata: Dict, ticket_data: Optional[Dict] = None,
+                                classified_data: Optional[Dict] = None) -> str:
         """
-        Build the LLM prompt for resolution generation.
+        Build the LLM prompt for resolution generation with safety boundaries for infrastructure vs subscriber tickets.
 
         Args:
             extracted_metadata: Extracted ticket metadata
+            ticket_data: Optional original ticket data
+            classified_data: Optional classification results
 
         Returns:
             str: Formatted LLM prompt
         """
+        t_data = ticket_data or {}
+        title = t_data.get('title', '')
+        desc = t_data.get('description', '')
+        affected_sys = extracted_metadata.get('affected_system', '')
+        main_issue = extracted_metadata.get('main_issue', '')
+
+        full_text = f"{title} {desc} {affected_sys} {main_issue}".lower()
+
+        # Identify carrier infrastructure, outside-plant, and core network issues
+        infra_keywords = [
+            'mx960', 'juniper', '400g', 'evpn', 'qinq', 'bgp', 'mpls',
+            'e7-2', 'olt', 'erps', 'g.8032', 'feeder fiber', 'splitter',
+            'bulkhead', 'backhaul', 'central office', 'circuit path', 'optic'
+        ]
+        is_infrastructure = any(kw in full_text for kw in infra_keywords)
+
+        if is_infrastructure:
+            persona_guidance = """
+You are an expert Telecommunications Network Operations & Engineering Specialist.
+CRITICAL SAFETY & OPERATIONAL GUIDELINES:
+- This is a CARRIER INFRASTRUCTURE / OUTSIDE-PLANT / CORE NETWORK issue.
+- Do NOT instruct end-users or residential subscribers to log into carrier routers (e.g. Junos MX960), manipulate 400G optics, or touch fiber splitters/feeders (Class 1M/3R invisible laser radiation hazard).
+- Structure the resolution into two distinct sections:
+  1. [Customer Notice]: A concise statement for the subscriber confirming the issue is tracked by CTTC Network Operations, engineering dispatch is active, and NO customer action is required.
+  2. [Engineering & Dispatch Protocol]: Step-by-step procedures for the assigned certified Network Engineer or Fiber Splicer (including safety precautions, OTDR tests, CLI verification, and maintenance window requirements).
+"""
+        else:
+            persona_guidance = """
+You are an expert IT & Broadband Support Specialist.
+CRITICAL SAFETY & OPERATIONAL GUIDELINES:
+- Generate a concise, actionable resolution note with clear, numbered steps for the end-user.
+- Only recommend safe subscriber actions (e.g., power-cycling premise device via 12V adapter, verifying Ethernet cables, checking LED indicator status).
+- If physical hardware replacement or fiber splicing is required (e.g., damaged ONT, broken fiber drop), clearly state that a certified field technician visit has been scheduled and warn the customer not to attempt internal physical fiber repairs.
+"""
+
         return f'''
-You are an expert IT support analyst. Based on the following extracted metadata from an IT support ticket, generate a concise, actionable resolution note with clear, numbered steps for the end-user to follow. The resolution should directly address the main issue and context provided by the metadata.
+{persona_guidance.strip()}
 
 IMPORTANT GUIDELINES:
-- Do NOT include any generic or irrelevant steps
+- Do NOT include generic or irrelevant steps
 - Do NOT reference unavailable information
-- Do NOT include any JSON or code formatting
-- Only provide step-by-step resolution as plain text
-- Number each step clearly (1., 2., 3., etc.)
-- Focus on practical, user-actionable steps
+- Do NOT include JSON formatting
+- Keep instructions highly concise, professional, and technically authoritative
 
 EXTRACTED METADATA:
 Main Issue: {extracted_metadata.get('main_issue', 'N/A')}
@@ -152,7 +207,7 @@ Technical Keywords: {', '.join(extracted_metadata.get('technical_keywords', []))
 User Actions: {extracted_metadata.get('user_actions', 'N/A')}
 Resolution Approach: {extracted_metadata.get('resolution_indicators', 'N/A')}
 
-Generate step-by-step resolution:
+Generate resolution note:
 '''
 
     def _generate_fallback_resolution(self, extracted_metadata: Dict,
@@ -236,6 +291,16 @@ Generate step-by-step resolution:
 
         logger.info(f"✅ Resolution validation passed ({len(resolution_note)} chars, contains steps)")
         return True
+
+    def sanitize_resolution_for_audience(self, raw_resolution: str, category: str = "", audience: str = "subscriber") -> str:
+        """
+        Enforce resolution safety for subscriber tickets:
+        Quarantines dangerous privileged CLI, optic manipulation, and laser actions.
+        """
+        is_safe, violations = inspect_resolution_safety(raw_resolution, audience=audience)
+        if not is_safe:
+            return sanitize_customer_resolution(raw_resolution, category=category)
+        return raw_resolution
 
 
 # Public interface function for backward compatibility

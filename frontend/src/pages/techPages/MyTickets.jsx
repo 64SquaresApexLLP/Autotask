@@ -9,6 +9,7 @@ import { ticketService } from "../../services/ticketService";
 import { Loader2 } from "lucide-react";
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { calculateTicketSla } from '../../components/MttrCard';
+import { parseIsoDate } from '../../utils/dateUtils';
 
 const statusColors = {
   open: "bg-blue-100 text-blue-800",
@@ -348,7 +349,7 @@ const MyTickets = () => {
                           if (isResolved) {
                             timeSpentDisplay = sla?.durationHours ? `${sla.durationHours}h` : '1.2h';
                           } else {
-                            const createdAt = ticket.created_at ? new Date(ticket.created_at) : null;
+                            const createdAt = parseIsoDate(ticket.created_at);
                             if (createdAt && !isNaN(createdAt.getTime())) {
                               const elapsedMins = Math.max(1, Math.round((Date.now() - createdAt.getTime()) / 60000));
                               if (elapsedMins < 60) {

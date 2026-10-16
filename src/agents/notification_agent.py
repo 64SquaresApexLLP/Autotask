@@ -19,7 +19,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 try:
     from config import (
         MANAGER_EMAIL, FALLBACK_TECHNICIAN_EMAIL, SUPPORT_EMAIL, SUPPORT_PHONE,
-        HIGH_PRIORITY_NOTIFICATIONS, ESCALATION_KEYWORDS
+        HIGH_PRIORITY_NOTIFICATIONS, ESCALATION_KEYWORDS, SKIP_GMAIL_SERVICES, ENABLE_GMAIL_SERVICES
     )
 except ImportError:
     # Fallback values if config import fails
@@ -29,6 +29,8 @@ except ImportError:
     SUPPORT_PHONE = os.getenv('SUPPORT_PHONE', '1-800-SUPPORT')
     HIGH_PRIORITY_NOTIFICATIONS = ['Critical', 'High', 'Desktop/User Down']
     ESCALATION_KEYWORDS = ['fallback', 'failed', 'error', 'escalated']
+    SKIP_GMAIL_SERVICES = os.getenv('SKIP_GMAIL_SERVICES', 'true').strip().lower() in ('true', '1', 'yes')
+    ENABLE_GMAIL_SERVICES = (not SKIP_GMAIL_SERVICES) and (os.getenv('ENABLE_GMAIL_SERVICES', 'false').strip().lower() in ('true', '1', 'yes'))
 
 # Removed logging configuration - using print statements for clean output
 
@@ -46,6 +48,9 @@ class NotificationAgent:
         Args:
             db_connection: Database connection for LLM access (Snowflake Cortex)
         """
+        # Feature flag to skip Gmail / email services
+        self.skip_gmail = SKIP_GMAIL_SERVICES or not ENABLE_GMAIL_SERVICES
+
         # SMTP Configuration - Use same Gmail account as monitoring
         self.smtp_server = os.getenv('SMTP_SERVER', 'smtp.gmail.com')
         self.smtp_port = int(os.getenv('SMTP_PORT', '587'))
@@ -64,12 +69,14 @@ class NotificationAgent:
         self.llm_model = 'llama3.1-70b'
 
         # Email Configuration
-        self.enabled = bool(self.smtp_password)
+        self.enabled = bool(self.smtp_password) and not self.skip_gmail
 
-        if not self.enabled:
+        if self.skip_gmail:
+            print("Gmail services are skipped/disabled - Email notifications disabled.")
+        elif not self.enabled:
             print("SMTP password not configured. Email notifications disabled.")
 
-        print(f"NotificationAgent initialized - SMTP: {'enabled' if self.enabled else 'disabled'}, LLM: {'enabled' if self.llm_enabled else 'disabled'}")
+        print(f"NotificationAgent initialized - SMTP: {'enabled' if self.enabled else 'disabled (skipped)' if self.skip_gmail else 'disabled'}, LLM: {'enabled' if self.llm_enabled else 'disabled'}")
 
     def _load_gmail_app_password(self) -> str:
         """Load Gmail app password from the same file used by Gmail monitor"""
@@ -538,6 +545,10 @@ Best regards,
         Returns:
             bool: True if sent successfully, False otherwise
         """
+        if getattr(self, 'skip_gmail', False):
+            print(f"Skipping email to {recipient_email} - Gmail services are currently disabled")
+            return False
+
         if not self.enabled:
             print("Email sending disabled - SMTP not configured")
             return False

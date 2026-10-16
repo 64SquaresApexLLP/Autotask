@@ -3,6 +3,8 @@ Email Listener Service - Background Gmail IMAP monitoring
 Integrates DirectGmailIntegration with IntakeAgent pipeline via webhook
 """
 
+import os
+import logging
 import imaplib
 import email
 import time
@@ -14,6 +16,8 @@ from datetime import datetime
 from email.header import decode_header
 from email.utils import parseaddr
 from typing import Dict, List, Optional, Callable
+
+logger = logging.getLogger(__name__)
 
 
 class EmailListenerService:
@@ -84,6 +88,9 @@ class EmailListenerService:
         Returns:
             bool: True if connection successful
         """
+        if os.getenv('SKIP_GMAIL_SERVICES', 'true').strip().lower() in ('true', '1', 'yes'):
+            logger.info("Gmail services are skipped/disabled - connection test skipped")
+            return False
         try:
             if not self.app_password:
                 if not self.load_app_password():
@@ -120,6 +127,9 @@ class EmailListenerService:
         Returns:
             bool: True if connection successful
         """
+        if os.getenv('SKIP_GMAIL_SERVICES', 'true').strip().lower() in ('true', '1', 'yes'):
+            logger.info("Gmail services are skipped/disabled - skipping IMAP connection")
+            return False
         try:
             self.mail = imaplib.IMAP4_SSL(self.imap_server, self.imap_port)
             self.mail.login(self.email_address, self.app_password)
@@ -358,6 +368,10 @@ class EmailListenerService:
         if self.is_monitoring:
             logger.warning("Email monitoring already running")
             return True
+        
+        if os.getenv('SKIP_GMAIL_SERVICES', 'true').strip().lower() in ('true', '1', 'yes'):
+            logger.info("Gmail services are skipped/disabled - email monitoring will not start")
+            return False
         
         # Test connection first
         if not self.test_connection():

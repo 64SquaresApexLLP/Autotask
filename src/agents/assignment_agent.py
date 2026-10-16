@@ -1332,6 +1332,11 @@ from dataclasses import dataclass
 
 from config import SF_DATABASE, SF_SCHEMA  # env-driven db/schema used to qualify SQL
 
+try:
+    from src.config.platform_policy import classify_ticket_domain, is_technician_domain_eligible, DOMAIN_ELIGIBILITY_RULES
+except ImportError:
+    from config.platform_policy import classify_ticket_domain, is_technician_domain_eligible, DOMAIN_ELIGIBILITY_RULES
+
 # Configure logging first
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -2044,11 +2049,11 @@ class AssignmentAgentIntegration:
             logger.warning("No candidates provided for selection")
             return None
 
-        # Sort candidates by priority tier first, then by current workload (ascending), then by skill match percentage (descending)
+        # Sort candidates by priority tier first, then by skill match percentage (descending), then by current workload (ascending) as tiebreaker
         sorted_candidates = sorted(candidates, key=lambda c: (
             c.priority_tier,
-            c.technician.current_workload,
-            -c.skill_match.match_percentage
+            -c.skill_match.match_percentage,
+            c.technician.current_workload
         ))
 
         best_candidate = sorted_candidates[0]
@@ -2620,6 +2625,27 @@ class AssignmentAgentIntegration:
             logger.error(f"Error retrieving available technicians: {str(e)}")
             return []
 
+    def classify_ticket_domain(self, ticket: Any) -> Optional[str]:
+        if isinstance(ticket, dict):
+            text = f"{ticket.get('TITLE', '')} {ticket.get('DESCRIPTION', '')} {ticket.get('TICKETCATEGORY', '')}"
+        else:
+            text = f"{getattr(ticket, 'issue', '')} {getattr(ticket, 'description', '')} {getattr(ticket, 'ticket_category', '')}"
+        return classify_ticket_domain(text)
+
+    def is_technician_eligible_for_domain(self, technician: Any, domain: Optional[str]) -> bool:
+        if isinstance(technician, dict):
+            role = technician.get('ROLE', technician.get('role', ''))
+            specs = technician.get('SPECIALIZATIONS', technician.get('specializations', []))
+        else:
+            role = getattr(technician, 'role', '')
+            specs = getattr(technician, 'specializations', [])
+        eligible, _ = is_technician_domain_eligible(domain, role, specs)
+        return eligible
+
+    def _get_fallback_candidate(self, domain: Optional[str]) -> str:
+        rule = DOMAIN_ELIGIBILITY_RULES.get(domain, {})
+        return rule.get("fallback_queue", "TECH-TR-01")
+
     def _evaluate_candidates(self, ticket: TicketData, skill_analysis: SkillAnalysis,
                             technicians: List[TechnicianData]) -> List[AssignmentCandidate]:
         """
@@ -2641,8 +2667,21 @@ class AssignmentAgentIntegration:
         """
         candidates = []
 
+        # Determine ticket domain from title, description, category, and issue type
+        full_ticket_text = f"{ticket.issue} {ticket.description} {ticket.ticket_category} {ticket.issue_type}"
+        domain = classify_ticket_domain(full_ticket_text)
+        if domain:
+            logger.info(f"🏷️ Ticket {ticket.ticket_id} classified into domain: '{domain}'")
+
         for technician in technicians:
             try:
+                # 1. Hard Domain & Role Eligibility Gate
+                if domain:
+                    is_eligible, elig_reason = is_technician_domain_eligible(domain, technician.role, technician.specializations)
+                    if not is_eligible:
+                        logger.info(f"🚫 Technician {technician.name} ({technician.role}) excluded from domain '{domain}': {elig_reason}")
+                        continue
+
                 # Calculate enhanced skill match using similarity-based matching
                 skill_match = self.calculate_skill_match(skill_analysis.required_skills, technician.skills)
 
@@ -2666,6 +2705,13 @@ class AssignmentAgentIntegration:
                     matched_skills=skill_match.matched_skills,
                     missing_skills=skill_match.missing_skills
                 )
+
+                # Enforce minimum skill threshold for specialized domain
+                domain_rule = DOMAIN_ELIGIBILITY_RULES.get(domain) if domain else None
+                min_match_pct = domain_rule.get("minimum_match_pct", 30) if domain_rule else 30
+                if enhanced_match_percentage < min_match_pct:
+                    logger.info(f"🚫 Technician {technician.name} below minimum {min_match_pct}% match for domain '{domain}' ({enhanced_match_percentage}%)")
+                    continue
 
                 # Check shift schedule availability
                 is_on_shift, shift_reason = self.check_shift_availability(technician, ticket.priority)
@@ -2857,12 +2903,18 @@ class AssignmentAgentIntegration:
         current_time = datetime.now()
 
         if is_fallback or candidate is None:
-            # Fallback assignment as specified in requirements
+            full_text = f"{ticket.issue} {ticket.description} {ticket.ticket_category} {ticket.issue_type}"
+            domain = classify_ticket_domain(full_text)
+            fallback_tech_id = "TECH-ENG-01" if domain == "carrier_routing" else ("TECH-ONT-01" if domain == "premise_ont_support" else "TECH-TR-01")
+            fallback_name = "Ray Flores" if fallback_tech_id == "TECH-ENG-01" else ("James Green" if fallback_tech_id == "TECH-ONT-01" else "Aric Rowland")
+            fallback_email = "ray.flores@cttc.com" if fallback_tech_id == "TECH-ENG-01" else ("james.green@cttc.com" if fallback_tech_id == "TECH-ONT-01" else "aric.rowland@cttc.com")
+
             return {
                 'assignment_result': {
                     'ticket_id': ticket.ticket_id,
-                    'assigned_technician': 'Fallback Support',
-                    'technician_email': self.fallback_email,
+                    'assigned_technician': fallback_name,
+                    'technician_email': fallback_email,
+                    'technician_id': fallback_tech_id,
                     'assignment_date': current_time.strftime('%Y-%m-%d'),
                     'assignment_time': current_time.strftime('%H:%M:%S'),
                     'priority': ticket.priority,
@@ -2872,10 +2924,10 @@ class AssignmentAgentIntegration:
                     'user_name': ticket.user_name,
                     'user_email': ticket.user_email,
                     'due_date': ticket.due_date,
-                    'status': 'Assigned (Fallback)',
+                    'status': 'Assigned (Escalated)',
                     'assignment_tier': 6,
                     'skill_match_percentage': 0,
-                    'reasoning': 'No suitable technician found, assigned to fallback'
+                    'reasoning': f"Domain '{domain or 'General'}' fallback routing: escalated to on-call queue ({fallback_tech_id})"
                 }
             }
         else:

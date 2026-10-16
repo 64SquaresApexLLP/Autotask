@@ -50,6 +50,11 @@ SNOWFLAKE_PASSCODE = SF_PASSCODE
 SNOWFLAKE_PRIVATE_KEY_PATH = SF_PRIVATE_KEY_PATH
 SNOWFLAKE_PRIVATE_KEY_PWD = SF_PRIVATE_KEY_PWD
 
+# Gmail / Email Feature Flags (set SKIP_GMAIL_SERVICES=true to disable all Gmail functionality)
+SKIP_GMAIL_SERVICES = os.getenv('SKIP_GMAIL_SERVICES', 'true').strip().lower() in ('true', '1', 'yes')
+ENABLE_GMAIL_SERVICES = (not SKIP_GMAIL_SERVICES) and (os.getenv('ENABLE_GMAIL_SERVICES', 'false').strip().lower() in ('true', '1', 'yes'))
+ENABLE_GMAIL_MONITOR = (not SKIP_GMAIL_SERVICES) and (os.getenv('ENABLE_GMAIL_MONITOR', 'false').strip().lower() in ('true', '1', 'yes'))
+
 # Email Configuration (loaded from .env)
 GMAIL_USER = os.getenv('GMAIL_USER', 'venkatehp12@gmail.com')
 GMAIL_APP_PASSWORD = os.getenv('GMAIL_APP_PASSWORD', os.getenv('SUPPORT_EMAIL_PASSWORD', 'xuzzbgdwqwzrklrj'))

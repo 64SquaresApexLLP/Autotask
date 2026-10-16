@@ -66,10 +66,13 @@ const AllTickets = () => {
       console.error('Failed to load technicians:', error);
       // Use fallback technicians with real IDs if API fails
       setTechnicians([
-        { id: 'T001', name: 'Technician T001', username: 'T001' },
-        { id: 'T103', name: 'Technician T103', username: 'T103' },
-        { id: 'T104', name: 'Technician T104', username: 'T104' },
-        { id: 'T106', name: 'Technician T106', username: 'T106' }
+        { id: 'TECH-TR-01', name: 'Aric Rowland', username: 'TECH-TR-01' },
+        { id: 'TECH-TR-02', name: 'Ray Denham', username: 'TECH-TR-02' },
+        { id: 'TECH-TR-03', name: 'Thomas Olson', username: 'TECH-TR-03' },
+        { id: 'TECH-TR-04', name: 'Ethan Martin', username: 'TECH-TR-04' },
+        { id: 'TECH-ONT-01', name: 'James Green', username: 'TECH-ONT-01' },
+        { id: 'Ruchir', name: 'Ruchir Chincholkar', username: 'Ruchir' },
+        { id: 'TECH-ENG-01', name: 'Ray Flores', username: 'TECH-ENG-01' }
       ]);
     }
   };

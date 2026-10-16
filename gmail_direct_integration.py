@@ -119,6 +119,9 @@ class DirectGmailIntegration:
     
     def test_connection(self, interactive=True):
         """Test Gmail IMAP connection"""
+        if os.getenv('SKIP_GMAIL_SERVICES', 'true').strip().lower() in ('true', '1', 'yes'):
+            print("ℹ️ Gmail services are skipped/disabled (SKIP_GMAIL_SERVICES=true) - connection test skipped")
+            return False
         try:
             if not self.app_password:
                 if not self.load_app_password():
@@ -157,6 +160,9 @@ class DirectGmailIntegration:
     
     def connect_to_gmail(self):
         """Connect to Gmail IMAP"""
+        if os.getenv('SKIP_GMAIL_SERVICES', 'true').strip().lower() in ('true', '1', 'yes'):
+            print("ℹ️ Gmail services are skipped/disabled (SKIP_GMAIL_SERVICES=true) - IMAP connection skipped")
+            return False
         try:
             self.mail = imaplib.IMAP4_SSL(self.imap_server, self.imap_port)
             self.mail.login(self.email_address, self.app_password)
@@ -300,6 +306,9 @@ class DirectGmailIntegration:
     
     def start_monitoring(self, check_interval=5):
         """Start email monitoring"""
+        if os.getenv('SKIP_GMAIL_SERVICES', 'true').strip().lower() in ('true', '1', 'yes'):
+            print("ℹ️ Gmail services are skipped/disabled (SKIP_GMAIL_SERVICES=true) - monitoring will not start")
+            return False
         if self.is_monitoring:
             print("📧 Already monitoring")
             return

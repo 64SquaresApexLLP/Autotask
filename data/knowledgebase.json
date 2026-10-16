@@ -1,6 +1,465 @@
 [
   {
     "new_ticket": {
+      "name": "Charlie Brown",
+      "description": "Customer reports loss of all broadband services at premise. Calix GP1100X Power LED solid green, Broadband flashing red indicating optical loss. OTDR testing at premise bulkhead reveals optical transceiver failure inside ONT unit.",
+      "title": "Internet Not Working - ONT Replacement protocol (Calix GP1100X)",
+      "date": "2026-10-15",
+      "time": "09:00:00",
+      "due_date": "2026-10-22",
+      "priority": "High",
+      "ticket_number": "KB-CTTC-0001",
+      "user_email": "charlie@example.com",
+      "extracted_metadata": {
+        "main_issue": "Complete broadband outage at customer premise requiring Calix GP1100X ONT replacement",
+        "affected_system": "Calix GP1100X Premise ONT",
+        "urgency_level": "High",
+        "error_messages": "Broadband LED flashing red, LOS Alarm",
+        "technical_keywords": "Internet Not Working, ONT, Calix GP1100X, OTDR, TR-069, Truck Roll",
+        "user_actions": "Reported trouble via portal",
+        "resolution_indicators": "Replaced Ont",
+        "STATUS": "Resolved"
+      },
+      "classified_data": {
+        "ISSUETYPE": {
+          "Value": "4",
+          "Label": "Hardware"
+        },
+        "SUBISSUETYPE": {
+          "Value": "48",
+          "Label": "Workstation"
+        },
+        "TICKETCATEGORY": {
+          "Value": "3",
+          "Label": "Standard"
+        },
+        "TICKETTYPE": {
+          "Value": "2",
+          "Label": "Incident"
+        },
+        "STATUS": {
+          "Value": "13",
+          "Label": "Resolved"
+        },
+        "PRIORITY": {
+          "Value": "1",
+          "Label": "High"
+        }
+      },
+      "resolution_note": "1. Verify premise drop fiber power level at bulkhead with handheld OTDR (target range: -18 to -24 dBm).\n2. If optical level is normal but Broadband LED flashes red, disconnect optical jumper and clean SC/APC ferrule.\n3. If receiver remains unresponsive, replace Calix GP1100X ONT unit.\n4. Scan barcoded serial number and re-provision profile in Calix Compass TR-069 ACS server.\n5. Verify broadband lock, run baseline speed test (1000/1000 Mbps), and close field work order."
+    },
+    "similar_tickets_found": []
+  },
+  {
+    "new_ticket": {
+      "name": "Diana Prince",
+      "description": "Customer landline phone is dead with no dial tone. Power adapter transformer (wall wart) cold to touch and POTS loop voltage measures 0V.",
+      "title": "Tele Line Dead / No Dial Tone - Wall Wart Power Supply replacement",
+      "date": "2026-10-15",
+      "time": "09:15:00",
+      "due_date": "2026-10-21",
+      "priority": "High",
+      "ticket_number": "KB-CTTC-0002",
+      "user_email": "diana@example.com",
+      "extracted_metadata": {
+        "main_issue": "Premise POTS telephony down due to failed 12V DC wall wart power supply",
+        "affected_system": "Premise ONT Power Brick / POTS Port",
+        "urgency_level": "High",
+        "error_messages": "No Dial Tone, 0V POTS loop",
+        "technical_keywords": "Tele Line Dead, No Dial Tone, Wall Wart, Power Supply, POTS, Truck Roll",
+        "user_actions": "Reported trouble via portal",
+        "resolution_indicators": "Replaced Wall Wart",
+        "STATUS": "Resolved"
+      },
+      "classified_data": {
+        "ISSUETYPE": {
+          "Value": "10",
+          "Label": "Telephony"
+        },
+        "SUBISSUETYPE": {
+          "Value": "48",
+          "Label": "Workstation"
+        },
+        "TICKETCATEGORY": {
+          "Value": "3",
+          "Label": "Standard"
+        },
+        "TICKETTYPE": {
+          "Value": "2",
+          "Label": "Incident"
+        },
+        "STATUS": {
+          "Value": "13",
+          "Label": "Resolved"
+        },
+        "PRIORITY": {
+          "Value": "1",
+          "Label": "High"
+        }
+      },
+      "resolution_note": "1. Test AC wall outlet voltage with digital multimeter to rule out premise breaker trip.\n2. Test DC barrel connector on OEM 12V 2.5A power brick (Wall Wart); replace burnt-out adapter.\n3. Measure POTS tip-and-ring idle loop voltage (-48V DC normal).\n4. Connect butt-set to test dial tone, place two-way test call to Central Office switch, and verify audio."
+    },
+    "similar_tickets_found": []
+  },
+  {
+    "new_ticket": {
+      "name": "Evan Wright",
+      "description": "Customer reports intermittent Wi-Fi drops and packet loss. Ethernet interface between ONT and indoor Wi-Fi controller is auto-negotiating incorrectly and dropping carrier.",
+      "title": "Internet Going On/Off - Wi-Fi Controller Replacement",
+      "date": "2026-10-15",
+      "time": "09:30:00",
+      "due_date": "2026-10-24",
+      "priority": "Medium",
+      "ticket_number": "KB-CTTC-0003",
+      "user_email": "evan@example.com",
+      "extracted_metadata": {
+        "main_issue": "Intermittent internet connection caused by failing Wi-Fi gateway controller",
+        "affected_system": "Premise Wi-Fi Controller / Gateway",
+        "urgency_level": "Medium",
+        "error_messages": "Ethernet link flapping, high buffer latency",
+        "technical_keywords": "Internet Going On/off, Controller, Wi-Fi, Ethernet, Flapping, Truck Roll",
+        "user_actions": "Rebooted router twice",
+        "resolution_indicators": "Replaced Controller",
+        "STATUS": "Resolved"
+      },
+      "classified_data": {
+        "ISSUETYPE": {
+          "Value": "4",
+          "Label": "Hardware"
+        },
+        "SUBISSUETYPE": {
+          "Value": "49",
+          "Label": "Connectivity/Outages"
+        },
+        "TICKETCATEGORY": {
+          "Value": "3",
+          "Label": "Standard"
+        },
+        "TICKETTYPE": {
+          "Value": "2",
+          "Label": "Incident"
+        },
+        "STATUS": {
+          "Value": "13",
+          "Label": "Resolved"
+        },
+        "PRIORITY": {
+          "Value": "2",
+          "Label": "Medium"
+        }
+      },
+      "resolution_note": "1. Review ONT Ethernet port statistics for CRC errors and carrier link down/up transitions.\n2. Replace existing patch cable with Cat6 shielded jumper.\n3. Replace failing indoor Wi-Fi controller gateway with new pre-configured router.\n4. Re-apply customer SSID and WPA3 security settings; verify 100 consecutive ICMP ping packets with 0% loss."
+    },
+    "similar_tickets_found": []
+  },
+  {
+    "new_ticket": {
+      "name": "Charlie Brown",
+      "description": "Customer experiences voice latency, audio echo, and occasional one-way audio on outbound telephone calls.",
+      "title": "Tele Delayed Voice & Audio Echo - Voice DSP Codec Update",
+      "date": "2026-10-15",
+      "time": "09:45:00",
+      "due_date": "2026-10-28",
+      "priority": "Low",
+      "ticket_number": "KB-CTTC-0004",
+      "user_email": "charlie@example.com",
+      "extracted_metadata": {
+        "main_issue": "VoIP voice delay and echo caused by obsolete DSP codec microcode",
+        "affected_system": "ONT VoIP DSP / SIP Client",
+        "urgency_level": "Low",
+        "error_messages": "Voice buffer overrun, jitter > 40ms",
+        "technical_keywords": "Tele Delayed Voice, Echo, VoIP, DSP, Codec, Truck Roll",
+        "user_actions": "Reported audio echo",
+        "resolution_indicators": "Firmware update / replaced ONT",
+        "STATUS": "Resolved"
+      },
+      "classified_data": {
+        "ISSUETYPE": {
+          "Value": "10",
+          "Label": "Telephony"
+        },
+        "SUBISSUETYPE": {
+          "Value": "48",
+          "Label": "Workstation"
+        },
+        "TICKETCATEGORY": {
+          "Value": "3",
+          "Label": "Standard"
+        },
+        "TICKETTYPE": {
+          "Value": "2",
+          "Label": "Incident"
+        },
+        "STATUS": {
+          "Value": "13",
+          "Label": "Resolved"
+        },
+        "PRIORITY": {
+          "Value": "3",
+          "Label": "Low"
+        }
+      },
+      "resolution_note": "1. Run remote voice packet latency and jitter test across access node.\n2. Push certified ONT firmware containing G.711u / G.729 voice DSP codec stability patch via ACS.\n3. Power cycle ONT to load new DSP microcode.\n4. If latency exceeds 20ms after firmware update, replace premise ONT unit."
+    },
+    "similar_tickets_found": []
+  },
+  {
+    "new_ticket": {
+      "name": "Charlie Brown",
+      "description": "Optical link state down on Goldthwaite central office Juniper MX960 core router port et-0/0/0 facing San Angelo aggregation. 400G-ZR optic alarm active.",
+      "title": "Juniper MX960 Core Uplink Failure - Goldthwaite CO",
+      "date": "2026-10-15",
+      "time": "10:00:00",
+      "due_date": "2026-10-18",
+      "priority": "Critical",
+      "ticket_number": "KB-CTTC-0005",
+      "user_email": "charlie@example.com",
+      "extracted_metadata": {
+        "main_issue": "Goldthwaite core transport uplink failure on Juniper MX960 400G-ZR port",
+        "affected_system": "GLDT-CORE-01 (Juniper MX960) / SANG-AGG-01",
+        "urgency_level": "Critical",
+        "error_messages": "LOS Alarm, Interface Oper-State DOWN, BGP Flap",
+        "technical_keywords": "Juniper MX960, 400G-ZR, Core, Uplink, Goldthwaite, San Angelo, BGP",
+        "user_actions": "NOC alarm triggered",
+        "resolution_indicators": "Transceiver clean/swap, failover confirm",
+        "STATUS": "Resolved"
+      },
+      "classified_data": {
+        "ISSUETYPE": {
+          "Value": "6",
+          "Label": "Network"
+        },
+        "SUBISSUETYPE": {
+          "Value": "49",
+          "Label": "Connectivity/Outages"
+        },
+        "TICKETCATEGORY": {
+          "Value": "3",
+          "Label": "Standard"
+        },
+        "TICKETTYPE": {
+          "Value": "2",
+          "Label": "Incident"
+        },
+        "STATUS": {
+          "Value": "13",
+          "Label": "Resolved"
+        },
+        "PRIORITY": {
+          "Value": "4",
+          "Label": "Critical"
+        }
+      },
+      "resolution_note": "1. Verify that dynamic MPLS/ISIS core traffic has safely failed over to secondary diverse fiber path.\n2. Poll QSFP-DD optical diagnostics (RX power, laser bias current) on port et-0/0/0.\n3. Clean optical fiber bulkheads using one-click optical cleaner.\n4. Reseat QSFP-DD 400G-ZR transceiver; replace transceiver if laser transmit power remains degraded.\n5. Verify link state UP and BGP peering re-established with SANG-AGG-01."
+    },
+    "similar_tickets_found": []
+  },
+  {
+    "new_ticket": {
+      "name": "Evan Wright",
+      "description": "Mobile carrier reports high packet loss and frame drops on cell-tower backhaul circuits terminating on AGG-02 running Junos 23.4R2. Analysis matches known defect def:evpn-qinq.",
+      "title": "Cell-Tower Backhaul Packet Drops (EVPN QinQ Defect def:evpn-qinq)",
+      "date": "2026-10-15",
+      "time": "10:15:00",
+      "due_date": "2026-10-17",
+      "priority": "Critical",
+      "ticket_number": "KB-CTTC-0006",
+      "user_email": "evan@example.com",
+      "extracted_metadata": {
+        "main_issue": "EVPN QinQ VLAN-in-VLAN encapsulation failure on Junos 23.4R2 impacting cell towers",
+        "affected_system": "AGG-02 (Juniper MX304) / Cell Carrier Circuits",
+        "urgency_level": "Critical",
+        "error_messages": "QinQ tag drop, packet loss > 15%",
+        "technical_keywords": "EVPN, QinQ, Cell-Tower, Junos 23.4, Defect def:evpn-qinq, MX304",
+        "user_actions": "Escalated by carrier NOC",
+        "resolution_indicators": "Config tag rewrite, software upgrade",
+        "STATUS": "Resolved"
+      },
+      "classified_data": {
+        "ISSUETYPE": {
+          "Value": "6",
+          "Label": "Network"
+        },
+        "SUBISSUETYPE": {
+          "Value": "49",
+          "Label": "Connectivity/Outages"
+        },
+        "TICKETCATEGORY": {
+          "Value": "3",
+          "Label": "Standard"
+        },
+        "TICKETTYPE": {
+          "Value": "2",
+          "Label": "Incident"
+        },
+        "STATUS": {
+          "Value": "13",
+          "Label": "Resolved"
+        },
+        "PRIORITY": {
+          "Value": "4",
+          "Label": "Critical"
+        }
+      },
+      "resolution_note": "1. Cross-reference circuit ID with defect def:evpn-qinq topology blast-radius view.\n2. Apply temporary VLAN-map rewrite policy to strip outer 802.1ad S-tag prior to EVPN MPLS push.\n3. Stage approved Junos 24.4R1-S3.6 golden image on AGG-02.\n4. Execute software upgrade during scheduled maintenance window to permanently resolve QinQ bug."
+    },
+    "similar_tickets_found": []
+  },
+  {
+    "new_ticket": {
+      "name": "Diana Prince",
+      "description": "Telemetry monitoring on GLDT-CORE-01 reports QSFP-DD 400G-ZR optic operating at 68\u00b0C under sustained load, exceeding vendor 65\u00b0C threshold (Defect def:zr-thermal).",
+      "title": "400G ZR Optic Thermal Alarm - GLDT-CORE-01",
+      "date": "2026-10-15",
+      "time": "10:30:00",
+      "due_date": "2026-10-20",
+      "priority": "High",
+      "ticket_number": "KB-CTTC-0007",
+      "user_email": "diana@example.com",
+      "extracted_metadata": {
+        "main_issue": "400G-ZR optic thermal runaway on core router slot exceeding vendor threshold",
+        "affected_system": "GLDT-CORE-01 (Juniper MX960)",
+        "urgency_level": "High",
+        "error_messages": "High Temp Alarm, Optic Temp 68C",
+        "technical_keywords": "400G-ZR, Thermal, Optic, MX960, Defect def:zr-thermal, Cooling",
+        "user_actions": "Telemetry threshold trigger",
+        "resolution_indicators": "Airflow audit, vendor microcode patch",
+        "STATUS": "Resolved"
+      },
+      "classified_data": {
+        "ISSUETYPE": {
+          "Value": "4",
+          "Label": "Hardware"
+        },
+        "SUBISSUETYPE": {
+          "Value": "48",
+          "Label": "Workstation"
+        },
+        "TICKETCATEGORY": {
+          "Value": "3",
+          "Label": "Standard"
+        },
+        "TICKETTYPE": {
+          "Value": "2",
+          "Label": "Incident"
+        },
+        "STATUS": {
+          "Value": "13",
+          "Label": "Resolved"
+        },
+        "PRIORITY": {
+          "Value": "1",
+          "Label": "High"
+        }
+      },
+      "resolution_note": "1. Inspect MX960 chassis air filter and verify fan tray speed running at 100% CFM.\n2. Apply vendor-mandated microcode response patch for 400G ZR optical transceiver power control.\n3. Verify optical temperature stabilizes below 60\u00b0C.\n4. Replace transceiver if thermal throttling persists."
+    },
+    "similar_tickets_found": []
+  },
+  {
+    "new_ticket": {
+      "name": "Charlie Brown",
+      "description": "Downstream GP1100X ONTs on Calix E7-2 OLT-XG01 PON-1 report optical power dropping to -29 dBm, approaching receiver sensitivity cutoff.",
+      "title": "Calix E7-2 OLT-XG01 Optical Power Low on PON-1",
+      "date": "2026-10-15",
+      "time": "10:45:00",
+      "due_date": "2026-10-21",
+      "priority": "High",
+      "ticket_number": "KB-CTTC-0008",
+      "user_email": "charlie@example.com",
+      "extracted_metadata": {
+        "main_issue": "Degraded optical launch/receive power across 1:32 PON distribution tree",
+        "affected_system": "Calix E7-2 OLT-XG01 / FDH Splitter Tray",
+        "urgency_level": "High",
+        "error_messages": "Optical power -29 dBm, Degraded BER",
+        "technical_keywords": "Calix E7-2, OLT, PON, GP1100X, Splitter, Optical Power, Fiber",
+        "user_actions": "ACS telemetry alert",
+        "resolution_indicators": "FDH cleaning, SFP+ swap",
+        "STATUS": "Resolved"
+      },
+      "classified_data": {
+        "ISSUETYPE": {
+          "Value": "6",
+          "Label": "Network"
+        },
+        "SUBISSUETYPE": {
+          "Value": "49",
+          "Label": "Connectivity/Outages"
+        },
+        "TICKETCATEGORY": {
+          "Value": "3",
+          "Label": "Standard"
+        },
+        "TICKETTYPE": {
+          "Value": "2",
+          "Label": "Incident"
+        },
+        "STATUS": {
+          "Value": "13",
+          "Label": "Resolved"
+        },
+        "PRIORITY": {
+          "Value": "1",
+          "Label": "High"
+        }
+      },
+      "resolution_note": "1. Query OLT transceivers for launch power (normal: +3 to +7 dBm).\n2. Dispatch technician to Service Area Fiber Distribution Hub (FDH).\n3. Clean 1:32 optical splitter input/output bulkheads using click-cleaner.\n4. Confirm downstream ONT optical power levels recover to -19 to -22 dBm across all ONTs."
+    },
+    "similar_tickets_found": []
+  },
+  {
+    "new_ticket": {
+      "name": "Evan Wright",
+      "description": "G.8032 ERPS ring protection protocol triggered automatic failover switch between ACX-06 and AGG-06 due to cut fiber on East distribution span.",
+      "title": "ERPS Ring Protection Switching Active - Distribution Loop",
+      "date": "2026-10-15",
+      "time": "11:00:00",
+      "due_date": "2026-10-23",
+      "priority": "Medium",
+      "ticket_number": "KB-CTTC-0009",
+      "user_email": "evan@example.com",
+      "extracted_metadata": {
+        "main_issue": "Fiber severance on distribution loop causing ERPS ring protection state switch",
+        "affected_system": "ACX-06 / AGG-06 ERPS Ring Protection Group",
+        "urgency_level": "Medium",
+        "error_messages": "Ring State: Switched, Signal Fail Alarm",
+        "technical_keywords": "ERPS, G.8032, Ring Switch, Fiber Cut, ACX-06, AGG-06, Optical",
+        "user_actions": "NOC ring state alarm",
+        "resolution_indicators": "OTDR break location, fiber fusion splice",
+        "STATUS": "Resolved"
+      },
+      "classified_data": {
+        "ISSUETYPE": {
+          "Value": "6",
+          "Label": "Network"
+        },
+        "SUBISSUETYPE": {
+          "Value": "49",
+          "Label": "Connectivity/Outages"
+        },
+        "TICKETCATEGORY": {
+          "Value": "3",
+          "Label": "Standard"
+        },
+        "TICKETTYPE": {
+          "Value": "2",
+          "Label": "Incident"
+        },
+        "STATUS": {
+          "Value": "13",
+          "Label": "Resolved"
+        },
+        "PRIORITY": {
+          "Value": "2",
+          "Label": "Medium"
+        }
+      },
+      "resolution_note": "1. Verify ERPS ring protection is holding all client traffic on secondary West arc with zero drop.\n2. Launch OTDR trace from ACX-06 east port to calculate exact distance to fiber break (e.g. 4.2 km).\n3. Dispatch fiber splice crew to break coordinate on county road.\n4. Complete fusion splicing in closure and unwrap ERPS ring back to normal idle state."
+    },
+    "similar_tickets_found": []
+  },
+  {
+    "new_ticket": {
       "name": "shubham",
       "description": "showing blue screen on laptop and two  - three options  are showing troubleshoot and other options",
       "title": "blue screen error on laptop",

@@ -162,7 +162,13 @@ class SnowflakeConnection:
                     connection_params['passcode_in_password'] = False
 
             self.conn = snowflake.connector.connect(**connection_params)
-            print(f"[SUCCESS] Connected to Snowflake (authenticator: {auth_label}).")
+            # Enforce canonical UTC session timezone across all operations
+            try:
+                with self.conn.cursor() as cur:
+                    cur.execute("ALTER SESSION SET TIMEZONE = 'UTC'")
+            except Exception as e_tz:
+                print(f"[WARNING] Could not set session timezone to UTC: {e_tz}")
+            print(f"[SUCCESS] Connected to Snowflake (authenticator: {auth_label}, timezone: UTC).")
         except Exception as e:
             error_msg = str(e)
             print(f"[ERROR] Connecting to Snowflake: {e}")

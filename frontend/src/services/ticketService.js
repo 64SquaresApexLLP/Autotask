@@ -5,11 +5,19 @@
 
 import apiService from './api.js';
 import { API_ENDPOINTS } from '../config/api.js';
+import { parseIsoDate } from '../utils/dateUtils.js';
 
 /**
  * Map technician IDs to display names (using real IDs from Snowflake)
  */
 const TECHNICIAN_DISPLAY_MAP = {
+  'TECH-TR-01': 'Aric Rowland',
+  'TECH-TR-02': 'Ray Denham',
+  'TECH-TR-03': 'Thomas Olson',
+  'TECH-TR-04': 'Ethan Martin',
+  'TECH-ONT-01': 'James Green',
+  'Ruchir': 'Ruchir Chincholkar',
+  'TECH-ENG-01': 'Ray Flores',
   'T001': 'Technician T001',
   'T103': 'Technician T103',
   'T104': 'Technician T104',
@@ -91,11 +99,11 @@ const transformTicketData = (ticket) => {
     // AI pipeline output - only present on the ticket-creation response
     extracted_metadata: ticket.extracted_metadata || null,
     similar_tickets: ticket.similar_tickets || null,
-    created_at: createdAt || new Date().toISOString(),
-    resolved_at: ticket.RESOLVED_AT || ticket.resolved_at || ticket.COMPLETED_AT || ticket.completed_at || null,
-    closed_at: ticket.CLOSED_AT || ticket.closed_at || null,
-    assigned_at: ticket.ASSIGNED_AT || ticket.assigned_at || null,
-    updated_at: ticket.UPDATED_AT || ticket.updated_at || new Date().toISOString()
+    created_at: (parseIsoDate(createdAt) || new Date()).toISOString(),
+    resolved_at: parseIsoDate(ticket.RESOLVED_AT || ticket.resolved_at || ticket.COMPLETED_AT || ticket.completed_at)?.toISOString() || null,
+    closed_at: parseIsoDate(ticket.CLOSED_AT || ticket.closed_at)?.toISOString() || null,
+    assigned_at: parseIsoDate(ticket.ASSIGNED_AT || ticket.assigned_at)?.toISOString() || null,
+    updated_at: (parseIsoDate(ticket.UPDATED_AT || ticket.updated_at) || parseIsoDate(createdAt) || new Date()).toISOString()
   };
 };
 

@@ -89,9 +89,12 @@ class IntakeClassificationAgent:
         self.conn = self.db_connection.conn
         self.reference_data = self.data_manager.reference_data
         
+        # Check if Gmail services are skipped
+        skip_gmail = os.getenv('SKIP_GMAIL_SERVICES', 'true').strip().lower() in ('true', '1', 'yes')
+        
         # Initialize email monitoring service (optional)
         self.email_listener = None
-        if enable_email_monitoring:
+        if enable_email_monitoring and not skip_gmail:
             try:
                 self.email_listener = EmailListenerService(
                     webhook_url=webhook_url,
@@ -108,6 +111,8 @@ class IntakeClassificationAgent:
                 print(f"[ERROR] Failed to initialize email monitoring: {e}")
                 print("Continuing without email integration")
                 self.email_listener = None
+        elif skip_gmail:
+            print("[INFO] Gmail services are skipped/disabled (SKIP_GMAIL_SERVICES=true)")
         else:
             print("[INFO] Email monitoring disabled")
         
@@ -657,6 +662,10 @@ class IntakeClassificationAgent:
         Returns:
             bool: True if monitoring started successfully
         """
+        if os.getenv('SKIP_GMAIL_SERVICES', 'true').strip().lower() in ('true', '1', 'yes'):
+            print("[INFO] Gmail services are disabled/skipped - email monitoring will not start")
+            return False
+
         if self.email_listener and self.email_listener.is_running():
             print("Email monitoring already running")
             return True
