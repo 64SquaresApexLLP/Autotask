@@ -1,6 +1,1487 @@
 [
   {
     "new_ticket": {
+      "name": "Mario Vallejo",
+      "description": "Customer in Big Valley reports total loss of internet service following an overnight thunderstorm. Calix GP1100X Premise ONT has solid green Power LED, but Broadband LED is flashing red continuously, indicating complete optical carrier loss. Drop cable bulkhead connection checked; OTDR confirms internal optical diplexer receiver failure.",
+      "title": "Internet Not Working - Calix GP1100X Premise ONT Replacement",
+      "date": "2026-05-14",
+      "time": "08:30:00",
+      "due_date": "2026-05-17",
+      "priority": "High",
+      "ticket_number": "KB-CTTC-0001",
+      "user_email": "mario.vallejo@bigvalley.net",
+      "phone_number": "325-555-0144",
+      "extracted_metadata": {
+        "main_issue": "Complete broadband outage at customer premise requiring Calix GP1100X ONT replacement",
+        "affected_system": "Calix GP1100X Premise ONT / Big Valley PON-1",
+        "urgency_level": "High",
+        "error_messages": "Broadband LED flashing red, Optical Loss of Signal (LOS)",
+        "technical_keywords": [
+          "Internet Not Working",
+          "Calix GP1100X",
+          "ONT",
+          "LOS Alarm",
+          "Truck Roll",
+          "OTDR",
+          "TR-069",
+          "Replaced Ont"
+        ],
+        "user_actions": "Power-cycled ONT twice via power strip",
+        "resolution_indicators": "Optical verification, SC/APC cleaning, hardware replacement, ACS re-provisioning",
+        "STATUS": "Resolved"
+      },
+      "classified_data": {
+        "ISSUETYPE": {
+          "Value": "4",
+          "Label": "Hardware"
+        },
+        "SUBISSUETYPE": {
+          "Value": "200",
+          "Label": "Modem"
+        },
+        "TICKETCATEGORY": {
+          "Value": "3",
+          "Label": "Standard"
+        },
+        "TICKETTYPE": {
+          "Value": "2",
+          "Label": "Incident"
+        },
+        "STATUS": {
+          "Value": "5",
+          "Label": "Complete"
+        },
+        "PRIORITY": {
+          "Value": "1",
+          "Label": "High"
+        }
+      },
+      "resolution_note": "1. Diagnostic Verification: Measure optical receive power on premise drop fiber at bulkhead using calibrated optical power meter. Normal target: -18.0 to -24.0 dBm.\n2. Connector Inspection: Unplug drop jumper, inspect SC/APC green ferrule with 400x fiber scope, and clean with 2.5mm dry click-cleaner.\n3. Unit Swap: Since optical power is within normal window (-20.4 dBm) but ONT receiver does not detect signal, replace failed Calix GP1100X unit with verified unit from van stock.\n4. Service Provisioning: Scan barcoded FSAN serial number into Calix Compass TR-069 ACS server; assign 1 Gbps symmetrical profile.\n5. Commissioning Test: Verify solid green Broadband LED, confirm WAN IP lease, execute baseline speed test (940/940 Mbps, 4ms latency), and complete customer handoff.\n\n\u26a0\ufe0f SAFETY PRECAUTIONS:\n- OPTICAL LASER RADIATION HAZARD (ANSI Z136.2 Class 1M): Active optical fiber carries invisible infrared laser light (1310/1490nm). NEVER look directly into open fiber connectors, bulkhead adapters, or optical transceiver bores.\n- ELECTRICAL SAFETY: Disconnect the 12V DC power jack before unmounting the ONT from the wall bracket. Check the wall outlet with a digital multimeter to ensure zero floating neutral or voltage surges.\n- FIBER SHARD DISPOSAL: Place all cleaved fiber scraps and protective dust caps into a puncture-proof sharps disposal container; bare glass shards can penetrate skin and cause severe soft tissue injuries."
+    },
+    "similar_tickets_found": []
+  },
+  {
+    "new_ticket": {
+      "name": "Sharon O'Neill",
+      "description": "Customer in San Saba reports landline phone is completely dead with no dial tone. Premise ONT auxiliary power adapter (12V 2.5A Wall Wart) is cold to the touch with no DC output, and POTS tip-and-ring idle loop voltage measures 0V DC instead of -48V DC.",
+      "title": "Tele Line Dead / No Dial Tone - Wall Wart 12V 2.5A Power Supply Replacement",
+      "date": "2026-05-14",
+      "time": "09:15:00",
+      "due_date": "2026-05-17",
+      "priority": "High",
+      "ticket_number": "KB-CTTC-0002",
+      "user_email": "sharon.oneill@sansaba.net",
+      "phone_number": "325-555-0182",
+      "extracted_metadata": {
+        "main_issue": "Premise POTS telephony down due to blown 12V DC wall wart power supply",
+        "affected_system": "Premise ONT Power Brick / POTS RJ-11 Port",
+        "urgency_level": "High",
+        "error_messages": "No Dial Tone, 0V POTS loop voltage, Dead Power Adapter",
+        "technical_keywords": [
+          "Tele Line Dead",
+          "No Dial Tone",
+          "Wall Wart",
+          "Power Supply",
+          "POTS",
+          "Truck Roll",
+          "Replaced Wall Wart"
+        ],
+        "user_actions": "Tried plugging phone into another house jack",
+        "resolution_indicators": "Multimeter AC/DC testing, power adapter replacement, butt-set dial tone check",
+        "STATUS": "Resolved"
+      },
+      "classified_data": {
+        "ISSUETYPE": {
+          "Value": "10",
+          "Label": "Telephony"
+        },
+        "SUBISSUETYPE": {
+          "Value": "55",
+          "Label": "Phone Issue"
+        },
+        "TICKETCATEGORY": {
+          "Value": "3",
+          "Label": "Standard"
+        },
+        "TICKETTYPE": {
+          "Value": "2",
+          "Label": "Incident"
+        },
+        "STATUS": {
+          "Value": "5",
+          "Label": "Complete"
+        },
+        "PRIORITY": {
+          "Value": "1",
+          "Label": "High"
+        }
+      },
+      "resolution_note": "1. Electrical Outlet Audit: Test premise 120V AC wall receptacle with digital multimeter (118V AC confirmed, circuit breaker intact).\n2. Adapter Testing: Measure DC barrel output of OEM power brick; 0V measured confirming blown internal primary transformer.\n3. Power Supply Replacement: Install new OEM 12V 2.5A regulated power supply connected to a UL-1449 surge protector.\n4. POTS Line Verification: Measure POTS tip-and-ring idle voltage across RJ-11 terminals (-48V DC nominal verified).\n5. Functional Test: Connect lineman's butt-set to test dial tone, place two-way test call to Central Office switch, and verify audio clarity and DTMF tone detection.\n\n\u26a0\ufe0f SAFETY PRECAUTIONS:\n- ELECTRICAL SHOCK HAZARD: Inspect the wall receptacle for scorch marks or thermal deformation. Never plug in replacement adapters if outlet shows signs of burning or arc flash.\n- POTS RINGING VOLTAGE CAUTION: Telephone lines carry up to 90V AC during incoming ringing cycles. Never touch exposed copper tip and ring terminals with bare hands.\n- SURGE PROTECTION: Ensure all telecommunications power adapters are installed on dedicated surge protective devices to prevent grid lightning surge pass-through."
+    },
+    "similar_tickets_found": []
+  },
+  {
+    "new_ticket": {
+      "name": "Ray Flores",
+      "description": "Customer in Goldthwaite reports intermittent Wi-Fi drops, high buffer latency, and video call disconnects every 10-15 minutes. Ethernet link between Calix ONT and indoor Wi-Fi gateway is auto-negotiating down to 100Mbps half-duplex and flapping carrier.",
+      "title": "Internet Going On/Off - Wi-Fi Controller Gateway Replacement",
+      "date": "2026-05-14",
+      "time": "10:00:00",
+      "due_date": "2026-05-18",
+      "priority": "Medium",
+      "ticket_number": "KB-CTTC-0003",
+      "user_email": "ray.flores@cttc.net",
+      "phone_number": "325-555-0210",
+      "extracted_metadata": {
+        "main_issue": "Intermittent internet connection caused by failing Wi-Fi gateway controller SoC",
+        "affected_system": "Premise Wi-Fi Controller Gateway / LAN Port 1",
+        "urgency_level": "Medium",
+        "error_messages": "Carrier link flapping, duplex mismatch, high CRC error rate",
+        "technical_keywords": [
+          "Internet Going On/off",
+          "Controller",
+          "Wi-Fi",
+          "Ethernet Flapping",
+          "Truck Roll",
+          "Replaced Controller"
+        ],
+        "user_actions": "Rebooted router multiple times",
+        "resolution_indicators": "Cable test, gateway swap, SSID replication, ICMP ping stability audit",
+        "STATUS": "Resolved"
+      },
+      "classified_data": {
+        "ISSUETYPE": {
+          "Value": "4",
+          "Label": "Hardware"
+        },
+        "SUBISSUETYPE": {
+          "Value": "21",
+          "Label": "Wireless"
+        },
+        "TICKETCATEGORY": {
+          "Value": "3",
+          "Label": "Standard"
+        },
+        "TICKETTYPE": {
+          "Value": "2",
+          "Label": "Incident"
+        },
+        "STATUS": {
+          "Value": "5",
+          "Label": "Complete"
+        },
+        "PRIORITY": {
+          "Value": "2",
+          "Label": "Medium"
+        }
+      },
+      "resolution_note": "1. Ethernet Interface Audit: Check ONT gigabit port statistics; 14,200 CRC frame errors and 84 link drops logged over 24 hours.\n2. Cable Replacement: Replace existing unshielded Cat5 jumper with Cat6 shielded patch cord; link still dropped under load.\n3. Gateway Replacement: Replace failing indoor Wi-Fi controller gateway unit with new pre-provisioned dual-band Wi-Fi 6 router.\n4. Profile Migration: Clone customer SSID and WPA3 passphrase to maintain zero-hassle client device reconnect.\n5. Quality Verification: Execute 200 consecutive ICMP ping packets to local gateway and 8.8.8.8; 0% loss and steady 3ms latency confirmed.\n\n\u26a0\ufe0f SAFETY PRECAUTIONS:\n- THERMAL HANDLING HAZARD: Failing controller chassis can reach surface temperatures over 55\u00b0C due to SoC thermal runaway. Allow device to cool before disconnect.\n- TRIP HAZARD MITIGATION: Fasten and secure all Ethernet and power cords along baseboards using insulated cable clips to avoid household trip hazards.\n- VENTILATION REQUIREMENTS: Position the new gateway on a hard, elevated, open surface with at least 4 inches of clearance. Never enclose in cabinets or place near heating radiators."
+    },
+    "similar_tickets_found": []
+  },
+  {
+    "new_ticket": {
+      "name": "Charlie Brown",
+      "description": "Customer reports substantial voice latency (>160ms), audio echo, and occasional one-way audio on outbound telephone calls. Telemetry shows voice packet jitter >42ms and outdated DSP codec microcode on Calix ONT.",
+      "title": "Tele Delayed Voice & Audio Echo - Voice DSP Codec Firmware Update",
+      "date": "2026-05-14",
+      "time": "10:30:00",
+      "due_date": "2026-05-19",
+      "priority": "Medium",
+      "ticket_number": "KB-CTTC-0004",
+      "user_email": "charlie@example.com",
+      "phone_number": "325-555-0101",
+      "extracted_metadata": {
+        "main_issue": "VoIP voice delay and echo caused by obsolete DSP codec microcode",
+        "affected_system": "ONT VoIP DSP / SIP Client Stack",
+        "urgency_level": "Medium",
+        "error_messages": "Voice buffer overrun, jitter > 40ms, audio latency > 150ms",
+        "technical_keywords": [
+          "Tele Delayed Voice",
+          "Echo",
+          "VoIP",
+          "DSP",
+          "Codec",
+          "Truck Roll",
+          "Firmware Update"
+        ],
+        "user_actions": "Reported audio echo to support",
+        "resolution_indicators": "Remote jitter test, firmware flash, power cycle, MOS test",
+        "STATUS": "Resolved"
+      },
+      "classified_data": {
+        "ISSUETYPE": {
+          "Value": "10",
+          "Label": "Telephony"
+        },
+        "SUBISSUETYPE": {
+          "Value": "181",
+          "Label": "VOIP Connection/Latency"
+        },
+        "TICKETCATEGORY": {
+          "Value": "3",
+          "Label": "Standard"
+        },
+        "TICKETTYPE": {
+          "Value": "2",
+          "Label": "Incident"
+        },
+        "STATUS": {
+          "Value": "5",
+          "Label": "Complete"
+        },
+        "PRIORITY": {
+          "Value": "2",
+          "Label": "Medium"
+        }
+      },
+      "resolution_note": "1. Latency & Jitter Baseline: Run remote packet analysis across access node; measured 44ms jitter and 170ms round-trip voice packet delay.\n2. ACS Firmware Upgrade: Push certified ONT firmware build containing updated G.711u / G.729 voice DSP codec stability patch via Calix Compass ACS.\n3. Microcode Reload: Power-cycle ONT to reload DSP microcode and re-register SIP stack with Central Office softswitch.\n4. Verification Call: Perform 5-minute test call to landline and mobile test numbers; confirm zero echo, jitter <8ms, and MOS score >4.3.\n\n\u26a0\ufe0f SAFETY PRECAUTIONS:\n- CRITICAL 911 / E911 SERVICE CONTINUITY: Never trigger remote ONT reboots or firmware flashes without verifying the line is idle and subscriber is not making an emergency 911 call.\n- POWER INTERRUPTION SAFETY: Never unplug the ONT during active flash writes (Broadband LED amber flashing) to prevent corrupted firmware and hardware lockup."
+    },
+    "similar_tickets_found": []
+  },
+  {
+    "new_ticket": {
+      "name": "Ruchir Chincholkar",
+      "description": "Optical link state down on Goldthwaite central office Juniper MX960 core router (GLDT-CORE-01) port et-0/0/0 facing San Angelo aggregation. 400G-ZR coherent optic LOS alarm active, causing BGP flap on inter-office transport route.",
+      "title": "Juniper MX960 Core Uplink Failure - Goldthwaite CO (400G-ZR Optic)",
+      "date": "2026-05-14",
+      "time": "11:00:00",
+      "due_date": "2026-05-15",
+      "priority": "Critical",
+      "ticket_number": "KB-CTTC-0005",
+      "user_email": "ruchir0311@mail.com",
+      "phone_number": "325-555-0300",
+      "extracted_metadata": {
+        "main_issue": "Goldthwaite core transport uplink failure on Juniper MX960 400G-ZR port",
+        "affected_system": "GLDT-CORE-01 (Juniper MX960:et-0/0/0) / SANG-AGG-01",
+        "urgency_level": "Critical",
+        "error_messages": "LOS Alarm, Interface Oper-State DOWN, BGP Flap, Optic Laser Fault",
+        "technical_keywords": [
+          "Juniper MX960",
+          "400G-ZR",
+          "Core",
+          "Uplink",
+          "Goldthwaite",
+          "San Angelo",
+          "BGP",
+          "Coherent Optic"
+        ],
+        "user_actions": "NOC alarm triggered",
+        "resolution_indicators": "Dynamic failover verify, diagnostic telemetry, bulkhead cleaning, optic swap",
+        "STATUS": "Resolved"
+      },
+      "classified_data": {
+        "ISSUETYPE": {
+          "Value": "6",
+          "Label": "Network"
+        },
+        "SUBISSUETYPE": {
+          "Value": "64",
+          "Label": "Connectivity/Outages"
+        },
+        "TICKETCATEGORY": {
+          "Value": "3",
+          "Label": "Standard"
+        },
+        "TICKETTYPE": {
+          "Value": "2",
+          "Label": "Incident"
+        },
+        "STATUS": {
+          "Value": "5",
+          "Label": "Complete"
+        },
+        "PRIORITY": {
+          "Value": "4",
+          "Label": "Critical"
+        }
+      },
+      "resolution_note": "1. Protection Path Audit: Verify that dynamic MPLS/IS-IS core traffic safely shifted to secondary diverse fiber path with 0% packet loss.\n2. Diagnostic Query: Query QSFP-DD optical diagnostics on port et-0/0/0 (`show interfaces diagnostics optics et-0/0/0`). Internal laser bias current indicates optic transmitter failure.\n3. Bulkhead Cleaning: Dry-clean optical bulkheads with 2.5mm specialized cassette cleaner.\n4. Transceiver Swap: Unseat failed transceiver, allow cooling, and install new vendor-certified 400G-ZR coherent module.\n5. Link State Restoration: Verify optical RX power (-10 dBm), link state UP, and BGP peering re-established with SANG-AGG-01.\n\n\u26a0\ufe0f SAFETY PRECAUTIONS:\n- CLASS 1M COHERENT LASER HAZARD (ANSI Z136.2): 400G-ZR coherent optics emit invisible laser radiation at 1550nm C-band. NEVER look directly into optical ports or fiber ferrules.\n- THERMAL CONTACT BURN HAZARD: 400G-ZR optical modules reach operational temperatures between 65\u00b0C and 70\u00b0C. Wear heat-resistant thermal handling gloves or wait 5 minutes after unlatching before handling.\n- ESD STATIC PROTECTION: Wear a grounded anti-static wrist strap clipped to the MX960 chassis ESD grounding stud before touching line cards or optical transceivers."
+    },
+    "similar_tickets_found": []
+  },
+  {
+    "new_ticket": {
+      "name": "Anant Lad",
+      "description": "Mobile wireless carrier reports heavy packet loss (>18%) and frame drops on cell-tower backhaul circuits terminating on Brady aggregation router AGG-02 running Junos 23.4R2. Defect analysis matches known defect def:evpn-qinq.",
+      "title": "Cell-Tower Backhaul Packet Drops (EVPN QinQ Defect def:evpn-qinq on MX304)",
+      "date": "2026-05-14",
+      "time": "11:30:00",
+      "due_date": "2026-05-16",
+      "priority": "Critical",
+      "ticket_number": "KB-CTTC-0006",
+      "user_email": "anantlad66@gmail.com",
+      "phone_number": "325-555-0301",
+      "extracted_metadata": {
+        "main_issue": "EVPN QinQ VLAN-in-VLAN encapsulation failure on Junos 23.4R2 impacting cell towers",
+        "affected_system": "AGG-02 (Juniper MX304) / Cell Carrier Backhaul Circuits",
+        "urgency_level": "Critical",
+        "error_messages": "QinQ tag drop, packet loss > 18%, ASIC buffer microburst drops",
+        "technical_keywords": [
+          "EVPN",
+          "QinQ",
+          "Cell-Tower",
+          "Junos 23.4",
+          "Defect def:evpn-qinq",
+          "MX304"
+        ],
+        "user_actions": "Escalated by carrier NOC",
+        "resolution_indicators": "VLAN rewrite policy, blast-radius audit, golden image upgrade",
+        "STATUS": "Resolved"
+      },
+      "classified_data": {
+        "ISSUETYPE": {
+          "Value": "6",
+          "Label": "Network"
+        },
+        "SUBISSUETYPE": {
+          "Value": "64",
+          "Label": "Connectivity/Outages"
+        },
+        "TICKETCATEGORY": {
+          "Value": "3",
+          "Label": "Standard"
+        },
+        "TICKETTYPE": {
+          "Value": "2",
+          "Label": "Incident"
+        },
+        "STATUS": {
+          "Value": "5",
+          "Label": "Complete"
+        },
+        "PRIORITY": {
+          "Value": "4",
+          "Label": "Critical"
+        }
+      },
+      "resolution_note": "1. Blast Radius Inspection: Cross-reference circuit IDs against Snowflake defect table DIM_KNOWN_DEFECTS (def:evpn-qinq) to identify all 8 affected customer instances.\n2. Temporary Policy Workaround: Apply temporary outer S-tag rewrite filter on the affected VLAN-in-VLAN service instance to bypass microcode drop.\n3. Golden Image Staging: Stage approved Junos 24.4R1-S3.6 golden image on AGG-02 secondary storage.\n4. Upgrade Maintenance: Execute router software upgrade during scheduled off-peak maintenance window (02:00-04:00 local); confirm permanent bug remediation and zero packet loss.\n\n\u26a0\ufe0f SAFETY PRECAUTIONS:\n- PUBLIC SAFETY COMMUNICATIONS: Cell tower circuits carry wireless E911 emergency calls. Confirm secondary carrier route is fully operational before executing any router policy changes.\n- MAINTENANCE WINDOW RESTRICTIONS: Never execute core software upgrades during peak business hours. Notify emergency dispatch coordinators prior to initiating maintenance reboots."
+    },
+    "similar_tickets_found": []
+  },
+  {
+    "new_ticket": {
+      "name": "Diana Prince",
+      "description": "Telemetry monitoring on GLDT-CORE-01 reports QSFP-DD 400G-ZR optic operating at 68\u00b0C under sustained load, exceeding vendor 65\u00b0C continuous operating ceiling (Defect def:zr-thermal).",
+      "title": "400G ZR Optic Thermal Alarm - GLDT-CORE-01 (Defect def:zr-thermal)",
+      "date": "2026-05-14",
+      "time": "12:00:00",
+      "due_date": "2026-05-17",
+      "priority": "High",
+      "ticket_number": "KB-CTTC-0007",
+      "user_email": "diana@example.com",
+      "phone_number": "325-555-0102",
+      "extracted_metadata": {
+        "main_issue": "400G-ZR optic thermal runaway on core router slot exceeding vendor threshold",
+        "affected_system": "GLDT-CORE-01 (Juniper MX960:et-0/0/0)",
+        "urgency_level": "High",
+        "error_messages": "High Temp Alarm, Optic Temp 68C, Thermal Threshold Exceeded",
+        "technical_keywords": [
+          "400G-ZR",
+          "Thermal",
+          "Optic",
+          "MX960",
+          "Defect def:zr-thermal",
+          "Cooling"
+        ],
+        "user_actions": "Telemetry threshold trigger",
+        "resolution_indicators": "Airflow audit, fan tray speed adjust, vendor microcode patch",
+        "STATUS": "Resolved"
+      },
+      "classified_data": {
+        "ISSUETYPE": {
+          "Value": "4",
+          "Label": "Hardware"
+        },
+        "SUBISSUETYPE": {
+          "Value": "48",
+          "Label": "Workstation"
+        },
+        "TICKETCATEGORY": {
+          "Value": "3",
+          "Label": "Standard"
+        },
+        "TICKETTYPE": {
+          "Value": "2",
+          "Label": "Incident"
+        },
+        "STATUS": {
+          "Value": "5",
+          "Label": "Complete"
+        },
+        "PRIORITY": {
+          "Value": "1",
+          "Label": "High"
+        }
+      },
+      "resolution_note": "1. Airflow Audit: Inspect MX960 chassis air filter for dust occlusion; verify high-speed fan trays running at 100% capacity.\n2. Vendor Response Patch: Apply vendor-mandated microcode response patch for 400G ZR optical transceiver power control.\n3. Thermal Stabilization: Monitor real-time telemetry; confirm operating temperature drops below 58\u00b0C.\n4. Post-Check: Verify optical power margin remains within normal range (+/- 0.5 dBm variation).\n\n\u26a0\ufe0f SAFETY PRECAUTIONS:\n- CONTACT BURN HAZARD: Optic casing temperature exceeds 65\u00b0C. Never touch transceiver body with unprotected skin. Use heat-resistant thermal gloves.\n- HIGH-VELOCITY COOLING FAN HAZARD: MX960 fan trays operate at high RPM with severe suction. Keep fingers, tools, and loose cables away from intake and exhaust grills."
+    },
+    "similar_tickets_found": []
+  },
+  {
+    "new_ticket": {
+      "name": "Ray Denham",
+      "description": "Downstream GP1100X ONTs on Calix E7-2 OLT-XG01 PON-1 report optical receive power dropping to -29 dBm, dangerously close to receiver sensitivity threshold (-30 dBm). Subscriber tickets indicate degraded throughput.",
+      "title": "Calix E7-2 OLT-XG01 Optical Power Low on PON-1 (FDH Splitter Cleaning)",
+      "date": "2026-05-14",
+      "time": "12:30:00",
+      "due_date": "2026-05-17",
+      "priority": "High",
+      "ticket_number": "KB-CTTC-0008",
+      "user_email": "ray.denham@sansaba.net",
+      "phone_number": "325-555-0199",
+      "extracted_metadata": {
+        "main_issue": "Degraded optical launch/receive power across 1:32 PON distribution tree",
+        "affected_system": "Calix E7-2 OLT-XG01 / FDH 1:32 Splitter Tray",
+        "urgency_level": "High",
+        "error_messages": "Optical power -29 dBm, Degraded Bit Error Rate (BER)",
+        "technical_keywords": [
+          "Calix E7-2",
+          "OLT",
+          "PON",
+          "GP1100X",
+          "Splitter",
+          "Optical Power",
+          "Fiber"
+        ],
+        "user_actions": "ACS telemetry alert",
+        "resolution_indicators": "Launch power check, FDH cleaning, SFP+ swap, receiver audit",
+        "STATUS": "Resolved"
+      },
+      "classified_data": {
+        "ISSUETYPE": {
+          "Value": "6",
+          "Label": "Network"
+        },
+        "SUBISSUETYPE": {
+          "Value": "64",
+          "Label": "Connectivity/Outages"
+        },
+        "TICKETCATEGORY": {
+          "Value": "3",
+          "Label": "Standard"
+        },
+        "TICKETTYPE": {
+          "Value": "2",
+          "Label": "Incident"
+        },
+        "STATUS": {
+          "Value": "5",
+          "Label": "Complete"
+        },
+        "PRIORITY": {
+          "Value": "1",
+          "Label": "High"
+        }
+      },
+      "resolution_note": "1. Launch Power Audit: Query OLT transceivers via CLI; launch power confirmed normal (+4.5 dBm).\n2. Outside Plant Dispatch: Dispatch field technician to Service Area Fiber Distribution Hub (FDH).\n3. Splitter Cleaning: Clean 1:32 optical splitter input and output bulkheads using dry 2.5mm fiber click-cleaners.\n4. Power Level Confirmation: Confirm downstream ONT optical power levels recover to -19.5 to -21.0 dBm across all 32 subscribers.\n\n\u26a0\ufe0f SAFETY PRECAUTIONS:\n- MULTI-CARRIER LASER HAZARD: OLT optical ports launch high-power Class 1M laser radiation across 32 distribution legs. Never look into splitter ports or active fiber jumpers.\n- OUTSIDE PLANT ENCLOSURE HAZARDS: Inspect outdoor FDH cabinets for stinging insects (wasps, hornets), fire ants, and spiders before inserting hands or test equipment."
+    },
+    "similar_tickets_found": []
+  },
+  {
+    "new_ticket": {
+      "name": "Evan Wright",
+      "description": "G.8032 ERPS ring protection protocol triggered automatic failover switch between ACX-06 and AGG-06 due to severed fiber on East distribution span along County Road 114.",
+      "title": "ERPS Ring Protection Switching Active - Distribution Loop Fiber Break",
+      "date": "2026-05-14",
+      "time": "13:00:00",
+      "due_date": "2026-05-18",
+      "priority": "Medium",
+      "ticket_number": "KB-CTTC-0009",
+      "user_email": "evan@example.com",
+      "phone_number": "325-555-0103",
+      "extracted_metadata": {
+        "main_issue": "Fiber severance on distribution loop causing ERPS ring protection state switch",
+        "affected_system": "ACX-06 / AGG-06 ERPS Ring Protection Group",
+        "urgency_level": "Medium",
+        "error_messages": "Ring State: Switched, Signal Fail Alarm",
+        "technical_keywords": [
+          "ERPS",
+          "G.8032",
+          "Ring Switch",
+          "Fiber Cut",
+          "ACX-06",
+          "AGG-06",
+          "Optical"
+        ],
+        "user_actions": "NOC ring state alarm",
+        "resolution_indicators": "OTDR break location, fiber fusion splice, ring restore",
+        "STATUS": "Resolved"
+      },
+      "classified_data": {
+        "ISSUETYPE": {
+          "Value": "6",
+          "Label": "Network"
+        },
+        "SUBISSUETYPE": {
+          "Value": "64",
+          "Label": "Connectivity/Outages"
+        },
+        "TICKETCATEGORY": {
+          "Value": "3",
+          "Label": "Standard"
+        },
+        "TICKETTYPE": {
+          "Value": "2",
+          "Label": "Incident"
+        },
+        "STATUS": {
+          "Value": "5",
+          "Label": "Complete"
+        },
+        "PRIORITY": {
+          "Value": "2",
+          "Label": "Medium"
+        }
+      },
+      "resolution_note": "1. Protection Verification: Verify ERPS ring protection is holding all client traffic on secondary West arc with 0% packet loss.\n2. OTDR Fault Location: Launch OTDR trace from ACX-06 east port; pinpoint break at 4.2 km coordinate on County Road 114.\n3. Emergency Splicing: Dispatch fiber splice crew; execute fusion splicing in aerial closure and seal enclosure.\n4. Ring Normalization: Confirm optical link UP and unwrap ERPS ring back to normal idle state.\n\n\u26a0\ufe0f SAFETY PRECAUTIONS:\n- ROADSIDE WORK ZONE SAFETY: Comply with MUTCD work zone standards. Deploy warning signs, 28-inch retroreflective cones, and vehicle amber strobe beacons on rural roadways.\n- POWER LINE CLEARANCE: When working near overhead utility poles, maintain a minimum 10-foot clearance from primary electrical conductors.\n- SPLICER ARC HAZARD: Fusion splicers generate electric arcs. Verify vault/enclosure atmosphere with 4-gas detector before operating."
+    },
+    "similar_tickets_found": []
+  },
+  {
+    "new_ticket": {
+      "name": "Betty Davis",
+      "description": "Severe thunderstorm with high lightning density caused sudden broadband and phone loss; ONT power brick charred and wall receptacle tripped breaker in San Saba.",
+      "title": "Lightning Surge Damaged Premise ONT & Wall Wart (Thunderstorm Event)",
+      "date": "2026-05-14",
+      "time": "13:30:00",
+      "due_date": "2026-05-17",
+      "priority": "High",
+      "ticket_number": "KB-CTTC-0010",
+      "user_email": "betty.davis@sansaba.net",
+      "phone_number": "325-555-0245",
+      "extracted_metadata": {
+        "main_issue": "Lightning surge destroyed premise ONT power supply and tripped breaker",
+        "affected_system": "Premise Electrical Demarcation / Calix GP1100X",
+        "urgency_level": "High",
+        "error_messages": "Charred Power Brick, Tripped Breaker, Dead ONT",
+        "technical_keywords": [
+          "Lightning Surge",
+          "Storm",
+          "ONT Damaged",
+          "Wall Wart",
+          "Replaced Ont",
+          "Replaced Wall Wart"
+        ],
+        "user_actions": "Reset home circuit breaker",
+        "resolution_indicators": "Ground audit, receptacle test, ONT and power supply replacement",
+        "STATUS": "Resolved"
+      },
+      "classified_data": {
+        "ISSUETYPE": {
+          "Value": "4",
+          "Label": "Hardware"
+        },
+        "SUBISSUETYPE": {
+          "Value": "19",
+          "Label": "Cabling"
+        },
+        "TICKETCATEGORY": {
+          "Value": "3",
+          "Label": "Standard"
+        },
+        "TICKETTYPE": {
+          "Value": "2",
+          "Label": "Incident"
+        },
+        "STATUS": {
+          "Value": "5",
+          "Label": "Complete"
+        },
+        "PRIORITY": {
+          "Value": "1",
+          "Label": "High"
+        }
+      },
+      "resolution_note": "1. Grounding Inspection: Inspect premise service entrance ground rod and NID ground bond wire for flashover damage.\n2. Receptacle Audit: Test AC wall outlet with 3-prong tester to verify correct polarity and low ground impedance.\n3. Hardware Replacement: Replace destroyed power supply and Calix GP1100X ONT; install inline UL-1449 surge protector.\n4. Commissioning: Provision new ONT in TR-069 ACS; verify both broadband and telephony operational.\n\n\u26a0\ufe0f SAFETY PRECAUTIONS:\n- ELECTRICAL SHOCK HAZARD: Never handle charred or melted electrical equipment without verifying the breaker is de-energized.\n- STRAY VOLTAGE DETECTION: Use a non-contact AC voltage detector to verify the NID metallic housing is not energized before touching."
+    },
+    "similar_tickets_found": []
+  },
+  {
+    "new_ticket": {
+      "name": "Tom Miller",
+      "description": "Customer reports download and upload speeds throttled below 40 Mbps on a 1 Gbps fiber plan, with high latency under load. ONT optical receive power measures -27.8 dBm.",
+      "title": "Slow Internet & High Latency due to Fiber Drop Cable Macro-Bend",
+      "date": "2026-05-14",
+      "time": "14:00:00",
+      "due_date": "2026-05-18",
+      "priority": "Medium",
+      "ticket_number": "KB-CTTC-0011",
+      "user_email": "tom.miller@goldthwaite.net",
+      "phone_number": "325-555-0288",
+      "extracted_metadata": {
+        "main_issue": "Severe optical attenuation caused by sharp macro-bend in drop cable",
+        "affected_system": "Premise Fiber Drop / Calix GP1100X",
+        "urgency_level": "Medium",
+        "error_messages": "Optical Power -27.8 dBm, High Latency, Packet Dropping",
+        "technical_keywords": [
+          "Internet Slow",
+          "Macro Bend",
+          "Optical Loss",
+          "Drop Cable",
+          "Fiber",
+          "Truck Roll"
+        ],
+        "user_actions": "Ran online speed tests",
+        "resolution_indicators": "Fiber routing check, bend release, ferrule cleaning, power verification",
+        "STATUS": "Resolved"
+      },
+      "classified_data": {
+        "ISSUETYPE": {
+          "Value": "6",
+          "Label": "Network"
+        },
+        "SUBISSUETYPE": {
+          "Value": "64",
+          "Label": "Connectivity/Outages"
+        },
+        "TICKETCATEGORY": {
+          "Value": "3",
+          "Label": "Standard"
+        },
+        "TICKETTYPE": {
+          "Value": "2",
+          "Label": "Incident"
+        },
+        "STATUS": {
+          "Value": "5",
+          "Label": "Complete"
+        },
+        "PRIORITY": {
+          "Value": "2",
+          "Label": "Medium"
+        }
+      },
+      "resolution_note": "1. Optical Loss Tracing: Inspect drop fiber from outside demarcation box to indoor ONT wall jack.\n2. Macro-Bend Relief: Locate sharp 90-degree kink in drop fiber beneath floor joist. Re-route fiber with minimum 30mm bend radius.\n3. Ferrule Cleaning: Clean SC/APC connector with 2.5mm click-cleaner and reconnect.\n4. Performance Verification: Confirm optical receive power recovers to -20.2 dBm; execute speed test confirming 940/940 Mbps.\n\n\u26a0\ufe0f SAFETY PRECAUTIONS:\n- LASER EYE SAFETY: Do not bend or inspect active fiber near the face; invisible laser radiation can escape from stressed fiber cladding.\n- CRAWLSPACE SAFETY: Wear an N95 respirator, safety goggles, and heavy work gloves when accessing subfloor or attic crawlspaces."
+    },
+    "similar_tickets_found": []
+  },
+  {
+    "new_ticket": {
+      "name": "Helen Keller",
+      "description": "Customer reports loud humming noise and static during telephone calls; caller audio muffled and hard to hear.",
+      "title": "Noisy / Static Telephony Line (Ground Loop & AC Ripple Leakage)",
+      "date": "2026-05-14",
+      "time": "14:30:00",
+      "due_date": "2026-05-18",
+      "priority": "Medium",
+      "ticket_number": "KB-CTTC-0012",
+      "user_email": "helen.keller@sansaba.net",
+      "phone_number": "325-555-0322",
+      "extracted_metadata": {
+        "main_issue": "Audible line noise caused by failing power supply AC ripple and poor ground bond",
+        "affected_system": "POTS Telephony Line / ONT Power Supply",
+        "urgency_level": "Medium",
+        "error_messages": "Loud Hum, Line Static, High Ripple Voltage",
+        "technical_keywords": [
+          "Tele Line Noisy",
+          "POTS",
+          "Static",
+          "Humming",
+          "Ground Loop",
+          "Truck Roll"
+        ],
+        "user_actions": "Tried two different telephone handsets",
+        "resolution_indicators": "POTS isolation, ripple measurement, power supply swap, ground bond check",
+        "STATUS": "Resolved"
+      },
+      "classified_data": {
+        "ISSUETYPE": {
+          "Value": "10",
+          "Label": "Telephony"
+        },
+        "SUBISSUETYPE": {
+          "Value": "55",
+          "Label": "Phone Issue"
+        },
+        "TICKETCATEGORY": {
+          "Value": "3",
+          "Label": "Standard"
+        },
+        "TICKETTYPE": {
+          "Value": "2",
+          "Label": "Incident"
+        },
+        "STATUS": {
+          "Value": "5",
+          "Label": "Complete"
+        },
+        "PRIORITY": {
+          "Value": "2",
+          "Label": "Medium"
+        }
+      },
+      "resolution_note": "1. Line Isolation: Connect butt-set directly to ONT POTS port to rule out internal premise wiring.\n2. Ripple Voltage Test: Measure DC output of ONT adapter with multimeter on AC mV scale; measured 480mV ripple indicating degraded filter capacitor.\n3. Adapter Swap: Replace failing power adapter with new regulated OEM power supply.\n4. Ground Bond Check: Re-torque ground rod lug at NID (<25 ohms ground resistance confirmed). Audio static completely resolved.\n\n\u26a0\ufe0f SAFETY PRECAUTIONS:\n- STRAY GROUND CURRENT: Measure ground conductor with clamp-on ammeter before disconnecting; stray current can cause shock.\n- RING VOLTAGE CAUTION: Disconnect station wiring before adjusting ground lugs to avoid sudden 90V AC ring shock."
+    },
+    "similar_tickets_found": []
+  },
+  {
+    "new_ticket": {
+      "name": "George Clark",
+      "description": "Customer unable to pair wireless mesh extender in detached garage office; extender status LED stays flashing yellow.",
+      "title": "Wi-Fi Extender Not Pairing / Signal Attenuation through Masonry",
+      "date": "2026-05-14",
+      "time": "15:00:00",
+      "due_date": "2026-05-19",
+      "priority": "Low",
+      "ticket_number": "KB-CTTC-0013",
+      "user_email": "george.clark@brady.net",
+      "phone_number": "325-555-0355",
+      "extracted_metadata": {
+        "main_issue": "Mesh extender 5GHz wireless backhaul attenuated by stone masonry wall",
+        "affected_system": "Premise Wi-Fi Mesh Extender / Gateway",
+        "urgency_level": "Low",
+        "error_messages": "WPS Pairing Timeout, Weak Backhaul RSSI (-85 dBm)",
+        "technical_keywords": [
+          "Wifi Ext Not Working",
+          "Mesh",
+          "Extender",
+          "WPS",
+          "Attenuation",
+          "Truck Roll"
+        ],
+        "user_actions": "Pressed WPS button repeatedly",
+        "resolution_indicators": "RF survey, extender repositioning, WPS re-pairing, speed test",
+        "STATUS": "Resolved"
+      },
+      "classified_data": {
+        "ISSUETYPE": {
+          "Value": "6",
+          "Label": "Network"
+        },
+        "SUBISSUETYPE": {
+          "Value": "21",
+          "Label": "Wireless"
+        },
+        "TICKETCATEGORY": {
+          "Value": "3",
+          "Label": "Standard"
+        },
+        "TICKETTYPE": {
+          "Value": "2",
+          "Label": "Incident"
+        },
+        "STATUS": {
+          "Value": "5",
+          "Label": "Complete"
+        },
+        "PRIORITY": {
+          "Value": "3",
+          "Label": "Low"
+        }
+      },
+      "resolution_note": "1. Spectrum Survey: Perform RF survey; 5GHz backhaul measured at -84 dBm through exterior limestone wall.\n2. Extender Repositioning: Move extender to window ledge with clear line of sight to main gateway (-63 dBm RSSI achieved).\n3. WPS Pairing: Trigger WPS handshake; green connection LED locks solid.\n4. Speed Verification: Run speed test from garage office; confirm 320 Mbps sustained throughput.\n\n\u26a0\ufe0f SAFETY PRECAUTIONS:\n- LADDER SAFETY: Use only ANSI Type IA ladders on firm, level ground when mounting high APs. Maintain 3 points of contact.\n- RF EXPOSURE: Maintain minimum 20cm (8 inches) distance between high-gain Wi-Fi antennas and human body."
+    },
+    "similar_tickets_found": []
+  },
+  {
+    "new_ticket": {
+      "name": "Sarah Jenkins",
+      "description": "AutoTask dispatch order code 219 logged for Big Valley subscriber. Calix GP1100X ONT completely unpowered with zero LED activity following power grid fluctuations.",
+      "title": "Equipment Outage Code 219 - Tripped ONT Internal MOV Thermal Fuse",
+      "date": "2026-05-14",
+      "time": "15:30:00",
+      "due_date": "2026-05-17",
+      "priority": "High",
+      "ticket_number": "KB-CTTC-0014",
+      "user_email": "sarah.jenkins@bigvalley.net",
+      "phone_number": "325-555-0377",
+      "extracted_metadata": {
+        "main_issue": "Internal thermal fuse tripped on ONT auxiliary power block after utility voltage spike",
+        "affected_system": "Calix GP1100X Power Block / Big Valley Grid",
+        "urgency_level": "High",
+        "error_messages": "Dispatch Code 219, Dead ONT, Blown MOV Fuse",
+        "technical_keywords": [
+          "219",
+          "ONT Dead",
+          "Power Surge",
+          "Replaced Ont",
+          "Replaced Wall Wart",
+          "Truck Roll"
+        ],
+        "user_actions": "Checked wall outlet",
+        "resolution_indicators": "Outlet voltage check, ONT replacement, surge strip installation",
+        "STATUS": "Resolved"
+      },
+      "classified_data": {
+        "ISSUETYPE": {
+          "Value": "4",
+          "Label": "Hardware"
+        },
+        "SUBISSUETYPE": {
+          "Value": "48",
+          "Label": "Workstation"
+        },
+        "TICKETCATEGORY": {
+          "Value": "3",
+          "Label": "Standard"
+        },
+        "TICKETTYPE": {
+          "Value": "2",
+          "Label": "Incident"
+        },
+        "STATUS": {
+          "Value": "5",
+          "Label": "Complete"
+        },
+        "PRIORITY": {
+          "Value": "1",
+          "Label": "High"
+        }
+      },
+      "resolution_note": "1. Receptacle Audit: Test premise outlet voltage with digital multimeter (121V AC verified).\n2. Hardware Replacement: Replace blown Wall Wart and Calix GP1100X ONT unit with tripped internal thermal fuse.\n3. Surge Suppression: Connect equipment to an auxiliary UL-1449 surge protector.\n4. Provisioning: Re-register serial in Compass ACS; verify green Power and Broadband LEDs and run speed test.\n\n\u26a0\ufe0f SAFETY PRECAUTIONS:\n- ELECTRICAL FIRE HAZARD: Never attempt to re-energize melted or smoking power adapters.\n- DISCONNECT POWER: Disconnect the AC wall plug before handling power connectors on the ONT chassis."
+    },
+    "similar_tickets_found": []
+  },
+  {
+    "new_ticket": {
+      "name": "Ray Flores",
+      "description": "Network architecture audit identifies San Angelo Central Office is connected via a single 100G link without ERPS protection ring (spof:sang-100g in Snowflake ontology), presenting high isolation risk.",
+      "title": "Single Point of Failure (SPOF) - Unprotected San Angelo 100G Trunk Risk",
+      "date": "2026-05-14",
+      "time": "16:00:00",
+      "due_date": "2026-05-20",
+      "priority": "High",
+      "ticket_number": "KB-CTTC-0015",
+      "user_email": "ray.flores@cttc.net",
+      "phone_number": "325-555-0210",
+      "extracted_metadata": {
+        "main_issue": "Single point of failure on San Angelo 100G aggregation trunk",
+        "affected_system": "SANG-AGG-01 / BRDY-AGG-02 Transport Path",
+        "urgency_level": "High",
+        "error_messages": "SPOF Topology Risk, Unprotected Trunk Alarm",
+        "technical_keywords": [
+          "spof:sang-100g",
+          "ERPS",
+          "SPOF",
+          "100G Trunk",
+          "San Angelo",
+          "Redundancy"
+        ],
+        "user_actions": "Architecture review",
+        "resolution_indicators": "Diverse path engineering, secondary trunk deploy, ERPS ring configuration",
+        "STATUS": "Resolved"
+      },
+      "classified_data": {
+        "ISSUETYPE": {
+          "Value": "6",
+          "Label": "Network"
+        },
+        "SUBISSUETYPE": {
+          "Value": "130",
+          "Label": "Outage"
+        },
+        "TICKETCATEGORY": {
+          "Value": "3",
+          "Label": "Standard"
+        },
+        "TICKETTYPE": {
+          "Value": "3",
+          "Label": "Problem"
+        },
+        "STATUS": {
+          "Value": "5",
+          "Label": "Complete"
+        },
+        "PRIORITY": {
+          "Value": "1",
+          "Label": "High"
+        }
+      },
+      "resolution_note": "1. Route Diversity Engineering: Design secondary 100G DWDM optical trunk routed via Brady CO to form geographic loop.\n2. Transceiver Deployment: Install 100G-LR4 transceivers on SANG-AGG-01 and BRDY-AGG-02.\n3. ERPS Configuration: Configure G.8032 ERPS ring protection across both nodes with East/West port groups.\n4. Failover Testing: Conduct simulated fiber break test during maintenance window; confirm sub-50ms protection failover.\n\n\u26a0\ufe0f SAFETY PRECAUTIONS:\n- UNDERGROUND EXCAVATION SAFETY: Call 811 (Texas One-Call) at least 48 hours prior to any trenching or directional boring to mark buried gas, power, and water utilities.\n- TRAFFIC CONTINUITY: Verify secondary routing path is operational before taking any active transport circuit offline."
+    },
+    "similar_tickets_found": []
+  },
+  {
+    "new_ticket": {
+      "name": "Ruchir Chincholkar",
+      "description": "ACX 5448D running unapproved Junos 23.4 release causes Locker management service breakdown and Central Office access point disconnect (Defect def:acx-234-locker).",
+      "title": "Junos Software Train Drift & Locker AP Service Breakage (def:acx-234-locker)",
+      "date": "2026-05-14",
+      "time": "16:30:00",
+      "due_date": "2026-05-18",
+      "priority": "High",
+      "ticket_number": "KB-CTTC-0016",
+      "user_email": "ruchir0311@mail.com",
+      "phone_number": "325-555-0300",
+      "extracted_metadata": {
+        "main_issue": "Junos 23.4 breaks Locker and CO AP services on ACX 5448D",
+        "affected_system": "ACX-19 (ACX 5448D) / Locker Services",
+        "urgency_level": "High",
+        "error_messages": "Defect def:acx-234-locker, AP Service Disconnected, Locker Daemon Error",
+        "technical_keywords": [
+          "def:acx-234-locker",
+          "ACX 5448D",
+          "Junos 23.4",
+          "Locker Service",
+          "Version Drift"
+        ],
+        "user_actions": "Facility reported Locker system offline",
+        "resolution_indicators": "Config backup, golden baseline downgrade, service restoration",
+        "STATUS": "Resolved"
+      },
+      "classified_data": {
+        "ISSUETYPE": {
+          "Value": "5",
+          "Label": "Software/SaaS"
+        },
+        "SUBISSUETYPE": {
+          "Value": "36",
+          "Label": "Business Line Application"
+        },
+        "TICKETCATEGORY": {
+          "Value": "3",
+          "Label": "Standard"
+        },
+        "TICKETTYPE": {
+          "Value": "2",
+          "Label": "Incident"
+        },
+        "STATUS": {
+          "Value": "5",
+          "Label": "Complete"
+        },
+        "PRIORITY": {
+          "Value": "1",
+          "Label": "High"
+        }
+      },
+      "resolution_note": "1. Configuration Archive: Back up running Junos configuration via CLI to central repository.\n2. Baseline Downgrade: Revert ACX 5448D to certified golden baseline 22.4R3-S7.5 using `request system software add`.\n3. Kernel Reboot: Reboot router into approved baseline kernel; verify sub-interface encapsulation.\n4. Service Validation: Confirm Locker service daemon and local access point connectivity fully restored.\n\n\u26a0\ufe0f SAFETY PRECAUTIONS:\n- OUT-OF-BAND TERMINAL ACCESS: Always verify active console terminal server session before initiating software reboots to prevent remote lockout.\n- PEER APPROVAL: Coordinate router software changes through regional engineering change management."
+    },
+    "similar_tickets_found": []
+  },
+  {
+    "new_ticket": {
+      "name": "Ray Denham",
+      "description": "OLT-XG01 generates 28 simultaneous ONT_UNREACHABLE alarms within 3 minutes; high-count aerial fiber feeder cut suspected on county line.",
+      "title": "28-ONT Management Loss Alarm Cascade (Feeder Fiber Severance)",
+      "date": "2026-05-14",
+      "time": "17:00:00",
+      "due_date": "2026-05-15",
+      "priority": "Critical",
+      "ticket_number": "KB-CTTC-0017",
+      "user_email": "ray.denham@sansaba.net",
+      "phone_number": "325-555-0199",
+      "extracted_metadata": {
+        "main_issue": "Simultaneous 28-ONT outage caused by severed primary fiber feeder cable",
+        "affected_system": "OLT-XG01 / Big Valley 48-Count Feeder Span",
+        "urgency_level": "Critical",
+        "error_messages": "Alarm Cascade: 28 ONT_UNREACHABLE, Feeder LOS Alarm",
+        "technical_keywords": [
+          "Alarm Cascade",
+          "ONT_UNREACHABLE",
+          "Feeder Cut",
+          "OLT-XG01",
+          "OTDR",
+          "Fusion Splice"
+        ],
+        "user_actions": "NOC emergency dispatch",
+        "resolution_indicators": "OTDR shoot, aerial bucket repair, fusion splice, alarm clear",
+        "STATUS": "Resolved"
+      },
+      "classified_data": {
+        "ISSUETYPE": {
+          "Value": "6",
+          "Label": "Network"
+        },
+        "SUBISSUETYPE": {
+          "Value": "130",
+          "Label": "Outage"
+        },
+        "TICKETCATEGORY": {
+          "Value": "3",
+          "Label": "Standard"
+        },
+        "TICKETTYPE": {
+          "Value": "2",
+          "Label": "Incident"
+        },
+        "STATUS": {
+          "Value": "5",
+          "Label": "Complete"
+        },
+        "PRIORITY": {
+          "Value": "4",
+          "Label": "Critical"
+        }
+      },
+      "resolution_note": "1. Upstream Correlation: Correlate simultaneous alarms to common upstream PON port on Calix E7-2 OLT-XG01.\n2. Fault Distance OTDR: Launch OTDR trace down feeder; identify break reflection at 8.7 km aerial span.\n3. Field Splicing: Dispatch outside plant emergency crew with bucket truck; repair severed 48-strand fiber cable in aerial splice enclosure.\n4. Restoration Verification: Monitor Compass ACS as all 28 ONTs re-register and return to active status.\n\n\u26a0\ufe0f SAFETY PRECAUTIONS:\n- AERIAL BUCKET SAFETY: Use full-body safety harness with lanyard anchored to approved bucket truck anchor point. Set outriggers on solid pads.\n- POWER LINE CLEARANCE: Ensure bucket boom maintains OSHA clearance (10+ feet) from electrical power lines.\n- LASER EYE SAFETY: Never peer into cut fiber buffer tubes; high-power OLT lasers remain active until administratively disabled."
+    },
+    "similar_tickets_found": []
+  },
+  {
+    "new_ticket": {
+      "name": "Mario Vallejo",
+      "description": "Customer reports degraded speeds and packet retransmissions. ONT optical receiver power fluctuating between -24 dBm and -28 dBm due to dirty bulkhead connector.",
+      "title": "Bulkhead SC/APC Connector Contamination & High Optical Return Loss",
+      "date": "2026-05-14",
+      "time": "17:30:00",
+      "due_date": "2026-05-18",
+      "priority": "Medium",
+      "ticket_number": "KB-CTTC-0018",
+      "user_email": "mario.vallejo@bigvalley.net",
+      "phone_number": "325-555-0144",
+      "extracted_metadata": {
+        "main_issue": "High insertion loss and reflection from contaminated SC/APC bulkhead connector",
+        "affected_system": "Premise Fiber Bulkhead / SC/APC Jumper",
+        "urgency_level": "Medium",
+        "error_messages": "Optical Return Loss Degraded, RX Power Fluctuation",
+        "technical_keywords": [
+          "Bulkhead Contamination",
+          "SC/APC",
+          "Click Cleaner",
+          "ORL",
+          "Optical Power",
+          "Truck Roll"
+        ],
+        "user_actions": "Reported slow internet",
+        "resolution_indicators": "Fiber scope inspection, dry click-cleaning, re-inspection, power check",
+        "STATUS": "Resolved"
+      },
+      "classified_data": {
+        "ISSUETYPE": {
+          "Value": "4",
+          "Label": "Hardware"
+        },
+        "SUBISSUETYPE": {
+          "Value": "19",
+          "Label": "Cabling"
+        },
+        "TICKETCATEGORY": {
+          "Value": "3",
+          "Label": "Standard"
+        },
+        "TICKETTYPE": {
+          "Value": "2",
+          "Label": "Incident"
+        },
+        "STATUS": {
+          "Value": "5",
+          "Label": "Complete"
+        },
+        "PRIORITY": {
+          "Value": "2",
+          "Label": "Medium"
+        }
+      },
+      "resolution_note": "1. Ferrule Inspection: Disconnect SC/APC jumper and inspect ferrule with 400x digital inspection scope; observe heavy dust contamination.\n2. Dry Cleaning: Clean with IBC 2.5mm click-cleaner and re-inspect to verify IEC 61300-3-35 cleanliness criteria.\n3. Bulkhead Cleaning: Insert click-cleaner into mating bulkhead sleeve to clean internal ferrule interface.\n4. Power Verification: Reconnect jumper; optical return loss recovers to >60 dB and power stabilizes at -19.5 dBm.\n\n\u26a0\ufe0f SAFETY PRECAUTIONS:\n- NEVER LOOK INTO FERRULE: Do not inspect active fiber ends with unshielded direct-view optical loupes. Use only digital video inspection probes.\n- SOLVENT SAFETY: If using isopropyl alcohol, ensure 99% electronic grade and allow complete evaporation to prevent vapor combustion."
+    },
+    "similar_tickets_found": []
+  },
+  {
+    "new_ticket": {
+      "name": "Sharon O'Neill",
+      "description": "Newly installed premise ONT cannot obtain WAN IP or SIP telephony credentials from Calix Compass ACS server due to typographical error in FSAN serial number.",
+      "title": "Calix Compass TR-069 ACS Automated Profile Provisioning Failure",
+      "date": "2026-05-14",
+      "time": "18:00:00",
+      "due_date": "2026-05-19",
+      "priority": "Medium",
+      "ticket_number": "KB-CTTC-0019",
+      "user_email": "sharon.oneill@sansaba.net",
+      "phone_number": "325-555-0182",
+      "extracted_metadata": {
+        "main_issue": "ONT profile provisioning failure caused by mismatched FSAN serial in ACS",
+        "affected_system": "Calix Compass TR-069 ACS / Subscriber Order System",
+        "urgency_level": "Medium",
+        "error_messages": "TR-069 ACS Registration Failed, Unauthorized ONT",
+        "technical_keywords": [
+          "Compass ACS",
+          "TR-069",
+          "Provisioning",
+          "FSAN Serial",
+          "WAN IP",
+          "SIP Credentials"
+        ],
+        "user_actions": "Field tech requested remote provisioning assistance",
+        "resolution_indicators": "Serial audit, billing record sync, remote OMCI push",
+        "STATUS": "Resolved"
+      },
+      "classified_data": {
+        "ISSUETYPE": {
+          "Value": "5",
+          "Label": "Software/SaaS"
+        },
+        "SUBISSUETYPE": {
+          "Value": "62",
+          "Label": "Service Applications"
+        },
+        "TICKETCATEGORY": {
+          "Value": "3",
+          "Label": "Standard"
+        },
+        "TICKETTYPE": {
+          "Value": "1",
+          "Label": "Service Request"
+        },
+        "STATUS": {
+          "Value": "5",
+          "Label": "Complete"
+        },
+        "PRIORITY": {
+          "Value": "2",
+          "Label": "Medium"
+        }
+      },
+      "resolution_note": "1. Serial Number Audit: Check physical barcode on Calix GP1100X ONT chassis against billing entry; identify swapped character.\n2. ACS Record Update: Correct FSAN serial in Compass TR-069 ACS; bind subscriber service profile (1000M Data + Residential POTS).\n3. OMCI Configuration Push: Trigger remote OMCI push to ONT.\n4. Service Verification: Confirm ONT downloads configuration, acquires WAN IP, and registers VoIP lines successfully.\n\n\u26a0\ufe0f SAFETY PRECAUTIONS:\n- CPNI / PRIVACY PROTECTION: Comply with Customer Proprietary Network Information (CPNI) standards. Never store unencrypted subscriber passwords or credentials in ticket logs.\n- SUBSCRIBER CONFIRMATION: Verify subscriber account authorization prior to updating network routing or telephony service tiers."
+    },
+    "similar_tickets_found": []
+  },
+  {
+    "new_ticket": {
+      "name": "Anant Lad",
+      "description": "Cellular carrier reports cell-tower synchronization drift and call drop rates rising along Highway 190. ACX-7100 PTP grandmaster clock degraded due to moisture in GPS coax connector.",
+      "title": "Mobile Tower Backhaul Synchronization Clock Failure (PTP / IEEE 1588v2)",
+      "date": "2026-05-14",
+      "time": "18:30:00",
+      "due_date": "2026-05-17",
+      "priority": "High",
+      "ticket_number": "KB-CTTC-0020",
+      "user_email": "anantlad66@gmail.com",
+      "phone_number": "325-555-0301",
+      "extracted_metadata": {
+        "main_issue": "PTP clock synchronization drift on mobile carrier backhaul router",
+        "affected_system": "ACX-7100 (Brady CO) / Highway 190 Cell Backhaul",
+        "urgency_level": "High",
+        "error_messages": "PTP Time Offset > 1000ns, GPS Lock Degraded",
+        "technical_keywords": [
+          "PTP",
+          "IEEE 1588v2",
+          "SyncE",
+          "GPS Clock",
+          "Cell-Tower",
+          "Timing Drift"
+        ],
+        "user_actions": "Carrier NOC escalation",
+        "resolution_indicators": "PTP telemetry check, GPS lightning arrestor swap, coaxial reseal",
+        "STATUS": "Resolved"
+      },
+      "classified_data": {
+        "ISSUETYPE": {
+          "Value": "6",
+          "Label": "Network"
+        },
+        "SUBISSUETYPE": {
+          "Value": "64",
+          "Label": "Connectivity/Outages"
+        },
+        "TICKETCATEGORY": {
+          "Value": "3",
+          "Label": "Standard"
+        },
+        "TICKETTYPE": {
+          "Value": "2",
+          "Label": "Incident"
+        },
+        "STATUS": {
+          "Value": "5",
+          "Label": "Complete"
+        },
+        "PRIORITY": {
+          "Value": "1",
+          "Label": "High"
+        }
+      },
+      "resolution_note": "1. Clock Status Query: Query Junos PTP status (`show ptp global-summary`); observe time synchronization offset >1000ns.\n2. Antenna Inspection: Inspect Central Office roof GPS antenna; locate moisture intrusion in N-type coaxial connector.\n3. Hardware Replacement: Replace moisture-damaged connector and lightning arrestor cartridge; weatherproof with vulcanizing tape.\n4. Clock Re-Lock: Verify GPS satellite constellation lock re-acquired; PTP timing offset stabilizes within +/- 12ns tolerance.\n\n\u26a0\ufe0f SAFETY PRECAUTIONS:\n- ROOF & ELEVATION SAFETY: Comply with OSHA 1910.28 roof fall protection regulations; stay at least 15 feet from un-railed roof edges.\n- RF RADIATION HAZARD: De-energize or bypass cellular and microwave transmitter antennas before working within the antenna aperture field."
+    },
+    "similar_tickets_found": []
+  },
+  {
+    "new_ticket": {
+      "name": "Ray Denham",
+      "description": "Subscriber phone line dead; CO switch alarms on metallic loop fault indicating tip-to-ring DC short circuit on premise station wiring in San Saba.",
+      "title": "Premise POTS Loop Voltage Shorted by Rodent Damage to Drop Wire",
+      "date": "2026-05-14",
+      "time": "19:00:00",
+      "due_date": "2026-05-18",
+      "priority": "Medium",
+      "ticket_number": "KB-CTTC-0021",
+      "user_email": "ray.denham@sansaba.net",
+      "phone_number": "325-555-0199",
+      "extracted_metadata": {
+        "main_issue": "Dead telephone line caused by rodent chewed station wire shorting tip and ring",
+        "affected_system": "Premise POTS Copper Station Wiring",
+        "urgency_level": "Medium",
+        "error_messages": "Tip-to-Ring Short Circuit, 0 Ohm Loop Resistance",
+        "technical_keywords": [
+          "POTS",
+          "Tip-to-Ring",
+          "Short Circuit",
+          "Rodent Damage",
+          "Copper Wiring",
+          "Truck Roll"
+        ],
+        "user_actions": "Reported phone dead",
+        "resolution_indicators": "Loop resistance check, crawlspace wire replacement, dial tone test",
+        "STATUS": "Resolved"
+      },
+      "classified_data": {
+        "ISSUETYPE": {
+          "Value": "10",
+          "Label": "Telephony"
+        },
+        "SUBISSUETYPE": {
+          "Value": "55",
+          "Label": "Phone Issue"
+        },
+        "TICKETCATEGORY": {
+          "Value": "3",
+          "Label": "Standard"
+        },
+        "TICKETTYPE": {
+          "Value": "2",
+          "Label": "Incident"
+        },
+        "STATUS": {
+          "Value": "5",
+          "Label": "Complete"
+        },
+        "PRIORITY": {
+          "Value": "2",
+          "Label": "Medium"
+        }
+      },
+      "resolution_note": "1. Resistance Measurement: Measure loop resistance with digital multimeter (0 ohms confirms dead short on tip/ring pair).\n2. Crawlspace Inspection: Inspect crawlspace cabling; locate rodent-chewed station wire shorting bare copper conductors.\n3. Cable Replacement: Replace damaged wiring with UV-rated shielded Cat5e cable enclosed in protective split loom conduit.\n4. Loop Test: Test dial tone and loop voltage (-48V DC nominal); verify incoming call ring trip operation.\n\n\u26a0\ufe0f SAFETY PRECAUTIONS:\n- BIOHAZARD & RESPIRATORY SAFETY: Wear nitrile gloves and HEPA-rated N95 respirator when working in crawlspaces with rodent droppings.\n- DISCONNECT TELEPHONY POWER: Disconnect phone cable from ONT before stripping conductors to avoid 90V AC ring shock."
+    },
+    "similar_tickets_found": []
+  },
+  {
+    "new_ticket": {
+      "name": "Ruchir Chincholkar",
+      "description": "BGP session flapping every 12 minutes between GLDT-CORE-01 and SANG-AGG-01 due to interface MTU mismatch and jumbo frame drops during route table updates.",
+      "title": "BGP Peering Flap between Goldthwaite Core and San Angelo Aggregation",
+      "date": "2026-05-14",
+      "time": "19:30:00",
+      "due_date": "2026-05-16",
+      "priority": "High",
+      "ticket_number": "KB-CTTC-0022",
+      "user_email": "ruchir0311@mail.com",
+      "phone_number": "325-555-0300",
+      "extracted_metadata": {
+        "main_issue": "BGP session flapping caused by interface MTU mismatch on core transport link",
+        "affected_system": "GLDT-CORE-01 / SANG-AGG-01 BGP Peering",
+        "urgency_level": "High",
+        "error_messages": "BGP Hold-Timer Expired, MTU Mismatch, Packet Drops",
+        "technical_keywords": [
+          "BGP Flap",
+          "MTU Mismatch",
+          "Jumbo Frames",
+          "GLDT-CORE-01",
+          "SANG-AGG-01",
+          "Core Routing"
+        ],
+        "user_actions": "NOC telemetry alarm",
+        "resolution_indicators": "Syslog audit, MTU alignment to 9216, ping sweep, BGP stabilization",
+        "STATUS": "Resolved"
+      },
+      "classified_data": {
+        "ISSUETYPE": {
+          "Value": "6",
+          "Label": "Network"
+        },
+        "SUBISSUETYPE": {
+          "Value": "64",
+          "Label": "Connectivity/Outages"
+        },
+        "TICKETCATEGORY": {
+          "Value": "3",
+          "Label": "Standard"
+        },
+        "TICKETTYPE": {
+          "Value": "2",
+          "Label": "Incident"
+        },
+        "STATUS": {
+          "Value": "5",
+          "Label": "Complete"
+        },
+        "PRIORITY": {
+          "Value": "1",
+          "Label": "High"
+        }
+      },
+      "resolution_note": "1. Syslog Audit: Review Junos system logs; observe BGP hold-timer expired on large route update packets.\n2. MTU Query: Check interface MTU settings: GLDT-CORE-01 configured for 9216 bytes, but intermediate transit port was set to 1514 bytes.\n3. MTU Alignment: Align MTU to 9216 bytes jumbo frame standard across all intermediate optical transport ports.\n4. Validation: Verify 9000-byte ICMP ping with 'do-not-fragment' bit set passes with 0% loss; BGP peering session stabilizes.\n\n\u26a0\ufe0f SAFETY PRECAUTIONS:\n- ROUTING STABILITY: Coordinate MTU changes during designated low-traffic window; verify alternate dynamic routes prevent blackholing traffic.\n- AUTOMATED ROLLBACK: Execute Junos configuration changes with `commit confirmed 10` to ensure automatic rollback in case of unexpected disconnect."
+    },
+    "similar_tickets_found": []
+  },
+  {
+    "new_ticket": {
+      "name": "Tom Miller",
+      "description": "Customer guest house Wi-Fi extender completely unpowered following electric utility restoration after thunderstorm in Cherokee.",
+      "title": "Wi-Fi Extender Dead Power Supply following Grid Power Restoration",
+      "date": "2026-05-14",
+      "time": "20:00:00",
+      "due_date": "2026-05-18",
+      "priority": "Medium",
+      "ticket_number": "KB-CTTC-0023",
+      "user_email": "tom.miller@goldthwaite.net",
+      "phone_number": "325-555-0288",
+      "extracted_metadata": {
+        "main_issue": "Extender power adapter blown by grid reconnection inductive voltage spike",
+        "affected_system": "Premise Wi-Fi Extender Power Brick",
+        "urgency_level": "Medium",
+        "error_messages": "Extender Unpowered, 0V Output, Blown Adapter",
+        "technical_keywords": [
+          "Wifi Ext Not Working",
+          "Power Supply",
+          "Surge Spike",
+          "Replaced Controller",
+          "Truck Roll"
+        ],
+        "user_actions": "Plugged into different outlet",
+        "resolution_indicators": "Outlet test, adapter replacement, surge strip installation, speed test",
+        "STATUS": "Resolved"
+      },
+      "classified_data": {
+        "ISSUETYPE": {
+          "Value": "4",
+          "Label": "Hardware"
+        },
+        "SUBISSUETYPE": {
+          "Value": "21",
+          "Label": "Wireless"
+        },
+        "TICKETCATEGORY": {
+          "Value": "3",
+          "Label": "Standard"
+        },
+        "TICKETTYPE": {
+          "Value": "2",
+          "Label": "Incident"
+        },
+        "STATUS": {
+          "Value": "5",
+          "Label": "Complete"
+        },
+        "PRIORITY": {
+          "Value": "2",
+          "Label": "Medium"
+        }
+      },
+      "resolution_note": "1. AC Voltage Test: Measure wall outlet voltage (120V AC confirmed operational).\n2. Adapter Output Measurement: Measure 12V 1.5A power brick DC output with multimeter (0V output indicates blown internal thermal fuse).\n3. Power Supply Swap: Replace power brick with new OEM power supply; extender boots up and locks green connection LED.\n4. Speed Test: Execute speed test in guest house confirming 240 Mbps download speed.\n\n\u26a0\ufe0f SAFETY PRECAUTIONS:\n- DAMAGED EQUIPMENT SAFETY: Check adapter casing for swelling or smell of burnt electronics before plugging in replacements.\n- SURGE PROTECTION: Connect equipment to an auxiliary surge protection strip to protect against future grid reconnection voltage spikes."
+    },
+    "similar_tickets_found": []
+  },
+  {
+    "new_ticket": {
+      "name": "Sarah Jenkins",
+      "description": "Small business customer unable to access premise network storage (NAS) after upgrading to CTTC fiber; needs assistance configuring static IP reservation.",
+      "title": "Computer Setup & Static IP Reservation for Network Attached Storage",
+      "date": "2026-05-14",
+      "time": "20:30:00",
+      "due_date": "2026-05-20",
+      "priority": "Low",
+      "ticket_number": "KB-CTTC-0024",
+      "user_email": "sarah.jenkins@bigvalley.net",
+      "phone_number": "325-555-0377",
+      "extracted_metadata": {
+        "main_issue": "Customer needs DHCP static IP reservation configured for premise NAS unit",
+        "affected_system": "Premise Gateway LAN DHCP / Network Attached Storage",
+        "urgency_level": "Low",
+        "error_messages": "Network Path Not Found, IP Address Conflict",
+        "technical_keywords": [
+          "Need Help Setting Up Device",
+          "Static IP",
+          "DHCP Reservation",
+          "NAS",
+          "LAN",
+          "Truck Roll"
+        ],
+        "user_actions": "Unable to map network drive",
+        "resolution_indicators": "Router login, MAC address binding, subnet verification, map drive test",
+        "STATUS": "Resolved"
+      },
+      "classified_data": {
+        "ISSUETYPE": {
+          "Value": "5",
+          "Label": "Software/SaaS"
+        },
+        "SUBISSUETYPE": {
+          "Value": "199",
+          "Label": "LAN"
+        },
+        "TICKETCATEGORY": {
+          "Value": "3",
+          "Label": "Standard"
+        },
+        "TICKETTYPE": {
+          "Value": "1",
+          "Label": "Service Request"
+        },
+        "STATUS": {
+          "Value": "5",
+          "Label": "Complete"
+        },
+        "PRIORITY": {
+          "Value": "3",
+          "Label": "Low"
+        }
+      },
+      "resolution_note": "1. Router Admin Access: Log into router LAN management portal at 192.168.1.1.\n2. MAC Address Identification: Identify NAS device MAC address in active DHCP client lease table.\n3. Reservation Binding: Configure static DHCP reservation binding IP 192.168.1.150 to NAS MAC address.\n4. Drive Mapping: Re-map network drive (\\\\192.168.1.150\\Share) on customer workstations and verify read/write access.\n\n\u26a0\ufe0f SAFETY PRECAUTIONS:\n- CYBERSECURITY ACCESS CONTROL: Change default gateway admin password to a strong 16-character alphanumeric passphrase.\n- SUBNET CONFLICT PREVENTION: Ensure reserved static IP is outside the dynamic DHCP allocation range to prevent IP address conflict collisions."
+    },
+    "similar_tickets_found": []
+  },
+  {
+    "new_ticket": {
+      "name": "Sharon O'Neill",
+      "description": "Residential customer in San Saba experiences dropped phone calls every few minutes; phone line cuts off during slight wind or touch to outdoor NID enclosure.",
+      "title": "Telephone Line Cuts Off & On - Loose NID Binding Post Screw",
+      "date": "2026-05-14",
+      "time": "21:00:00",
+      "due_date": "2026-05-18",
+      "priority": "Medium",
+      "ticket_number": "KB-CTTC-0025",
+      "user_email": "sharon.oneill@sansaba.net",
+      "phone_number": "325-555-0182",
+      "extracted_metadata": {
+        "main_issue": "Intermittent telephone disconnects caused by oxidized copper and loose binding post screw in outdoor NID",
+        "affected_system": "Outdoor NID Enclosure / POTS Binding Post",
+        "urgency_level": "Medium",
+        "error_messages": "Intermittent Audio, Dropped Calls, Line Noise",
+        "technical_keywords": [
+          "Tele Cuts Off & On",
+          "NID",
+          "Binding Post",
+          "Loose Connection",
+          "POTS",
+          "Truck Roll"
+        ],
+        "user_actions": "Reported intermittent call drops",
+        "resolution_indicators": "NID inspection, wire strip and polish, binding post torque, continuous call test",
+        "STATUS": "Resolved"
+      },
+      "classified_data": {
+        "ISSUETYPE": {
+          "Value": "10",
+          "Label": "Telephony"
+        },
+        "SUBISSUETYPE": {
+          "Value": "55",
+          "Label": "Phone Issue"
+        },
+        "TICKETCATEGORY": {
+          "Value": "3",
+          "Label": "Standard"
+        },
+        "TICKETTYPE": {
+          "Value": "2",
+          "Label": "Incident"
+        },
+        "STATUS": {
+          "Value": "5",
+          "Label": "Complete"
+        },
+        "PRIORITY": {
+          "Value": "2",
+          "Label": "Medium"
+        }
+      },
+      "resolution_note": "1. Enclosure Inspection: Open outdoor NID box on side of residence; inspect POTS copper screw terminals.\n2. Defect Identification: Locate oxidized tip wire and loose binding post screw vibrating in wind.\n3. Re-Termination: Strip back 1 inch of fresh copper, apply dielectric anti-corrosion grease, and securely torque binding screw.\n4. Call Stability Test: Place 10-minute continuous test call to Central Office switchboard; zero audio dropouts observed.\n\n\u26a0\ufe0f SAFETY PRECAUTIONS:\n- OUTDOOR ENCLOSURE INSECT SAFETY: Outdoor NID boxes frequently shelter stinging wasps, yellow jackets, or scorpions. Tap the enclosure gently before opening and stand back.\n- POTS VOLTAGE HAZARD: Avoid touching bare tip and ring wires simultaneously; 90V ringing voltage can cause unexpected electrical shock."
+    },
+    "similar_tickets_found": []
+  },
+  {
+    "new_ticket": {
       "name": "shubham",
       "description": "showing blue screen on laptop and two  - three options  are showing troubleshoot and other options",
       "title": "blue screen error on laptop",

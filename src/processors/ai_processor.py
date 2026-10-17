@@ -240,33 +240,41 @@ class AIProcessor:
             summary_str += f"{field}: {info['Value']} (Label: {label}, appeared {info['Count']} times)\n"
 
         classification_prompt = f"""
-        You are an expert IT support ticket classifier. Analyze the ticket content carefully and classify it based on what the issue is actually about.
+        You are an expert IT and Telecommunications support ticket classifier. Analyze the ticket content carefully and classify it based on technical domain, affected system, and standard Autotask reference data.
 
-        **CRITICAL CLASSIFICATION RULES:**
-        1. **Content-First Analysis**: Base your classification PRIMARILY on the ticket title, description, and extracted metadata
-        2. **Logical Categorization**:
-           - Software applications (Teams, Office, browsers, etc.) → TICKETCATEGORY: Software/SaaS
-           - Hardware devices (printers, computers, phones) → TICKETCATEGORY: Hardware
-           - Network connectivity, WiFi, internet → TICKETCATEGORY: Network
-           - Email, Exchange, Outlook → TICKETCATEGORY: Email/Communication
-           - Security, passwords, access → TICKETCATEGORY: Security
-        3. **Ignore Misleading Patterns**: Do NOT be influenced by potentially incorrect historical classifications
+        **CRITICAL CLASSIFICATION MAPPINGS (Conform strictly to reference data):**
+        1. **ISSUETYPE (What technology domain is impacted?):**
+           - Premise ONT, Power Adapter (Wall Wart), Wi-Fi Controller, Router hardware, PC, Printer → ISSUETYPE: Hardware
+           - Fiber optics, 400G optic, Core Router (MX960), Aggregation (MX304, ACX), BGP, ERPS, Internet connectivity, OLT, VLAN/QinQ → ISSUETYPE: Network
+           - Landline dead, No dial tone, POTS line, Voice echo, VoIP delay, Jitter, SIP → ISSUETYPE: Telephony
+           - Business applications, TR-069 ACS server, operating system, software → ISSUETYPE: Software/SaaS
+           - Outlook, Exchange, email issues → ISSUETYPE: Email
+           - Security incidents, unauthorized access, breaches → ISSUETYPE: Cybersecurity Intrusion
 
-        **Classification Fields:**
-        - **ISSUETYPE** → Type of request (Incident=something broken, Request=asking for something, Problem=recurring issue, Change=modification)
-        - **SUBISSUETYPE** → Specific sub-category within the issue type
-        - **TICKETCATEGORY** → What system/area is affected (Software, Hardware, Network, Security, etc.)
-        - **TICKETTYPE** → Service Request, Incident, Problem, Change Request, or Task
-        - **PRIORITY** → Urgency level based on business impact and user-specified priority
-        - **STATUS** → Always "Open" for new tickets
+        2. **SUBISSUETYPE (Specific sub-domain):**
+           - Total outage, internet down, packet loss, fiber cuts, carrier dropouts → SUBISSUETYPE: Connectivity/Outages
+           - Optical drop jumper, bulkhead, cabling, wiring faults → SUBISSUETYPE: Cabling
+           - Wi-Fi extender, mesh satellite, AP coverage, WPS pairing → SUBISSUETYPE: Wireless
+           - POTS telephone dead, dial tone loss, line static/hum → SUBISSUETYPE: Phone Issue
+           - Voice latency, audio echo, VoIP jitter, SIP codec → SUBISSUETYPE: VOIP Connection/Latency
+           - Premise ONT equipment unit, modem → SUBISSUETYPE: Modem
+           - Core chassis, fan trays, cooling, workstations → SUBISSUETYPE: Workstation
 
-        **ANALYSIS STEPS:**
-        1. Read the ticket title and description carefully
-        2. Identify what system/application/hardware is mentioned
-        3. Determine if it's broken (Incident) or a request for something (Request)
-        4. Choose the category that matches the affected system
-        5. Set appropriate priority based on impact and urgency
- 
+        3. **TICKETCATEGORY:**
+           - General operational and field dispatch tickets → TICKETCATEGORY: Standard
+           - Automated network monitoring telemetry alarms → TICKETCATEGORY: Standard or AEM Alert
+
+        4. **TICKETTYPE:**
+           - Broken service, outage, equipment failure, degraded quality → TICKETTYPE: Incident
+           - New equipment setup, static IP request, provisioning assistance → TICKETTYPE: Service Request
+           - Recurring architectural vulnerability, SPOF, chronic defects → TICKETTYPE: Problem
+           - Scheduled software upgrade, firmware maintenance window → TICKETTYPE: Change Request
+
+        5. **PRIORITY:**
+           - Total service outage, core transport link down, cell tower drops → Critical or High
+           - Intermittent connection, degraded performance, voice echo → Medium
+           - General setup assistance, cosmetic questions → Low
+
         ---
  
         **New Ticket Information**  
@@ -316,24 +324,6 @@ class AIProcessor:
 
         classification_prompt += """
 
-**CLASSIFICATION INSTRUCTIONS:**
-
-1. **ANALYZE THE TICKET CONTENT FIRST**: Look at the title, description, and extracted metadata to understand what the issue is actually about.
-
-2. **CHOOSE THE CORRECT CATEGORY**: Based on the content analysis:
-   - If it mentions software applications (Teams, Office, browsers, etc.) → TICKETCATEGORY should be "Software/SaaS"
-   - If it mentions hardware (printers, computers, phones) → TICKETCATEGORY should be "Hardware"
-   - If it mentions network/connectivity → TICKETCATEGORY should be "Network"
-   - If it mentions email/communication → TICKETCATEGORY should be "Email" or similar
-
-3. **DETERMINE ISSUE TYPE**:
-   - If something is broken/not working → ISSUETYPE: "Incident"
-   - If user is requesting something → ISSUETYPE: "Request"
-
-4. **USE AVAILABLE OPTIONS**: Select from the provided classification options that best match your analysis.
-
-5. **HISTORICAL CONTEXT**: Use similar tickets only as secondary reference, not as the primary decision factor.
-
 **OUTPUT FORMAT**: Provide classification in JSON format with both Value (numerical ID) and Label from the available options.
 
 JSON Schema:
@@ -353,13 +343,8 @@ JSON Schema:
         # Handle case where LLM returns None
         if not classified_data:
             print("LLM classification failed, using intelligent content-based fallback classification")
-
-            # Intelligent fallback based on ticket content analysis
             classified_data = self._intelligent_fallback_classification(new_ticket_data, extracted_metadata, summary)
         else:
-            # Validate the LLM's PRIORITY: an empty or unrecognized label would
-            # otherwise be persisted verbatim and rendered as "UNKNOWN" on the
-            # ticket pages. Recover from the user-set priority / similar tickets.
             llm_priority = classified_data.get("PRIORITY")
             resolved_priority = None
             if isinstance(llm_priority, dict):
@@ -378,79 +363,85 @@ JSON Schema:
 
     def _intelligent_fallback_classification(self, ticket_data: Dict, extracted_metadata: Dict, summary: Dict) -> Dict:
         """
-        Intelligent fallback classification based on content analysis when LLM fails
+        Intelligent fallback classification based on telecom/IT content analysis when LLM fails
         """
-        # Analyze ticket content
         title = ticket_data.get('title', '').lower()
         description = ticket_data.get('description', '').lower()
-        main_issue = extracted_metadata.get('main_issue', '').lower()
-        affected_system = extracted_metadata.get('affected_system', '').lower()
+        main_issue = str(extracted_metadata.get('main_issue', '')).lower()
+        affected_system = str(extracted_metadata.get('affected_system', '')).lower()
+        keywords = str(extracted_metadata.get('technical_keywords', '')).lower()
 
-        # Combine all text for analysis
-        all_text = f"{title} {description} {main_issue} {affected_system}"
-
-        # Content-based classification logic
+        all_text = f"{title} {description} {main_issue} {affected_system} {keywords}"
         classified_data = {}
 
-        # Determine TICKETCATEGORY based on content
-        if any(keyword in all_text for keyword in ['teams', 'office', 'software', 'application', 'app', 'saas', 'browser', 'outlook']):
-            category_value = self._find_value_by_label("ticketcategory", "Software/SaaS") or self._find_value_by_label("ticketcategory", "Software")
-            classified_data["TICKETCATEGORY"] = {"Value": category_value, "Label": "Software/SaaS"}
-        elif any(keyword in all_text for keyword in ['printer', 'computer', 'laptop', 'hardware', 'device', 'phone']):
-            category_value = self._find_value_by_label("ticketcategory", "Hardware") or self._find_value_by_label("ticketcategory", "Printer")
-            classified_data["TICKETCATEGORY"] = {"Value": category_value, "Label": "Hardware"}
-        elif any(keyword in all_text for keyword in ['network', 'wifi', 'internet', 'connectivity', 'connection']):
-            category_value = self._find_value_by_label("ticketcategory", "Network")
-            classified_data["TICKETCATEGORY"] = {"Value": category_value, "Label": "Network"}
-        elif any(keyword in all_text for keyword in ['email', 'exchange', 'mail']):
-            category_value = self._find_value_by_label("ticketcategory", "Email")
-            classified_data["TICKETCATEGORY"] = {"Value": category_value, "Label": "Email"}
+        # 1. Determine ISSUETYPE
+        if any(w in all_text for w in ['tele', 'phone', 'pots', 'dial tone', 'voice', 'echo', 'delay', 'call']):
+            val = self._find_value_by_label("issuetype", "Telephony") or "10"
+            classified_data["ISSUETYPE"] = {"Value": val, "Label": "Telephony"}
+        elif any(w in all_text for w in ['fiber', 'optic', '400g', 'core', 'uplink', 'erps', 'bgp', 'qinq', 'evpn', 'olt', 'network', 'outage', 'circuit']):
+            val = self._find_value_by_label("issuetype", "Network") or "6"
+            classified_data["ISSUETYPE"] = {"Value": val, "Label": "Network"}
+        elif any(w in all_text for w in ['ont', 'wall wart', 'power supply', 'adapter', 'hardware', 'controller', 'router', 'printer', 'laptop', 'device']):
+            val = self._find_value_by_label("issuetype", "Hardware") or "4"
+            classified_data["ISSUETYPE"] = {"Value": val, "Label": "Hardware"}
+        elif any(w in all_text for w in ['email', 'outlook', 'exchange', 'mail']):
+            val = self._find_value_by_label("issuetype", "Email") or "15"
+            classified_data["ISSUETYPE"] = {"Value": val, "Label": "Email"}
         else:
-            # Use most common from similar tickets or default
-            if "TICKETCATEGORY" in summary:
-                label = self.reference_data.get('ticketcategory', {}).get(str(summary["TICKETCATEGORY"]["Value"]), "Unknown")
-                classified_data["TICKETCATEGORY"] = {"Value": summary["TICKETCATEGORY"]["Value"], "Label": label}
-            else:
-                # Default to Software/SaaS for unknown issues
-                category_value = self._find_value_by_label("ticketcategory", "Software/SaaS") or "5"
-                classified_data["TICKETCATEGORY"] = {"Value": category_value, "Label": "Software/SaaS"}
+            val = self._find_value_by_label("issuetype", "Hardware") or "4"
+            classified_data["ISSUETYPE"] = {"Value": val, "Label": "Hardware"}
 
-        # Determine ISSUETYPE (Incident vs Request)
-        if any(keyword in all_text for keyword in ['not working', 'broken', 'error', 'issue', 'problem', 'down', 'failed', 'not responding']):
-            issue_value = self._find_value_by_label("issuetype", "Incident") or "1"
-            classified_data["ISSUETYPE"] = {"Value": issue_value, "Label": "Incident"}
+        # 2. Determine SUBISSUETYPE
+        if any(w in all_text for w in ['dial tone', 'dead phone', 'line static', 'noisy line', 'cuts off']):
+            val = self._find_value_by_label("subissuetype", "Phone Issue") or "55"
+            classified_data["SUBISSUETYPE"] = {"Value": val, "Label": "Phone Issue"}
+        elif any(w in all_text for w in ['voice delay', 'echo', 'voip', 'jitter', 'latency']):
+            val = self._find_value_by_label("subissuetype", "VOIP Connection/Latency") or "181"
+            classified_data["SUBISSUETYPE"] = {"Value": val, "Label": "VOIP Connection/Latency"}
+        elif any(w in all_text for w in ['wifi', 'wireless', 'extender', 'mesh', 'ssid', 'wps']):
+            val = self._find_value_by_label("subissuetype", "Wireless") or "21"
+            classified_data["SUBISSUETYPE"] = {"Value": val, "Label": "Wireless"}
+        elif any(w in all_text for w in ['cable', 'cabling', 'bulkhead', 'connector', 'jumper', 'drop wire', 'sc/apc']):
+            val = self._find_value_by_label("subissuetype", "Cabling") or "19"
+            classified_data["SUBISSUETYPE"] = {"Value": val, "Label": "Cabling"}
+        elif any(w in all_text for w in ['ont', 'modem', 'gateway']):
+            val = self._find_value_by_label("subissuetype", "Modem") or "200"
+            classified_data["SUBISSUETYPE"] = {"Value": val, "Label": "Modem"}
+        elif any(w in all_text for w in ['outage', 'down', 'fiber cut', 'break', 'severed', 'flapping']):
+            val = self._find_value_by_label("subissuetype", "Connectivity/Outages") or "64"
+            classified_data["SUBISSUETYPE"] = {"Value": val, "Label": "Connectivity/Outages"}
         else:
-            issue_value = self._find_value_by_label("issuetype", "Request") or "2"
-            classified_data["ISSUETYPE"] = {"Value": issue_value, "Label": "Request"}
+            val = self._find_value_by_label("subissuetype", "Connectivity/Outages") or "64"
+            classified_data["SUBISSUETYPE"] = {"Value": val, "Label": "Connectivity/Outages"}
 
-        # Set other fields with intelligent defaults
-        for field in ["SUBISSUETYPE", "TICKETTYPE", "PRIORITY"]:
-            # Similar tickets may store either the numeric Value or the Label;
-            # resolve both forms so we never persist an "Unknown" label.
-            resolved = self._resolve_reference(field.lower(), summary[field]["Value"]) if field in summary else None
+        # 3. Determine TICKETCATEGORY (Standard = 3)
+        cat_val = self._find_value_by_label("ticketcategory", "Standard") or "3"
+        classified_data["TICKETCATEGORY"] = {"Value": cat_val, "Label": "Standard"}
 
-            if field == "PRIORITY":
-                # Honor the user-set priority first, then similar tickets, then Medium.
-                classified_data[field] = self._resolve_priority(ticket_data, summary)
-            elif resolved:
-                classified_data[field] = resolved
-            else:
-                # Set reasonable defaults
-                if field == "SUBISSUETYPE":
-                    classified_data[field] = {"Value": "N/A", "Label": "N/A"}
-                elif field == "TICKETTYPE":
-                    type_value = self._find_value_by_label("tickettype", "Incident") or "2"
-                    classified_data[field] = {"Value": type_value, "Label": "Incident"}
+        # 4. Determine TICKETTYPE
+        if any(w in all_text for w in ['setup', 'help setting up', 'configure', 'request', 'install', 'static ip']):
+            type_val = self._find_value_by_label("tickettype", "Service Request") or "1"
+            classified_data["TICKETTYPE"] = {"Value": type_val, "Label": "Service Request"}
+        elif any(w in all_text for w in ['spof', 'single point of failure', 'vulnerability', 'chronic']):
+            type_val = self._find_value_by_label("tickettype", "Problem") or "3"
+            classified_data["TICKETTYPE"] = {"Value": type_val, "Label": "Problem"}
+        else:
+            type_val = self._find_value_by_label("tickettype", "Incident") or "2"
+            classified_data["TICKETTYPE"] = {"Value": type_val, "Label": "Incident"}
 
-        # Always set STATUS to Open
-        status_value = self._find_value_by_label("status", "Open") or "1"
-        classified_data["STATUS"] = {"Value": status_value, "Label": "Open"}
+        # 5. PRIORITY
+        classified_data["PRIORITY"] = self._resolve_priority(ticket_data, summary)
+
+        # 6. STATUS (Open = 1)
+        status_val = self._find_value_by_label("status", "New") or "1"
+        classified_data["STATUS"] = {"Value": status_val, "Label": "New"}
 
         print("Applied intelligent content-based fallback classification:")
         for field, value in classified_data.items():
             print(f"  {field}: {value['Value']} ({value['Label']})")
 
         return classified_data
+
 
     def generate_resolution_note(self, ticket_data: Dict, classified_data: Dict,
                                 extracted_metadata: Dict) -> str:

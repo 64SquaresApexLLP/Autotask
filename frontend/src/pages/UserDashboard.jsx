@@ -114,10 +114,12 @@ const UserDashboard = () => {
       setAiPipelineSubmitted({ title: formData.title, description: formData.description });
       setAiPipelineOpen(true);
 
+      const defaultDueDate = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
       const ticketData = {
         ...formData,
-        user_email: formData.user_email || user?.email || user?.username,
-        requester_name: formData.requester_name || user?.full_name || user?.username,
+        due_date: formData.due_date || defaultDueDate,
+        user_email: formData.user_email || user?.email || user?.username || 'customer@cttc.net',
+        requester_name: formData.requester_name || user?.full_name || user?.username || 'Customer',
         phone_number: formData.phone_number || user?.phone_number || user?.phone || ''
       };
 

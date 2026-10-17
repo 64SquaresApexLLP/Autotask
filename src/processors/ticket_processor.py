@@ -156,12 +156,14 @@ class TicketProcessor:
 
         # Define technical keyword categories
         keywords = {
+            'telecom_isp': ['ont', 'olt', 'calix', 'gp1100x', 'wall wart', 'truck roll', 'dial tone', 'pots', 'voip', 'jitter', 'latency', 'bng', 'tr-069', 'acs', 'e7-2', 'compass'],
+            'optical_network': ['fiber', 'optic', '400g-zr', 'coherent', 'transceiver', 'qsfp-dd', 'otdr', 'macro-bend', 'attenuation', 'splitter', 'fdh', 'sc/apc', 'erps', 'evpn', 'qinq', 'juniper', 'mx960', 'mx304', 'acx', 'los'],
             'applications': ['outlook', 'excel', 'word', 'powerpoint', 'teams', 'chrome', 'firefox', 'safari', 'edge'],
             'systems': ['windows', 'mac', 'linux', 'server', 'database', 'sql', 'oracle', 'mysql'],
-            'network': ['wifi', 'ethernet', 'vpn', 'firewall', 'router', 'switch', 'dns', 'dhcp'],
-            'hardware': ['printer', 'monitor', 'keyboard', 'mouse', 'laptop', 'desktop', 'hard drive', 'memory'],
-            'errors': ['error', 'crash', 'freeze', 'slow', 'timeout', 'connection', 'failed', 'denied'],
-            'actions': ['login', 'password', 'access', 'install', 'update', 'backup', 'restore', 'sync']
+            'network': ['wifi', 'ethernet', 'vpn', 'firewall', 'router', 'switch', 'dns', 'dhcp', 'gateway', 'mesh', 'extender'],
+            'hardware': ['printer', 'monitor', 'keyboard', 'mouse', 'laptop', 'desktop', 'hard drive', 'memory', 'power supply', 'adapter'],
+            'errors': ['error', 'crash', 'freeze', 'slow', 'timeout', 'connection', 'failed', 'denied', 'flapping', 'echo', 'attenuated'],
+            'actions': ['login', 'password', 'access', 'install', 'update', 'backup', 'restore', 'sync', 'replaced ont', 'replaced wall wart', 'replaced controller']
         }
 
         found_keywords = {}

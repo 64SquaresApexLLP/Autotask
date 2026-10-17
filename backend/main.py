@@ -3022,9 +3022,20 @@ def create_ticket(request: TicketCreateRequest):
         # Use agentic workflow to process and create ticket
         print(f"🚀 Starting agentic workflow for ticket: {request.title}")
 
+        # Ensure due_date is calculated from SLA if missing or empty
+        if not request.due_date or not str(request.due_date).strip():
+            p_days = {'critical': 1, 'high': 2, 'medium': 5, 'low': 7}.get(str(request.priority or 'medium').lower(), 5)
+            request.due_date = (datetime.now() + timedelta(days=p_days)).strftime("%Y-%m-%d")
+
+        if not request.requester_name or not str(request.requester_name).strip():
+            request.requester_name = "Customer"
+
+        if not request.user_email or not str(request.user_email).strip():
+            request.user_email = "customer@cttc.net"
+
         # Process the ticket through the complete agentic workflow
         result = intake_agent.process_new_ticket(
-            ticket_name=request.requester_name or "Anonymous",
+            ticket_name=request.requester_name,
             ticket_description=request.description,
             ticket_title=request.title,
             due_date=request.due_date,
@@ -3053,25 +3064,21 @@ def create_ticket(request: TicketCreateRequest):
         # Insert into Snowflake TICKETS table
         print(f"💾 Inserting ticket {ticket_number} into database")
 
-        # Extract technician email from assignment result
-        technician_email = ""
-        if assignment:
-            # Check if assignment_result is nested
-            if "assignment_result" in assignment:
-                technician_email = assignment["assignment_result"].get("technician_email", "")
-            else:
-                technician_email = assignment.get("technician_email", "")
+        # Extract technician email and ID from assignment result
+        assignment_info = assignment.get("assignment_result", assignment) if isinstance(assignment, dict) else {}
+        technician_email = assignment_info.get("technician_email", "")
+        technician_id = assignment_info.get("technician_id")
+        assigned_technician_name = assignment_info.get("assigned_technician", "")
 
-        print(f"🔍 Technician email to save: '{technician_email}'")
+        print(f"🔍 Technician to save - Email: '{technician_email}', ID: '{technician_id}', Name: '{assigned_technician_name}'")
 
         # Ensure TECHNICIAN_ID column exists in TICKETS table
         ensure_technician_id_column()
 
-        # Get TECHNICIAN_ID from email if technician is assigned
-        technician_id = None
-        if technician_email:
+        # Get TECHNICIAN_ID from email if not already present
+        if not technician_id and technician_email:
             technician_id = get_technician_id_from_email(technician_email)
-            print(f"🔍 Technician ID: '{technician_id}'")
+            print(f"🔍 Looked up Technician ID from email: '{technician_id}'")
 
         def sanitize_similar_tickets(raw_similar_tickets):
             """Reduce raw Snowflake rows to a small, JSON-safe summary for the frontend."""
@@ -3199,8 +3206,8 @@ def create_ticket(request: TicketCreateRequest):
             description=request.description,
             due_date=request.due_date,
             priority=priority,
-            assigned_technician=assignment.get("assigned_technician", ""),
-            technician_email=assignment.get("technician_email", ""),
+            assigned_technician=assigned_technician_name or (technician_id or ""),
+            technician_email=technician_email,
             technician_id=technician_id,
             phone_number=request.phone_number,
             issue_type=issue_type,

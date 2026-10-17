@@ -85,3 +85,33 @@ frontend/build/
 # Vite cache
 
 .vite/
+
+# Scratch & local temporary files
+scratch/
+.pytest_cache/
+
+# Backups
+*.bak
+*.backup
+*.backup.*
+data/*.backup*.json
+
+# Sensitive mock data
+data/CTTC_MOCK_TECHNICIAN_DATA.csv
+
+# Ad-hoc audit, testing, and verification scripts
+scripts/test_*.py
+!scripts/test_assignment_flow.py
+scripts/verify_*.py
+scripts/audit_*.py
+scripts/backup_*.py
+scripts/check_*.py
+scripts/analyze_*.py
+scripts/dump_*.py
+scripts/reconcile_*.py
+scripts/remediate_*.py
+scripts/clean_and_seed_*.py
+scripts/generate_cttc_portal_*.py
+scripts/order_tickets.py
+scripts/update_knowledgebase.py
+scripts/enrich_knowledgebase_cttc_truckroll.py

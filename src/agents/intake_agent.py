@@ -5,9 +5,22 @@ This is the main class that provides the same interface as the original monolith
 
 import json
 import os
+import re
+import sys
 import threading
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
+
+if hasattr(sys.stdout, 'reconfigure'):
+    try:
+        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+    except Exception:
+        pass
+if hasattr(sys.stderr, 'reconfigure'):
+    try:
+        sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+    except Exception:
+        pass
 
 from src.database import SnowflakeConnection
 from src.data import DataManager
@@ -378,8 +391,8 @@ class IntakeClassificationAgent:
             list: List of similar tickets ordered by semantic similarity score (highest first)
         """
         if not self.db_connection.conn:
-            print("Not connected to Snowflake. Please check connection.")
-            return []
+            print("Not connected to Snowflake. Falling back to local knowledgebase.json...")
+            return self._find_similar_tickets_local_kb(title, description, top_n)
 
         new_ticket_text = f"{title.strip()} {description.strip()}".strip()
 
@@ -398,6 +411,7 @@ class IntakeClassificationAgent:
             SUBISSUETYPE,
             PRIORITY,
             STATUS,
+            RESOLUTION,
             VECTOR_COSINE_SIMILARITY(
                 SNOWFLAKE.CORTEX.EMBED_TEXT_768(
                     'e5-base-v2',
@@ -405,17 +419,23 @@ class IntakeClassificationAgent:
                 ),
                 SNOWFLAKE.CORTEX.EMBED_TEXT_768('e5-base-v2', '{escaped_ticket_text}')
             ) AS SIMILARITY_SCORE
-        FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS
-        WHERE TITLE IS NOT NULL
-        AND DESCRIPTION IS NOT NULL
-        AND TRIM(TITLE) != ''
+        FROM (
+            SELECT TICKETNUMBER, TITLE, DESCRIPTION, ISSUETYPE, SUBISSUETYPE, PRIORITY, STATUS, RESOLUTION
+            FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_CLOSED_TICKETS
+            WHERE TITLE IS NOT NULL AND DESCRIPTION IS NOT NULL
+            UNION ALL
+            SELECT TICKETNUMBER, TITLE, DESCRIPTION, ISSUETYPE, SUBISSUETYPE, PRIORITY, STATUS, RESOLUTION
+            FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS
+            WHERE TITLE IS NOT NULL AND DESCRIPTION IS NOT NULL
+        ) combined_tickets
+        WHERE TRIM(TITLE) != ''
         AND TRIM(DESCRIPTION) != ''
         AND LENGTH(TRIM(TITLE || ' ' || DESCRIPTION)) > 10
         ORDER BY SIMILARITY_SCORE DESC
         LIMIT {min(top_n, 10)}
         """
 
-        print(f"Searching for top {min(top_n, 10)} semantically similar tickets using Snowflake Cortex AI...")
+        print(f"Searching for top {min(top_n, 10)} semantically similar tickets across active and closed knowledgebase...")
         print(f"New ticket text: '{new_ticket_text[:100]}{'...' if len(new_ticket_text) > 100 else ''}'")
 
         try:
@@ -450,10 +470,10 @@ class IntakeClassificationAgent:
                     return filtered_results
                 else:
                     print(f"No tickets met minimum similarity threshold of {min_similarity_threshold}")
-                    return []
+                    return self._find_similar_tickets_keyword_fallback(title, description, top_n)
             else:
-                print("No similar tickets found using semantic similarity")
-                return []
+                print("No similar tickets found using semantic similarity; trying keyword fallback...")
+                return self._find_similar_tickets_keyword_fallback(title, description, top_n)
 
         except Exception as e:
             print(f"Error in semantic similarity search: {e}")
@@ -462,8 +482,7 @@ class IntakeClassificationAgent:
 
     def _find_similar_tickets_keyword_fallback(self, title: str, description: str, top_n: int = 10) -> List[Dict]:
         """
-        Keyword-based similar-ticket search used when Cortex's AI_SIMILARITY
-        function is unavailable on this Snowflake account/region.
+        Keyword-based similar-ticket search across Snowflake and local knowledgebase.json.
         """
         stopwords = {
             "the", "a", "an", "is", "are", "was", "were", "in", "on", "at", "to",
@@ -475,7 +494,7 @@ class IntakeClassificationAgent:
         keywords = [w for w in dict.fromkeys(words) if len(w) > 3 and w not in stopwords][:8]
 
         if not keywords:
-            return []
+            return self._find_similar_tickets_local_kb(title, description, top_n)
 
         escaped_keywords = [kw.replace("'", "''") for kw in keywords]
         conditions = " OR ".join(
@@ -484,19 +503,84 @@ class IntakeClassificationAgent:
         )
         query = f"""
         SELECT TICKETNUMBER, TITLE, DESCRIPTION, ISSUETYPE, SUBISSUETYPE, PRIORITY, STATUS, RESOLUTION
-        FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS
-        WHERE TITLE IS NOT NULL AND DESCRIPTION IS NOT NULL
-        AND ({conditions})
+        FROM (
+            SELECT TICKETNUMBER, TITLE, DESCRIPTION, ISSUETYPE, SUBISSUETYPE, PRIORITY, STATUS, RESOLUTION
+            FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_CLOSED_TICKETS
+            WHERE TITLE IS NOT NULL AND DESCRIPTION IS NOT NULL
+            UNION ALL
+            SELECT TICKETNUMBER, TITLE, DESCRIPTION, ISSUETYPE, SUBISSUETYPE, PRIORITY, STATUS, RESOLUTION
+            FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS
+            WHERE TITLE IS NOT NULL AND DESCRIPTION IS NOT NULL
+        ) combined_tickets
+        WHERE ({conditions})
         LIMIT {min(top_n, 10)}
         """
 
         try:
             results = self.db_connection.execute_query(query)
             if results:
-                print(f"Keyword fallback found {len(results)} similar tickets")
-            return results or []
+                print(f"Keyword fallback found {len(results)} similar tickets in Snowflake")
+                return results
+            else:
+                return self._find_similar_tickets_local_kb(title, description, top_n)
         except Exception as e:
-            print(f"Keyword fallback search also failed: {e}")
+            print(f"Keyword fallback search query failed: {e}; reading local knowledge base...")
+            return self._find_similar_tickets_local_kb(title, description, top_n)
+
+    def _find_similar_tickets_local_kb(self, title: str, description: str, top_n: int = 10) -> List[Dict]:
+        """
+        Local semantic/keyword retrieval over data/knowledgebase.json when Snowflake is unavailable or empty.
+        """
+        kb_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data", "knowledgebase.json")
+        if not os.path.exists(kb_path):
+            kb_path = "data/knowledgebase.json"
+
+        if not os.path.exists(kb_path):
+            return []
+
+        try:
+            with open(kb_path, "r", encoding="utf-8") as f:
+                kb_data = json.load(f)
+
+            query_tokens = set(re.findall(r'\b[a-zA-Z0-9_-]{3,}\b', f"{title} {description}".lower()))
+            scored = []
+
+            for entry in kb_data:
+                nt = entry.get("new_ticket", {})
+                t_title = str(nt.get("title", ""))
+                t_desc = str(nt.get("description", ""))
+                t_tokens = set(re.findall(r'\b[a-zA-Z0-9_-]{3,}\b', f"{t_title} {t_desc}".lower()))
+
+                if not t_tokens:
+                    continue
+
+                overlap = len(query_tokens & t_tokens)
+                if overlap > 0:
+                    score = overlap / float(len(query_tokens | t_tokens))
+                    cd = nt.get("classified_data", {})
+                    def get_f(k, d=""):
+                        v = cd.get(k, {})
+                        return v.get("Label", v.get("Value", d)) if isinstance(v, dict) else (v or d)
+
+                    scored.append((score, {
+                        "TICKETNUMBER": nt.get("ticket_number", ""),
+                        "TITLE": t_title,
+                        "DESCRIPTION": t_desc,
+                        "ISSUETYPE": get_f("ISSUETYPE", "Hardware"),
+                        "SUBISSUETYPE": get_f("SUBISSUETYPE", "Workstation"),
+                        "PRIORITY": get_f("PRIORITY", nt.get("priority", "Medium")),
+                        "STATUS": get_f("STATUS", "Resolved"),
+                        "RESOLUTION": nt.get("resolution_note", ""),
+                        "SIMILARITY_SCORE": score
+                    }))
+
+            scored.sort(key=lambda x: x[0], reverse=True)
+            top_matches = [item[1] for item in scored[:top_n]]
+            print(f"Local knowledgebase retrieval found {len(top_matches)} relevant tickets")
+            return top_matches
+
+        except Exception as e_kb:
+            print(f"Error reading local knowledge base for similarity: {e_kb}")
             return []
 
     def classify_ticket(self, new_ticket_data: Dict, extracted_metadata: Dict,
@@ -507,13 +591,15 @@ class IntakeClassificationAgent:
         return self.ai_processor.classify_ticket(new_ticket_data, extracted_metadata, similar_tickets, model)
 
     def generate_resolution_note(self, ticket_data: Dict, classified_data: Dict,
-                               extracted_metadata: Dict, ticket_number: str = "") -> str:
+                               extracted_metadata: Dict, ticket_number: str = "",
+                               similar_tickets: Optional[List[Dict]] = None) -> str:
         """
         Generates a resolution note via the ResolutionAgent (Cortex LLM with
         retry logic and template fallback).
         """
         return self.resolution_agent.generate_resolution(
-            ticket_data, classified_data, extracted_metadata, ticket_number
+            ticket_data, classified_data, extracted_metadata, ticket_number,
+            similar_tickets=similar_tickets
         )
 
     def process_new_ticket(self, ticket_name: str, ticket_description: str, ticket_title: str,
@@ -544,8 +630,16 @@ class IntakeClassificationAgent:
         ticket_date = creation_time.strftime("%Y-%m-%d")
         ticket_time = creation_time.strftime("%H:%M:%S")
 
+        # Ensure due_date is calculated from SLA if not provided
+        if not due_date or not str(due_date).strip():
+            p_days = {'critical': 1, 'high': 2, 'medium': 5, 'low': 7}.get(str(priority_initial or 'medium').lower(), 5)
+            due_date = (creation_time + timedelta(days=p_days)).strftime("%Y-%m-%d")
+
+        user_name_val = ticket_name or user_id or "Customer"
+        user_email_val = user_email if user_email and user_email.strip() else "customer@cttc.net"
+
         new_ticket_raw = {
-            "name": ticket_name,
+            "name": user_name_val,
             "description": ticket_description,
             "title": ticket_title,
             "date": ticket_date,
@@ -590,16 +684,22 @@ class IntakeClassificationAgent:
 
         # Generate resolution note
         print("\n--- Generating Resolution Note ---")
-        resolution_note = self.generate_resolution_note(new_ticket_raw, classified_data, extracted_metadata, ticket_number=ticket_number)
+        resolution_note = self.generate_resolution_note(new_ticket_raw, classified_data, extracted_metadata, ticket_number=ticket_number, similar_tickets=similar_tickets)
         print("Generated Resolution Note:")
-        print(resolution_note)
+        try:
+            print(resolution_note)
+        except Exception:
+            try:
+                print(str(resolution_note).encode('ascii', errors='replace').decode('ascii'))
+            except Exception:
+                pass
 
         # Prepare final ticket data
         final_ticket_data = {
             **new_ticket_raw,
             "ticket_number": ticket_number,
-            "user_email": user_email if user_email and user_email.strip() else "",
-            "user_id": user_id if user_id and user_id.strip() else "",
+            "user_email": user_email_val,
+            "user_id": user_id if user_id and user_id.strip() else user_name_val,
             "phone_number": phone_number if phone_number and phone_number.strip() else "",
             "extracted_metadata": extracted_metadata,
             "classified_data": classified_data,
@@ -613,7 +713,10 @@ class IntakeClassificationAgent:
             assignment_result = self.assignment_agent.process_ticket_assignment({"new_ticket": final_ticket_data})
             final_ticket_data["assignment_result"] = assignment_result.get("assignment_result", {})
             print("Assignment Result:")
-            print(json.dumps(assignment_result, indent=2))
+            try:
+                print(json.dumps(assignment_result, indent=2))
+            except Exception:
+                pass
         except Exception as e:
             print(f"❌ Assignment failed: {e}")
             # Continue processing even if assignment fails

@@ -2288,18 +2288,34 @@ class AssignmentAgentIntegration:
             new_ticket = intake_output.get('new_ticket', {})
             classified_data = new_ticket.get('classified_data', {})
             
+            def _extract_label(val, default=""):
+                if isinstance(val, dict):
+                    return val.get('Label') or val.get('Value') or default
+                return str(val) if val is not None and str(val).strip() else default
+
+            priority_val = _extract_label(classified_data.get('PRIORITY'), new_ticket.get('priority', 'Medium'))
+
+            # Ensure due_date exists, or calculate intelligent default based on priority SLA
+            due_date = new_ticket.get('due_date')
+            if not due_date or not str(due_date).strip():
+                p_days = {'critical': 1, 'high': 2, 'medium': 5, 'low': 7}.get(str(priority_val).lower(), 5)
+                due_date = (datetime.now() + timedelta(days=p_days)).strftime("%Y-%m-%d")
+
+            user_name = new_ticket.get('name') or new_ticket.get('user_id') or new_ticket.get('requester_name') or 'Customer'
+            user_email = new_ticket.get('user_email') or 'customer@cttc.net'
+
             # Map the fields according to the required format
             assignment_input = {
-                'ticket_id': new_ticket.get('ticket_number', ''),
-                'issue': new_ticket.get('description', ''),
-                'description': new_ticket.get('description', ''),
-                'issue_type': classified_data.get('ISSUETYPE', {}).get('Label', ''),
-                'sub_issue_type': classified_data.get('SUBISSUETYPE', {}).get('Label', ''),
-                'ticket_category': classified_data.get('TICKETCATEGORY', {}).get('Label', ''),
-                'priority': classified_data.get('PRIORITY', {}).get('Label', ''),
-                'due_date': new_ticket.get('due_date', ''),
-                'user_name': new_ticket.get('name', ''),
-                'user_email': new_ticket.get('user_email', '')
+                'ticket_id': str(new_ticket.get('ticket_number') or new_ticket.get('id') or 'T-NEW'),
+                'issue': str(new_ticket.get('title') or new_ticket.get('description') or 'Technical Support Request'),
+                'description': str(new_ticket.get('description') or new_ticket.get('title') or 'Technical Support Request'),
+                'issue_type': _extract_label(classified_data.get('ISSUETYPE'), 'Hardware'),
+                'sub_issue_type': _extract_label(classified_data.get('SUBISSUETYPE'), 'General'),
+                'ticket_category': _extract_label(classified_data.get('TICKETCATEGORY'), 'Standard'),
+                'priority': str(priority_val or 'Medium'),
+                'due_date': str(due_date),
+                'user_name': str(user_name),
+                'user_email': str(user_email)
             }
 
             logger.info(f"Mapped intake data to assignment format for ticket: {assignment_input['ticket_id']}")
@@ -2311,42 +2327,48 @@ class AssignmentAgentIntegration:
 
     def _validate_ticket_data(self, ticket_data: Dict) -> TicketData:
         """
-        Validate and parse incoming ticket data according to required format
+        Validate and parse incoming ticket data according to required format.
+        Applies safe defaults if non-critical fields are empty rather than aborting assignment.
 
         Args:
             ticket_data (Dict): Raw ticket data matching required JSON input format
 
         Returns:
             TicketData: Validated ticket data object
-
-        Raises:
-            ValueError: If required fields are missing or invalid
         """
-        required_fields = [
-            'ticket_id', 'issue', 'description', 'issue_type', 'sub_issue_type',
-            'ticket_category', 'priority', 'due_date', 'user_name', 'user_email'
-        ]
+        ticket_id = str(ticket_data.get('ticket_id') or 'T-NEW').strip()
+        issue = str(ticket_data.get('issue') or ticket_data.get('title') or 'Technical Support Request').strip()
+        description = str(ticket_data.get('description') or issue).strip()
+        issue_type = str(ticket_data.get('issue_type') or 'Hardware').strip()
+        sub_issue_type = str(ticket_data.get('sub_issue_type') or 'General').strip()
+        ticket_category = str(ticket_data.get('ticket_category') or 'Standard').strip()
+        priority = str(ticket_data.get('priority') or 'Medium').strip().capitalize()
+        
+        due_date = str(ticket_data.get('due_date') or '').strip()
+        if not due_date:
+            p_days = {'Critical': 1, 'High': 2, 'Medium': 5, 'Low': 7}.get(priority, 5)
+            due_date = (datetime.now() + timedelta(days=p_days)).strftime("%Y-%m-%d")
 
-        missing_fields = [field for field in required_fields if field not in ticket_data or not ticket_data[field]]
-        if missing_fields:
-            raise ValueError(f"Missing required fields: {', '.join(missing_fields)}")
+        user_name = str(ticket_data.get('user_name') or 'Customer').strip()
+        user_email = str(ticket_data.get('user_email') or 'customer@cttc.net').strip()
 
         # Validate priority level
         valid_priorities = ['Low', 'Medium', 'High', 'Critical']
-        if ticket_data['priority'] not in valid_priorities:
-            logger.warning(f"Priority '{ticket_data['priority']}' not in standard list, proceeding anyway")
+        if priority not in valid_priorities:
+            logger.warning(f"Priority '{priority}' not in standard list, defaulting to 'Medium'")
+            priority = 'Medium'
 
         return TicketData(
-            ticket_id=str(ticket_data['ticket_id']),
-            issue=str(ticket_data['issue']),
-            description=str(ticket_data['description']),
-            issue_type=str(ticket_data['issue_type']),
-            sub_issue_type=str(ticket_data['sub_issue_type']),
-            ticket_category=str(ticket_data['ticket_category']),
-            priority=str(ticket_data['priority']),
-            due_date=str(ticket_data['due_date']),
-            user_name=str(ticket_data['user_name']),
-            user_email=str(ticket_data['user_email'])
+            ticket_id=ticket_id,
+            issue=issue,
+            description=description,
+            issue_type=issue_type,
+            sub_issue_type=sub_issue_type,
+            ticket_category=ticket_category,
+            priority=priority,
+            due_date=due_date,
+            user_name=user_name,
+            user_email=user_email
         )
 
     def _analyze_skills_with_cortex(self, ticket: TicketData) -> SkillAnalysis:
