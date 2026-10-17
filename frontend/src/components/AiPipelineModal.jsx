@@ -3,6 +3,7 @@ import {
   Inbox, Brain, Tag, Layers, Zap, UserCheck, Link2, Wand2,
   FileCheck2, Loader2, CheckCircle2, ChevronDown, ChevronUp
 } from 'lucide-react';
+import ResolutionView from './ResolutionView';
 
 const priorityColors = {
   low: 'bg-green-100 text-green-800',
@@ -125,34 +126,11 @@ const buildSteps = (submitted, result) => {
     {
       key: 'resolution',
       icon: Wand2,
-      title: 'AI-Generated Resolution',
-      subtitle: 'Suggested fix, ready for technician review',
-      render: () => {
-        if (!result.resolution) {
-          return <p className="text-sm text-gray-500 italic">No resolution generated.</p>;
-        }
-
-        const raw = String(result.resolution);
-        const safetyIdx = raw.search(/⚠️?\s*SAFETY PRECAUTIONS:?/i);
-        const steps = safetyIdx !== -1 ? raw.substring(0, safetyIdx).trim() : raw;
-        const safety = safetyIdx !== -1 ? raw.substring(safetyIdx).trim() : '';
-
-        return (
-          <div className="space-y-2.5">
-            <div className="text-sm text-gray-700 p-3 bg-purple-50 border border-purple-100 rounded-lg whitespace-pre-line leading-relaxed">
-              {steps}
-            </div>
-            {safety && (
-              <div className="text-xs text-amber-900 p-3 bg-amber-50 border-l-4 border-amber-500 rounded-r-lg whitespace-pre-line font-medium leading-relaxed">
-                <div className="font-bold text-amber-950 mb-1 flex items-center gap-1.5">
-                  <span>⚠️ MANDATORY SAFETY PRECAUTIONS</span>
-                </div>
-                {safety.replace(/^⚠️?\s*SAFETY PRECAUTIONS:?\s*/i, '')}
-              </div>
-            )}
-          </div>
-        );
-      },
+      title: 'AI-Generated Resolutions',
+      subtitle: 'Subscriber guidance & technician remediation protocol',
+      render: () => (
+        <ResolutionView resolution={result.resolution} initialTab="all" />
+      ),
     },
     {
       key: 'final',

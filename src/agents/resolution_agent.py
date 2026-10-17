@@ -142,19 +142,37 @@ class ResolutionAgent:
                     similar_context += f"Reference #{i+1} ({st.get('TICKETNUMBER', 'N/A')} - {st.get('TITLE', 'N/A')}):\n{st.get('RESOLUTION')}\n---\n"
 
         return f'''
-You are an expert IT and Telecommunications Support Engineer. Based on the extracted metadata and ticket details below, generate a professional, actionable, step-by-step resolution note for technicians and support staff.
+You are an expert IT and Telecommunications Support Engineer. Based on the extracted metadata and ticket details below, you MUST generate TWO DISTINCT, COMPREHENSIVE RESOLUTIONS followed by domain safety precautions:
 
-CRITICAL RESOLUTION GUIDELINES:
-1. Provide numbered, practical, sequential steps (1., 2., 3., etc.) addressing root cause, diagnosis, and remediation.
-2. MANDATORY SAFETY SECTION: At the end of every resolution, you MUST include a dedicated section beginning with:
-"⚠️ SAFETY PRECAUTIONS:"
-Detail the exact hazards and safety rules applicable to the equipment and technologies involved:
-- OPTICAL / LASER RADIATION HAZARD (ANSI Z136.2 Class 1M / Class 3B): If fiber optic cables, bulkheads, ONTs, OLTs, splitters, or optical transceivers (400G-ZR, 100G, SFP+) are involved, explicitly instruct NEVER to look directly into open fiber connectors, adapters, or optical ports. Invisible laser radiation causes permanent retinal injury.
-- ELECTRICAL & POWER SURGE SAFETY: If power adapters (Wall Warts), electrical circuits, or POTS telephone lines are involved, warn against handling scorched/melted adapters, instruct to test wall outlets with multimeters, unplug equipment before dismounting, and warn of POTS 90V AC ringing voltage shock hazards.
-- THERMAL & MECHANICAL HAZARDS: If coherent transceivers (>65°C), high-density chassis, or high-RPM fan trays are involved, warn against contact burns and moving fan blades.
-- OUTSIDE PLANT / ENVIRONMENTAL SAFETY: If outside pedestals, FDHs, aerial spans, or roadways are involved, detail roadside traffic cones/signage, venomous insect/spider inspections in cabinets, and utility power line clearances (10+ feet).
-- SUBSCRIBER & PREMISE SAFETY: Instruct end-users never to disassemble ONT hardware or bend optical jumpers.
-3. Do NOT include JSON, markdown backticks (```), or code formatting. Output as clear plain text.
+RESOLUTION STRUCTURE REQUIREMENTS (Follow this exact layout):
+
+### 👤 SUBSCRIBER SELF-SERVICE RESOLUTION (Customer Guidance)
+- Target Audience: Normal subscriber / non-technical end-user.
+- Tone: Friendly, accessible, clear plain English with ZERO telecom jargon.
+- Content:
+  1. Safe physical checks (checking device power cable is plugged into wall, checking if power light is lit).
+  2. Indicator checks (explaining what solid green vs red or flashing lights mean simply).
+  3. Safe power-cycle procedure (unplug power adapter from wall outlet, wait 30 seconds, plug back in, allow 2-3 minutes).
+  4. Cable warning: Explicitly instruct subscriber NOT to touch, bend, or pull any green fiber optic cables or look into open fiber jacks.
+  5. What to expect: Reassurance that a field technician has been assigned and will contact them if on-site repair is required.
+
+### 🔧 TECHNICIAN FIELD REMEDIATION (Technical Protocol)
+- Target Audience: Professional Field Truck Roll Technician / Network Engineer.
+- Tone: Highly technical, precise engineering procedures with specific equipment, tools, and telemetry targets.
+- Content:
+  1. Root cause diagnostics, optical power level targets (e.g. -18.0 to -24.0 dBm at SC/APC bulkhead).
+  2. Fiber end-face inspection with 400x fiber scope and 2.5mm dry click-cleaning.
+  3. Power supply load test (12V DC Wall Wart voltage metering, POTS 90V AC ring voltage measurement).
+  4. Provisioning / OLT Compass / Calix CMS TR-069 ACS synchronization.
+  5. Equipment swap and acceptance test procedures (e.g. ONT GP1100X, router port, transceiver).
+
+⚠️ SAFETY PRECAUTIONS:
+- OPTICAL / LASER RADIATION HAZARD (ANSI Z136.2 Class 1M / Class 3B): Detail invisible infrared radiation hazards (1310/1490/1550nm) and prohibit looking into open fiber ports/bulkheads.
+- ELECTRICAL & POWER SURGE SAFETY: Detail electrical disconnection, wall outlet testing with multimeters, Wall-Wart thermal inspection, and POTS 90V ring voltage shock hazards.
+- THERMAL & MECHANICAL HAZARDS: Detail high-temp coherent transceivers (>65°C), high-RPM fan tray pinch hazards, and electrostatic discharge (ESD).
+- OUTSIDE PLANT / ROADWAY SAFETY: Detail traffic cones, bucket truck harness protocols, and inspection for stinging insects/spiders in outdoor pedestals.
+
+Do NOT output raw JSON or code backticks. Generate clean text using the headers above.
 
 TICKET DETAILS:
 Title: {ticket_data.get('title', 'N/A')}
@@ -171,7 +189,7 @@ Technical Keywords: {', '.join(extracted_metadata.get('technical_keywords', []))
 User Actions: {extracted_metadata.get('user_actions', 'N/A')}
 Suggested Resolution Approach: {extracted_metadata.get('resolution_indicators', 'N/A')}
 {similar_context}
-Generate step-by-step resolution with mandatory ⚠️ SAFETY PRECAUTIONS:
+Generate both Subscriber and Technician resolutions with mandatory ⚠️ SAFETY PRECAUTIONS:
 '''
 
     def _get_context_safety_precautions(self, extracted_metadata: Dict, classified_data: Dict) -> str:
@@ -204,36 +222,47 @@ Generate step-by-step resolution with mandatory ⚠️ SAFETY PRECAUTIONS:
                                     classified_data: Dict,
                                     similar_tickets: Optional[List[Dict]] = None) -> str:
         """
-        Generate a fallback resolution with comprehensive safety precautions when LLM is unavailable.
+        Generate a fallback resolution with comprehensive two-tier resolutions and safety precautions.
         """
-        logger.info("📋 Using fallback resolution template with safety precautions")
+        logger.info("📋 Using fallback resolution template with subscriber and technician guidance")
 
         # If a similar ticket with resolution exists, leverage its proven resolution
         if similar_tickets:
             for st in similar_tickets:
                 res = str(st.get("RESOLUTION") or "").strip()
-                if len(res) > 50 and "⚠️ SAFETY PRECAUTIONS" in res:
+                if len(res) > 50 and ("SUBSCRIBER" in res.upper() or "TECHNICIAN" in res.upper()) and "SAFETY PRECAUTIONS" in res.upper():
                     logger.info(f"Found high-quality golden KB template from similar ticket {st.get('TICKETNUMBER')}")
                     return res
 
         issue_type = self._extract_field(classified_data, 'ISSUETYPE', 'Hardware')
         urgency = extracted_metadata.get('urgency_level', 'Medium')
         main_issue = extracted_metadata.get('main_issue', 'Issue')
-        affected_system = extracted_metadata.get('affected_system', 'system')
+        affected_system = extracted_metadata.get('affected_system', 'equipment')
 
-        fallback_steps = [
-            f"1. Diagnostic Verification: Verify physical power and status indicators on the affected {affected_system}.",
-            f"2. Physical Link Inspection: Inspect power cords, network cables, and optical jumpers for damage, loose terminations, or micro-bends.",
-            f"3. Component Power-Cycle: Perform a clean electrical reboot of {affected_system} by unplugging the power supply for 30 seconds.",
-            f"4. Signal & Interface Test: Check interface error counters, optical receive power, and IP gateway connectivity.",
-            f"5. Hardware/Service Remediation: If errors or offline status persist, swap defective module/power supply with verified unit from inventory and verify baseline performance."
+        subscriber_section = (
+            "### 👤 SUBSCRIBER SELF-SERVICE RESOLUTION (Customer Guidance)\n"
+            f"1. Check Power Connection: Verify that your {affected_system} power cord is plugged firmly into a working electrical wall outlet and the power light is turned on.\n"
+            f"2. Safe Power Restart: Unplug the power adapter from the wall outlet, wait 30 seconds, and plug it back in. Wait 2-3 minutes for the device lights to stabilize.\n"
+            f"3. Check Network Cables: Ensure the network cable connecting your computer or router to the {affected_system} is securely plugged in.\n"
+            "4. Important Safety Rule: Do NOT touch, pull, or bend any green fiber optic cables connected to the unit, and never look directly into open fiber ports.\n"
+            "5. Field Support Update: If your connection does not restore after restarting, a certified field technician has been assigned to inspect and resolve your issue."
+        )
+
+        technician_steps = [
+            f"1. Physical Layer & Optical Audit: Inspect {affected_system} physical mounting. Measure optical receive power at SC/APC bulkhead using an optical power meter (Nominal target: -18.0 to -24.0 dBm).",
+            "2. Connector Scoping & Cleaning: Inspect connector end-face with a 400x fiber scope. Clean using a 2.5mm dry click-cleaner to eliminate surface contamination and return loss.",
+            "3. Power Supply & Voltage Test: Meter the 12V DC power adapter (Wall Wart) under load. Swap out power brick if voltage sag (<11.6V DC) or capacitor degradation is observed.",
+            "4. Provisioning & ACS Check: Verify ONT registration state, TR-069 provisioning, and port mapping in Calix CMS / OLT Compass.",
+            f"5. Hardware Replacement: If internal hardware fault is confirmed, replace {affected_system} with certified stock, register FSAN/MAC, and verify end-to-end line speed."
         ]
 
         if urgency.lower() in ['critical', 'high']:
-            fallback_steps.insert(0, "⚠️ HIGH PRIORITY PROTOCOL - Escalating to specialized Tier 2 / Field Engineering dispatch.")
+            technician_steps.insert(0, "⚠️ HIGH PRIORITY PROTOCOL - Expedited Tier 2 / Field Engineering dispatch.")
 
+        technician_section = "### 🔧 TECHNICIAN FIELD REMEDIATION (Technical Protocol)\n" + "\n".join(technician_steps)
         safety_block = self._get_context_safety_precautions(extracted_metadata, classified_data)
-        return "\n".join(fallback_steps) + "\n\n" + safety_block
+
+        return subscriber_section + "\n\n" + technician_section + "\n\n" + safety_block
 
     def _extract_field(self, data: Dict, field_name: str, default: str = "system") -> str:
         """

@@ -8,9 +8,12 @@ import {
   Phone,
   Sparkles,
   User,
-  ShieldAlert,
-  Wrench
+  Cpu
 } from 'lucide-react';
+import ResolutionView from './ResolutionView';
+import { parseResolutionContent } from '../utils/resolutionParser';
+
+export { parseResolutionContent };
 
 const getStatusIcon = (status) => {
   switch (status?.toLowerCase()) {
@@ -25,31 +28,8 @@ const getStatusIcon = (status) => {
   }
 };
 
-/**
- * Splits a resolution string into actionable resolution steps and safety precautions.
- */
-const parseResolutionContent = (rawResolution) => {
-  if (!rawResolution || typeof rawResolution !== 'string') {
-    return { steps: '', safety: '' };
-  }
-
-  const safetyKeywords = ['⚠️ SAFETY PRECAUTIONS:', 'SAFETY PRECAUTIONS:', '⚠️ SAFETY PRECAUTIONS', '[SAFETY PRECAUTIONS]'];
-  for (const kw of safetyKeywords) {
-    const idx = rawResolution.indexOf(kw);
-    if (idx !== -1) {
-      const steps = rawResolution.substring(0, idx).trim();
-      const safety = rawResolution.substring(idx).trim();
-      return { steps, safety };
-    }
-  }
-
-  return { steps: rawResolution.trim(), safety: '' };
-};
-
 const ExpandedTicketDetails = ({ ticket }) => {
   if (!ticket) return null;
-
-  const { steps, safety } = parseResolutionContent(ticket.resolution);
 
   return (
     <div className="border-t border-gray-200 p-4 md:p-6 bg-gray-50/60 space-y-5">
@@ -130,32 +110,10 @@ const ExpandedTicketDetails = ({ ticket }) => {
         )}
       </div>
 
-      {/* Resolution & Safety Precautions */}
+      {/* Two-Tier Resolution Section: Subscriber & Technician */}
       {ticket.resolution && (
-        <div className="space-y-3 pt-1">
-          {/* Actionable Resolution Steps */}
-          <div className="bg-white rounded-lg border border-blue-100 p-4 shadow-sm">
-            <div className="flex items-center gap-2 mb-2.5 text-blue-900 font-semibold text-sm">
-              <Wrench className="w-4 h-4 text-[#00ABE4]" />
-              <span>Resolution & Action Plan</span>
-            </div>
-            <div className="text-sm text-gray-700 leading-relaxed whitespace-pre-line font-sans pl-1">
-              {steps || ticket.resolution}
-            </div>
-          </div>
-
-          {/* Safety Precautions Highlight Callout */}
-          {safety && (
-            <div className="bg-amber-50/90 border-l-4 border-amber-500 rounded-r-lg p-4 shadow-sm">
-              <div className="flex items-center gap-2 mb-2 text-amber-900 font-bold text-sm">
-                <ShieldAlert className="w-5 h-5 text-amber-600 flex-shrink-0" />
-                <span>MANDATORY SAFETY PRECAUTIONS</span>
-              </div>
-              <div className="text-xs md:text-sm text-amber-900 leading-relaxed whitespace-pre-line font-medium pl-1">
-                {safety.replace(/^⚠️?\s*SAFETY PRECAUTIONS:?\s*/i, '')}
-              </div>
-            </div>
-          )}
+        <div className="pt-1">
+          <ResolutionView resolution={ticket.resolution} initialTab="all" />
         </div>
       )}
     </div>

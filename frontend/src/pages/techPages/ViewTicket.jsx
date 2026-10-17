@@ -6,6 +6,7 @@ import Header from '../../components/Header';
 import ChatButton from '../../components/ChatButton';
 import { ticketService } from '../../services/ticketService';
 import useAuth from '../../hooks/useAuth';
+import ResolutionView from '../../components/ResolutionView';
 import { 
   Loader2, 
   Sparkles, 
@@ -454,9 +455,9 @@ function ViewTicket() {
                     ) : (
                       <>
                         {ticket.resolution ? (
-                          <p className="text-sm text-gray-700 p-3 bg-purple-50 border border-purple-100 rounded whitespace-pre-line">
-                            {ticket.resolution}
-                          </p>
+                          <div className="mt-1">
+                            <ResolutionView resolution={ticket.resolution} initialTab="technician" />
+                          </div>
                         ) : (
                           <p className="text-sm text-gray-500 italic p-3 bg-gray-50 rounded">
                             No AI resolution generated for this ticket yet.

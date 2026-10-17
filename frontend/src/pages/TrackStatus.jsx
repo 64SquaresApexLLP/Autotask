@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Search, Clock, AlertCircle, CheckCircle, User, Calendar, Phone, Mail, Loader2, FileText, Sparkles, ChevronDown, ChevronUp, Tag } from 'lucide-react';
 import Header from '../components/Header';
 import Sidebar from '../components/Sidebar';
+import ResolutionView from '../components/ResolutionView';
 import { ticketService } from '../services/ticketService.js';
 import { ApiError } from '../services/api.js';
 import useAuth from '../hooks/useAuth';
@@ -288,16 +289,7 @@ const TrackStatus = () => {
                               </div>
 
                               <div>
-                                <div className="text-xs text-gray-500 mb-1">🤖 AI Suggested Resolution</div>
-                                {ticket.resolution ? (
-                                  <p className="text-sm text-gray-700 p-3 bg-purple-50 border border-purple-100 rounded whitespace-pre-line">
-                                    {ticket.resolution}
-                                  </p>
-                                ) : (
-                                  <p className="text-sm text-gray-500 italic p-3 bg-gray-50 rounded">
-                                    No AI resolution generated yet.
-                                  </p>
-                                )}
+                                <ResolutionView resolution={ticket.resolution} initialTab="subscriber" />
                               </div>
                             </div>
                           )}
