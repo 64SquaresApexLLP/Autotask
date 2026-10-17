@@ -1,5 +1,5 @@
 """
-Configuration file for TeamLogic AutoTask System
+Configuration file for CTTC AutoTask System
 Contains database and service configuration settings
 """
 

@@ -176,7 +176,7 @@ def main():
         return 1
 
     print("=" * 70)
-    print(" PRIORITY data repair - TeamLogic AutoTask")
+    print(" PRIORITY data repair - CTTC AutoTask")
     print("=" * 70)
     print(f" Reference priorities : {priority_map}")
     print(f" Mode                 : {'APPLY (writes)' if args.apply else 'DRY RUN (no writes)'}")

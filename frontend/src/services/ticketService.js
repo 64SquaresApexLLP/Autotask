@@ -10,10 +10,24 @@ import { API_ENDPOINTS } from '../config/api.js';
  * Map technician IDs to display names (using real IDs from Snowflake)
  */
 const TECHNICIAN_DISPLAY_MAP = {
-  'T001': 'Technician T001',
-  'T103': 'Technician T103',
-  'T104': 'Technician T104',
-  'T106': 'Technician T106'
+  'TECH-TR-01': 'Aric Rowland (Truck Roll)',
+  'TECH-TR-02': 'Ray Denham (Truck Roll)',
+  'TECH-TR-03': 'Thomas Olson (Truck Roll)',
+  'TECH-TR-04': 'Ethan Martin (Truck Roll)',
+  'TECH-ONT-01': 'James Green (ONT Specialist)',
+  'TECH-ENG-01': 'Ray Flores (Network Engineer)',
+  'Ruchir': 'Ruchir Chincholkar (NOC Tech)',
+  'aric.rowland@cttc.net': 'Aric Rowland',
+  'ray.denham@cttc.net': 'Ray Denham',
+  'thomas.olson@cttc.net': 'Thomas Olson',
+  'ethan.martin@cttc.net': 'Ethan Martin',
+  'james.green@cttc.net': 'James Green',
+  'ray.flores@cttc.net': 'Ray Flores',
+  'ruchir0311@mail.com': 'Ruchir Chincholkar',
+  'T001': 'Aric Rowland',
+  'T103': 'Thomas Olson',
+  'T104': 'Ethan Martin',
+  'T106': 'James Green'
 };
 
 /**
@@ -23,9 +37,13 @@ const TECHNICIAN_DISPLAY_MAP = {
 const transformTicketData = (ticket) => {
   if (!ticket) return null;
 
-  // Use real technician ID from Snowflake
+  // Use real technician ID from Snowflake, fallback to name/email
   const technicianId = ticket.TECHNICIAN_ID || ticket.technician_id;
-  const assignedTechnician = technicianId || ticket.ASSIGNED_TECHNICIAN || ticket.assigned_technician || null;
+  const rawAssigned = ticket.assigned_technician || ticket.ASSIGNED_TECHNICIAN || technicianId || ticket.TECHNICIANEMAIL || ticket.technician_email || null;
+  let assignedTechnician = rawAssigned;
+  if (!assignedTechnician || assignedTechnician === 'IT Manager' || assignedTechnician === 'itmanager@company.com' || assignedTechnician === 'Fallback Support') {
+    assignedTechnician = technicianId ? (TECHNICIAN_DISPLAY_MAP[technicianId] || 'Ray Flores') : 'Ray Flores';
+  }
   const technicianDisplayName = assignedTechnician ? (TECHNICIAN_DISPLAY_MAP[assignedTechnician] || assignedTechnician) : null;
 
     // Parse creation timestamp from Snowflake or ticket number

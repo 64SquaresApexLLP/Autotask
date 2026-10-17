@@ -32,7 +32,8 @@ import useAuth from '../hooks/useAuth';
 
 const MttrReport = () => {
   const { user } = useAuth();
-  const isTechnician = user?.role !== 'user';
+  const isAdmin = user?.role === 'admin' || user?.username?.trim().toLowerCase() === 'admin';
+  const isTechnician = isAdmin || user?.role === 'technician' || user?.role !== 'user';
   const navigate = useNavigate();
 
   const [loading, setLoading] = useState(true);
@@ -59,9 +60,12 @@ const MttrReport = () => {
       const userEmail = user?.email?.trim().toLowerCase();
       const userName = (user?.name || user?.full_name)?.trim().toLowerCase();
 
-      const mttrParams = isTechnician
-        ? { technician_id: userId || userEmail }
-        : { user_email: userEmail || userId };
+      // Admins request global fleet MTTR without scoping to admin username
+      const mttrParams = isAdmin
+        ? {}
+        : isTechnician
+          ? { technician_id: userId || userEmail }
+          : { user_email: userEmail || userId };
 
       const [allTickets, analytics] = await Promise.all([
         ticketService.getAllTickets({ limit: 150 }).catch(() => []),
@@ -98,7 +102,7 @@ const MttrReport = () => {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [user, isTechnician]);
+  }, [user, isTechnician, isAdmin]);
 
   useEffect(() => {
     loadMttrReportData();
@@ -116,14 +120,19 @@ const MttrReport = () => {
     const techEmail = (ticket.technician_email || '').trim().toLowerCase();
 
     return (
-      (currentUserId && (assignedTech === currentUserId || techId === currentUserId)) ||
+      (currentUserId && (assignedTech === currentUserId || techId === currentUserId || assignedTech.includes(currentUserId))) ||
       (currentUserEmail && (techEmail === currentUserEmail || assignedTech === currentUserEmail)) ||
       (currentFullName && (assignedTech === currentFullName || assignedTech.includes(currentFullName)))
     );
   };
 
-  // Tickets rendered on this report — technicians see only their own assigned tickets (MTTR-only, no SLA tracking)
-  const processedTickets = isTechnician ? tickets.filter(isTicketAssignedToMe) : tickets;
+  // Tickets rendered on this report — admins see all tickets; technicians see assigned tickets (fallback to all tickets if none assigned yet); users see their own
+  const myAssignedTickets = tickets.filter(isTicketAssignedToMe);
+  const processedTickets = isAdmin
+    ? tickets
+    : isTechnician
+      ? (myAssignedTickets.length > 0 ? myAssignedTickets : tickets)
+      : tickets;
 
   // Filtered tickets based on search and filters
   const displayedTickets = processedTickets.filter(ticket => {

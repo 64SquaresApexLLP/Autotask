@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Snowflake Database Setup & Data Uploader for TeamLogic AutoTask System.
+Snowflake Database Setup & Data Uploader for CTTC AutoTask System.
 Executes DDL to create tables and loads the generated dummy data into Snowflake.
 Supports key-pair (RSA, no MFA), 'externalbrowser' SSO, and password authentication.
 """
@@ -21,7 +21,7 @@ from config import (SF_ACCOUNT, SF_USER, SF_WAREHOUSE, SF_DATABASE, SF_SCHEMA, S
 def run_setup(sql_file="data/dummy_data.sql"):
     """Execute SQL script against Snowflake database."""
     print("=" * 70)
-    print(" Snowflake Setup & Data Upload - TeamLogic AutoTask")
+    print(" Snowflake Setup & Data Upload - CTTC AutoTask")
     print("=" * 70)
     print(f" Account:       {SF_ACCOUNT}")
     print(f" User:          {SF_USER}")

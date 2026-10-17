@@ -109,7 +109,7 @@ const AdminWiderMttr = () => {
     if (!mttrData) return;
 
     const reportContent = `=====================================================
-TEAMLOGIC AUTOTASK EXECUTIVE MTTR & SLA GOVERNANCE
+CTTC AUTOTASK EXECUTIVE MTTR & SLA GOVERNANCE
 Generated on: ${new Date().toLocaleString()}
 =====================================================
 

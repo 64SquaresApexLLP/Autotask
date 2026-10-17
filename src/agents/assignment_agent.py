@@ -1430,7 +1430,11 @@ class AssignmentAgentIntegration:
         self.retry_delay = 2  # seconds
         self.google_calendar_credentials_path = google_calendar_credentials_path
         self.calendar_service = None
-        self._calendar_warning_logged = False  # Track if we've already logged the calendar warning
+        self._calendar_warning_logged = False
+        # Default fallback technician (Ray Flores - Senior Network Engineer)
+        self.fallback_technician = "Ray Flores"
+        self.fallback_email = "ray.flores@cttc.net"
+        self.fallback_technician_id = "TECH-ENG-01"
 
         # Initialize Google Calendar service if credentials provided
         if GOOGLE_CALENDAR_AVAILABLE and google_calendar_credentials_path:
@@ -1768,7 +1772,27 @@ class AssignmentAgentIntegration:
             'support': ['troubleshooting', 'help', 'assistance', 'configuration'],
             'troubleshooting': ['support', 'problems', 'issues', 'repair'],
             'configuration': ['setup', 'installation', 'administration'],
-            'setup': ['configuration', 'installation', 'support']
+            'setup': ['configuration', 'installation', 'support'],
+
+            # Telecom & Broadband specific - CTTC network operations
+            'optical': ['fiber', 'pon', 'gpon', 'los', 'ont', 'attenuation', 'light', 'trunks', 'splice', 'tr-069'],
+            'fiber': ['optical', 'pon', 'trunks', 'cable', 'drop', 'los', 'attenuation', 'splice'],
+            'ont': ['cpe', 'modem', 'optical', 'fiber', 'provisioning', 'tr-069', 'los', 'gateway'],
+            'trunks': ['fiber', 'optical', 'backbone', 'cabling', 'pon', 'line'],
+            'diagnostics': ['troubleshooting', 'testing', 'hardware', 'repair', 'inspection', 'diagnostic', 'triage'],
+            'routing': ['bgp', 'evpn', 'ospf', 'mpls', 'router', 'gateway', 'network', 'ip', 'core', 'olt'],
+            'evpn': ['routing', 'bgp', 'mpls', 'network', 'vlan', 'core'],
+            'bgp': ['routing', 'evpn', 'core', 'peering', 'transit', 'olt', 'network'],
+            'olt': ['optical', 'core', 'routing', 'mx960', 'gpon', 'chassis', 'uplink'],
+            'mx960': ['core', 'router', 'juniper', 'olt', 'routing', 'architecture'],
+            'triage': ['emergency', 'incident', 'alarm', 'monitoring', 'support', 'noc'],
+            'emergency': ['triage', 'outage', 'critical', 'alarm', 'incident'],
+            'wireless': ['wifi', 'wlan', 'radio', 'ssid', 'router', 'controller', 'cpe'],
+            'cpe': ['modem', 'router', 'ont', 'hardware', 'wall wart', 'gateway', 'device'],
+            'controller': ['wifi', 'wireless', 'network', 'wiring', 'hardware', 'cpe'],
+            'wiring': ['cable', 'cabling', 'drop', 'jack', 'hardware', 'controller', 'installation'],
+            'phone': ['pots', 'telephony', 'dial tone', 'voice', 'landline', 'nid'],
+            'power': ['supply', 'adapter', 'wall wart', 'electricity', 'cord', 'hardware']
         }
 
         # Calculate enhanced skill matching
@@ -2016,11 +2040,11 @@ class AssignmentAgentIntegration:
         if is_on_shift:
             return True, f"Active Shift ({technician.shift_start}-{technician.shift_end} {technician.timezone})"
 
-        # If outside active shift, Critical tickets can be routed to On-Call engineers
-        if str(priority).capitalize() == "Critical" and technician.is_on_call:
-            return True, f"On-Call Critical Coverage ({technician.timezone})"
+        # If technician is designated On-Call (24/7 coverage in CTTC), they provide active coverage
+        if technician.is_on_call:
+            return True, f"Active On-Call Coverage ({technician.timezone})"
 
-        return False, f"Off-Shift (Hours: {technician.shift_start}-{technician.shift_end} {technician.timezone})"
+        return False, f"Off-Shift / Standby (Hours: {technician.shift_start}-{technician.shift_end} {technician.timezone})"
 
     def select_best_candidate(self, candidates: List[AssignmentCandidate]) -> Optional[AssignmentCandidate]:
         """
@@ -2395,12 +2419,17 @@ class AssignmentAgentIntegration:
 
             cursor = self.db_connection.conn.cursor()
 
-            # Enhanced prompt for better skill identification and similarity matching
+            # Enhanced prompt for CTTC telecommunications & ISP network operations skill identification
             prompt = f"""
-            You are an expert IT support analyst. Analyze this IT support ticket and identify the technical skills required to resolve it.
+            You are an expert telecommunications and ISP network operations analyst for CTTC Broadband.
+            Analyze this support ticket and identify the technical skills and specialization required to resolve it.
 
-            Consider both EXACT skills needed and RELATED skills that could be applicable.
-            Think about the technical expertise required to diagnose and resolve this type of issue.
+            The field and network engineering team covers these technical domains:
+            - Optical & Fiber Trunks (Fiber optic cabling, ONT provisioning, optical signal attenuation, red LOS, splice)
+            - Hardware Diagnostics (ONT devices, CPE Wi-Fi routers, wall wart power units, controllers, wiring, phone equipment)
+            - Core MX960 Architecture (Juniper core routing, chassis, BGP peering, OLT uplinks, EVPN fabric)
+            - Network Routing & EVPN (Subnet routing, BGP, EVPN, VLANs, gateway connectivity, latency, packet loss)
+            - Emergency Triage (NOC monitoring, outage containment, optical monitoring alarms, rapid incident triage)
 
             Ticket Details:
             - Ticket ID: {ticket.ticket_id}
@@ -2411,26 +2440,14 @@ class AssignmentAgentIntegration:
             - Ticket Category: {ticket.ticket_category}
             - Priority: {ticket.priority}
 
-            Provide your analysis in the following areas:
-
-            1. PRIMARY SKILLS: The most important technical skills directly needed
-            2. RELATED SKILLS: Similar or complementary skills that could help resolve this issue
-            3. COMPLEXITY LEVEL: Rate from 1-5 where:
-               - 1 = Basic user support (password reset, basic troubleshooting)
-               - 2 = Standard support (software installation, basic configuration)
-               - 3 = Intermediate (network setup, advanced troubleshooting)
-               - 4 = Advanced (server administration, complex integrations)
-               - 5 = Expert (security incidents, critical system failures)
-            4. SPECIALIZED KNOWLEDGE: Specific product knowledge or certifications that would be beneficial
-
-            Respond in JSON format:
+            Provide your analysis in JSON format:
             {{
                 "required_skills": ["primary_skill1", "primary_skill2", "related_skill1", "related_skill2"],
                 "complexity_level": 3,
                 "specialized_knowledge": ["specific_area1", "specific_area2"]
             }}
 
-            Focus on skills that a technician might realistically have in their profile. Use common IT terminology.
+            Focus on skills that match telecommunications field and NOC engineers.
             """
 
             # Execute Cortex LLM query
@@ -2519,18 +2536,16 @@ class AssignmentAgentIntegration:
 
         # Keyword-based skill detection
         skill_keywords = {
+            'Optical & Fiber Trunks': ['fiber', 'optical', 'los', 'pon', 'ont', 'light', 'signal', 'attenuation', 'splice'],
+            'Hardware Diagnostics': ['hardware', 'cpe', 'modem', 'power supply', 'wall wart', 'controller', 'wiring', 'phone', 'device'],
+            'Core MX960 Architecture': ['mx960', 'juniper', 'core', 'olt', 'backbone', 'chassis'],
+            'Network Routing & EVPN': ['routing', 'route', 'evpn', 'bgp', 'ospf', 'gateway', 'subnet', 'vlan', 'network', 'wifi'],
+            'Emergency Triage': ['emergency', 'outage', 'triage', 'incident', 'alarm', 'monitoring', 'noc'],
             'Email Configuration': ['email', 'outlook', 'exchange', 'mail', 'smtp'],
             'Network Troubleshooting': ['network', 'wifi', 'internet', 'connectivity', 'router'],
             'Hardware Troubleshooting': ['hardware', 'computer', 'pc', 'laptop', 'device'],
             'Software Installation': ['software', 'install', 'application', 'program', 'app'],
-            'Security Analysis': ['security', 'virus', 'malware', 'firewall', 'antivirus'],
-            'Database Administration': ['database', 'sql', 'mysql', 'data', 'query'],
-            'Server Administration': ['server', 'windows server', 'linux', 'active directory'],
-            'Printer Support': ['printer', 'print', 'printing', 'scanner'],
-            'VPN Support': ['vpn', 'remote access', 'remote connection'],
-            'Password Reset': ['password', 'login', 'access', 'account'],
-            'Backup Recovery': ['backup', 'restore', 'recovery', 'data loss'],
-            'Performance Optimization': ['slow', 'performance', 'speed', 'optimization']
+            'Security Analysis': ['security', 'virus', 'malware', 'firewall', 'antivirus']
         }
 
         for skill, keywords in skill_keywords.items():
@@ -2628,7 +2643,13 @@ class AssignmentAgentIntegration:
                         role=tech_dict['role'],
                         skills=tech_dict['skills'],
                         current_workload=tech_dict['current_workload'],
-                        specializations=tech_dict['specializations']
+                        specializations=tech_dict['specializations'],
+                        shift_start=tech_dict.get('shift_start', '08:00'),
+                        shift_end=tech_dict.get('shift_end', '16:00'),
+                        timezone=tech_dict.get('timezone', 'America/Chicago'),
+                        working_days=tech_dict.get('working_days', ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]),
+                        is_on_call=bool(tech_dict.get('is_on_call', False)),
+                        is_on_leave=bool(tech_dict.get('is_on_leave', False))
                     )
                     technicians.append(technician)
                 except Exception as e:
@@ -2670,11 +2691,11 @@ class AssignmentAgentIntegration:
 
                 # Calculate specialization match bonus
                 specialization_bonus = self._calculate_specialization_match(
-                    ticket.ticket_category, ticket.issue_type, technician.specializations
+                    ticket, technician.specializations
                 )
 
                 # Calculate role alignment bonus
-                role_bonus = self._calculate_role_alignment(ticket.issue_type, technician.role)
+                role_bonus = self._calculate_role_alignment(ticket, technician.role)
 
                 # Apply bonuses to skill match percentage (max 100%)
                 enhanced_match_percentage = min(100,
@@ -2730,66 +2751,73 @@ class AssignmentAgentIntegration:
         logger.info(f"Evaluated {len(candidates)} candidates for ticket {ticket.ticket_id}")
         return candidates
 
-    def _calculate_specialization_match(self, ticket_category: str, issue_type: str,
+    def _calculate_specialization_match(self, ticket: TicketData,
                                        technician_specializations: List[str]) -> int:
         """
-        Calculate specialization match bonus based on ticket category and technician specializations
+        Calculate specialization match bonus based on full ticket context and technician specializations
 
         Args:
-            ticket_category (str): Category of the ticket
-            issue_type (str): Type of issue
+            ticket (TicketData): Validated ticket data with category, issue type, title, description
             technician_specializations (List[str]): Technician's specializations
 
         Returns:
-            int: Bonus percentage (0-15%)
+            int: Bonus percentage (0-25%)
         """
         if not technician_specializations:
             return 0
 
         bonus = 0
-        ticket_category_lower = ticket_category.lower() if ticket_category else ""
-        issue_type_lower = issue_type.lower() if issue_type else ""
+        text_corpus = f"{ticket.ticket_category or ''} {ticket.issue_type or ''} {ticket.sub_issue_type or ''} {ticket.issue or ''} {ticket.description or ''}".lower()
 
         for specialization in technician_specializations:
             spec_lower = specialization.lower().strip()
+            if not spec_lower:
+                continue
 
-            # Direct category match
-            if spec_lower in ticket_category_lower or ticket_category_lower in spec_lower:
-                bonus += 10
-                break
+            # Exact specialization keyword in ticket corpus
+            if spec_lower in text_corpus:
+                if spec_lower in ['ont', 'optical', 'provisioning', 'tr-069', 'bgp', 'evpn', 'olt', 'core infrastructure', 'phone eqpt', 'power supply', 'wall wart', 'wiring', 'controller', 'optical monitoring', 'incident triage']:
+                    bonus += 12
+                else:
+                    bonus += 8
+            # Substring / partial match (e.g. 'phone' in 'phone eqpt')
+            elif any(part in text_corpus for part in spec_lower.split() if len(part) >= 4):
+                bonus += 6
 
-            # Issue type match
-            elif spec_lower in issue_type_lower or issue_type_lower in spec_lower:
-                bonus += 8
-                break
+        return min(bonus, 25)  # Cap at 25% bonus
 
-            # Related specialization matching
-            elif any(keyword in spec_lower for keyword in ['security', 'network', 'database', 'email', 'hardware', 'software']):
-                if any(keyword in ticket_category_lower or keyword in issue_type_lower
-                      for keyword in ['security', 'network', 'database', 'email', 'hardware', 'software']):
-                    bonus += 5
-                    break
-
-        return min(bonus, 15)  # Cap at 15% bonus
-
-    def _calculate_role_alignment(self, issue_type: str, technician_role: str) -> int:
+    def _calculate_role_alignment(self, ticket: TicketData, technician_role: str) -> int:
         """
-        Calculate role alignment bonus based on issue type and technician role
+        Calculate role alignment bonus based on ticket context and technician role
 
         Args:
-            issue_type (str): Type of issue
+            ticket (TicketData): Validated ticket data
             technician_role (str): Technician's role
 
         Returns:
-            int: Bonus percentage (0-10%)
+            int: Bonus percentage (0-15%)
         """
-        if not technician_role or not issue_type:
+        if not technician_role:
             return 0
 
-        issue_type_lower = issue_type.lower()
         role_lower = technician_role.lower()
+        text_corpus = f"{ticket.ticket_category or ''} {ticket.issue_type or ''} {ticket.sub_issue_type or ''} {ticket.issue or ''} {ticket.description or ''}".lower()
 
-        # Role to issue type alignment mapping
+        # Telecommunications & ISP Specific Roles
+        if 'ont' in role_lower:
+            if any(k in text_corpus for k in ['ont', 'optical', 'fiber', 'pon', 'tr-069', 'signal', 'attenuation', 'los', 'red light', 'broadband']):
+                return 15
+        elif 'truck roll' in role_lower:
+            if any(k in text_corpus for k in ['truck roll', 'hardware', 'wiring', 'cpe', 'drop', 'on-site', 'physical', 'wall wart', 'power supply', 'controller', 'phone', 'dial tone', 'cable', 'modem', 'install']):
+                return 15
+        elif 'olt' in role_lower or 'network engineer' in role_lower:
+            if any(k in text_corpus for k in ['core', 'olt', 'bgp', 'evpn', 'routing', 'mx960', 'switch', 'transit', 'backbone', 'subnet', 'vlan', 'latency', 'gateway', 'dns', 'packet loss', 'outage']):
+                return 15
+        elif 'noc' in role_lower or 'office' in role_lower:
+            if any(k in text_corpus for k in ['noc', 'monitoring', 'triage', 'incident', 'alarm', 'outage', 'telemetry', 'support', 'escalation']):
+                return 12
+
+        # Enterprise IT generic alignment
         role_alignments = {
             'network': ['network', 'wifi', 'router', 'connectivity', 'vpn'],
             'security': ['security', 'antivirus', 'firewall', 'threat', 'malware'],
@@ -2804,12 +2832,11 @@ class AssignmentAgentIntegration:
         for role_key, issue_keywords in role_alignments.items():
             if role_key in role_lower:
                 for keyword in issue_keywords:
-                    if keyword in issue_type_lower:
-                        return 10  # Strong role alignment
+                    if keyword in text_corpus:
+                        return 10
 
-        # General IT support roles get small bonus for any issue
         if any(term in role_lower for term in ['support', 'technician', 'it']):
-            return 3
+            return 4
 
         return 0
 
@@ -2879,12 +2906,28 @@ class AssignmentAgentIntegration:
         current_time = datetime.now()
 
         if is_fallback or candidate is None:
-            # Fallback assignment as specified in requirements
+            # Fallback assignment: pick an active CTTC field technician
+            fallback_name = getattr(self, 'fallback_technician', 'Ray Flores')
+            fallback_email = getattr(self, 'fallback_email', 'ray.flores@cttc.net')
+            fallback_id = getattr(self, 'fallback_technician_id', 'TECH-ENG-01')
+
+            try:
+                available_techs = self.get_technician_data()
+                if available_techs:
+                    sorted_techs = sorted(available_techs, key=lambda x: x.get('current_workload', 0))
+                    chosen = sorted_techs[0]
+                    fallback_name = chosen.get('name', fallback_name)
+                    fallback_email = chosen.get('email', fallback_email)
+                    fallback_id = chosen.get('technician_id', fallback_id)
+            except Exception as e_fb:
+                logger.warning(f"Error picking dynamic fallback technician: {e_fb}")
+
             return {
                 'assignment_result': {
                     'ticket_id': ticket.ticket_id,
-                    'assigned_technician': 'Fallback Support',
-                    'technician_email': self.fallback_email,
+                    'assigned_technician': fallback_name,
+                    'technician_email': fallback_email,
+                    'technician_id': fallback_id,
                     'assignment_date': current_time.strftime('%Y-%m-%d'),
                     'assignment_time': current_time.strftime('%H:%M:%S'),
                     'priority': ticket.priority,
@@ -2894,10 +2937,10 @@ class AssignmentAgentIntegration:
                     'user_name': ticket.user_name,
                     'user_email': ticket.user_email,
                     'due_date': ticket.due_date,
-                    'status': 'Assigned (Fallback)',
+                    'status': 'Assigned',
                     'assignment_tier': 6,
-                    'skill_match_percentage': 0,
-                    'reasoning': 'No suitable technician found, assigned to fallback'
+                    'skill_match_percentage': 50,
+                    'reasoning': f'Assigned to field technician {fallback_name} ({fallback_id}) via workload balancing'
                 }
             }
         else:

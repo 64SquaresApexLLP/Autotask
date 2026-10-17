@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-TeamLogic AutoTask FastAPI Backend Starter
+CTTC AutoTask FastAPI Backend Starter
 Quick script to start the FastAPI backend from the root directory.
 """
 
@@ -10,7 +10,7 @@ import os
 
 def main():
     """Start the FastAPI backend server."""
-    print("🚀 Starting TeamLogic AutoTask FastAPI Backend...")
+    print("🚀 Starting CTTC AutoTask FastAPI Backend...")
     print("=" * 60)
     
     # Check if we're in the right directory
