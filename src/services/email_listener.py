@@ -14,6 +14,9 @@ from datetime import datetime
 from email.header import decode_header
 from email.utils import parseaddr
 from typing import Dict, List, Optional, Callable
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class EmailListenerService:

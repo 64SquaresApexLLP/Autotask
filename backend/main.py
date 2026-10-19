@@ -18,7 +18,7 @@ import hmac
 import json
 import re
 import requests
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import asyncio
 from jose import JWTError, jwt
 from passlib.context import CryptContext
@@ -68,6 +68,21 @@ except ImportError:
 from chatbot.simple_router import router as chatbot_router
 
 app = FastAPI(title="CTTC AutoTask API", description="Backend API for CTTC AutoTask System", version="1.0.0")
+
+# --- TIMESTAMPS ---
+# Snowflake sessions run in UTC (see src/database/snowflake_db.py), so every
+# TIMESTAMP_NTZ value is UTC. Serialize naive datetimes with an explicit UTC
+# offset so browsers convert them to the viewer's local time correctly.
+import fastapi.encoders as _fastapi_encoders
+_fastapi_encoders.ENCODERS_BY_TYPE[datetime] = (
+    lambda d: (d if d.tzinfo else d.replace(tzinfo=timezone.utc)).isoformat()
+)
+
+
+def utc_now() -> datetime:
+    """Current UTC time as a naive datetime (same convention as the database)."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
 
 # Add CORS middleware
 app.add_middleware(
@@ -479,15 +494,15 @@ def authenticate_user(username: str, password: str, requested_role: Optional[str
             admin_user["role"] = requested_role
         return admin_user
 
-    # Check real users from Snowflake database
-    user = authenticate_user_from_db(u_clean, p_clean)
-    if user:
-        return user
-
-    # Check real technicians from Snowflake database
-    technician = authenticate_technician_from_db(u_clean, p_clean)
-    if technician:
-        return technician
+    # Check real users / technicians from Snowflake database. The same ID can exist in
+    # both tables (e.g. "Ruchir"), so try the table for the requested role first.
+    lookups = [authenticate_user_from_db, authenticate_technician_from_db]
+    if requested_role == "technician":
+        lookups.reverse()
+    for lookup in lookups:
+        account = lookup(u_clean, p_clean)
+        if account:
+            return account
 
     return None
 
@@ -892,6 +907,13 @@ class TicketUpdateResponse(BaseModel):
 
 # --- Helper to load all real-time tickets from Snowflake (with local fallback if offline) ---
 
+def get_real_tickets() -> List[Dict[str, Any]]:
+    """All tickets except knowledge-base reference rows (e.g. KB-CTTC-0001).
+    Use for ticket lists, counts and statistics; KB rows are reference
+    material stored alongside tickets, not customer tickets."""
+    return [t for t in get_all_tickets_realtime() if is_real_ticket(t)]
+
+
 def get_all_tickets_realtime() -> List[Dict[str, Any]]:
     """
     Primary data loader: Fetches tickets directly from Snowflake database.
@@ -1036,7 +1058,7 @@ def get_tickets_count():
             except Exception as e_sf:
                 logger.warning(f"Snowflake count error, falling back to local: {e_sf}")
 
-        all_tickets = get_all_tickets_realtime()
+        all_tickets = get_real_tickets()
         return {"total_tickets": len(all_tickets)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get tickets count: {str(e)}")
@@ -1068,7 +1090,7 @@ def get_ticket_statistics():
             except Exception as e_sf:
                 logger.warning(f"Snowflake statistics error, falling back to local: {e_sf}")
 
-        all_tickets = get_all_tickets_realtime()
+        all_tickets = get_real_tickets()
         by_status = {}
         by_priority = {}
         for t in all_tickets:
@@ -1088,294 +1110,101 @@ def get_ticket_statistics():
 @app.get("/analytics/mttr")
 def get_mttr_analytics(
     technician_id: Optional[str] = None,
-    user_email: Optional[str] = None
+    user_email: Optional[str] = None,
+    days: Optional[int] = 30
 ):
     """
-    Calculate Mean Time To Resolution (MTTR) and SLA metrics
-    across all tickets, by priority, and per technician/user.
+    Mean Time To Resolve (MTTR) and SLA metrics.
 
-    MTTR prefers the technician logged hands-on effort (TIME_SPENT_MINUTES) --
-    the actual resolution time he needed on site, falling back to the wall-clock
-    wait (RESOLVED_AT - CREATED_AT) when no effort was logged. Resolved
-    tickets with neither are excluded (counted in resolved_missing_timestamp_count).
+    MTTR = mean(RESOLVED_AT - CREATED_AT) over valid resolved tickets resolved in
+    the last `days` days (days=0 -> all time). Median and P90 are returned too
+    because resolution times are skewed. Avg Work Time (logged TIME_SPENT) and
+    the lifecycle stages (assign / travel / on-site) are separate metrics.
 
-    SLA compliance measures the customer wall-clock wait against priority targets;
-    Average Work Time = average(TIME_SPENT_MINUTES) --independent of wait time.
+    Scope: `technician_id` -> that technician's tickets, `user_email` -> that
+    subscriber's tickets, neither -> all tickets. Team-wide figures are always
+    returned alongside as the benchmark.
     """
     try:
         all_tickets = get_all_tickets_realtime()
-        
-        # Priority SLA targets in hours
-        sla_targets = {
-            "critical": 2.0,
-            "high": 8.0,
-            "medium": 24.0,
-            "low": 48.0
-        }
-        
-        resolved_statuses = {"resolved", "completed", "closed"}
-        
-        total_durations = []
-        personal_durations = []
-        priority_durations = {"Critical": [], "High": [], "Medium": [], "Low": []}
-        category_durations = {}
-        work_minutes_total = []  # technician effort (minutes) per resolved ticket
-        priority_work = {"Critical": [], "High": [], "Medium": [], "Low": []}
-        resolved_missing_timestamp = 0
-        sla_met_count = 0
-        total_evaluated_sla = 0
-        
-        active_on_track = 0
-        active_approaching = 0
-        active_breached = 0
+        now = _db_now()
+        data = build_mttr_dataset(all_tickets, days, now)
 
         tech_filter = (technician_id or "").strip().lower()
         if tech_filter in ["admin", "administrator", "all", "fleet", "manager", "none", "null", "undefined"]:
             tech_filter = ""
         user_filter = (user_email or "").strip().lower()
 
-        def ticket_belongs_to_tech(t: dict, tf: str) -> bool:
-            """Check if a ticket is assigned to the given technician filter string."""
-            fields = [
-                str(t.get("TECHNICIAN_ID")       or t.get("technician_id")       or "").strip().lower(),
-                str(t.get("ASSIGNED_TECHNICIAN") or t.get("assigned_technician") or "").strip().lower(),
-                str(t.get("TECHNICIANEMAIL")     or t.get("technician_email")     or "").strip().lower(),
-            ]
-            return any(tf in f or f in tf for f in fields if f)
+        def in_scope(t: dict) -> bool:
+            if tech_filter:
+                return tech_filter in ticket_technician_keys(t)
+            if user_filter:
+                ids = {str(t.get(k) or "").strip().lower()
+                       for k in ("USEREMAIL", "user_email", "USERID", "user_id")}
+                return user_filter in ids
+            return True
 
-        now = datetime.utcnow()
+        scoped_resolved = [(t, tm) for t, tm in data["resolved"] if in_scope(t)]
+        scoped_open = [t for t in data["open"] if in_scope(t)]
+        scoped_numbers = {str(t.get("TICKETNUMBER")) for t in all_tickets if in_scope(t)}
+        scoped_excluded = [e for e in data["excluded"] if str(e["ticket_number"]) in scoped_numbers]
+        scoped_work_flagged = [e for e in data["work_flagged"] if str(e["ticket_number"]) in scoped_numbers]
 
-        # Target tickets for personal scoping
-        if tech_filter:
-            target_tickets = [t for t in all_tickets if ticket_belongs_to_tech(t, tech_filter)]
-        elif user_filter:
-            target_tickets = [
-                t for t in all_tickets
-                if (
-                    user_filter in str(t.get("USEREMAIL") or t.get("user_email") or "").strip().lower()
-                    or user_filter in str(t.get("USERID") or t.get("user_id") or "").strip().lower()
-                    or user_filter in str(t.get("REQUESTER_NAME") or t.get("requester_name") or "").strip().lower()
-                    or str(t.get("USEREMAIL") or t.get("user_email") or "").strip().lower() in user_filter
-                    or str(t.get("USERID") or t.get("user_id") or "").strip().lower() in user_filter
-                )
-            ]
-        else:
-            target_tickets = all_tickets
+        team = mttr_block(data["resolved"])
+        personal = mttr_block(scoped_resolved)
 
-        base_priority_mttr = {"Critical": 1.6, "High": 6.4, "Medium": 18.0, "Low": 36.0}
+        def by_priority(rows):
+            out = {}
+            for p, target in SLA_TARGET_HOURS.items():
+                block = mttr_block([(t, tm) for t, tm in rows
+                                    if normalize_priority(t.get("PRIORITY") or t.get("priority")) == p])
+                block["sla_target_hours"] = target
+                out[p] = block
+            return out
 
-        # 1. Process all tickets for team/fleet-wide MTTR, SLA and priority benchmarks
-        for t in all_tickets:
-            status_val = str(t.get("STATUS") or t.get("status") or "").strip().lower()
-            priority_val = str(t.get("PRIORITY") or t.get("priority") or "Medium").strip()
-            priority_key = priority_val.capitalize()
-            if priority_key not in priority_durations:
-                priority_key = "Medium"
-
-            category_val = str(t.get("TICKETCATEGORY") or t.get("ISSUETYPE") or t.get("category") or "General").strip()
-
-            # Parse created timestamp
-            created_dt = None
-            raw_created = (
-                t.get("CREATED_AT") or t.get("created_at") or
-                t.get("ORIGINAL_CREATED_AT") or t.get("original_created_at") or
-                t.get("date")
-            )
-            if raw_created:
-                try:
-                    created_dt = datetime.fromisoformat(str(raw_created).replace("Z", "+00:00").split("+")[0])
-                except Exception:
-                    pass
-
-            if not created_dt:
-                created_dt = parse_created_at_from_ticket_number(
-                    t.get("TICKETNUMBER") or t.get("ticket_number"))
-
-            duration_hours = None
-
-            raw_resolved = (t.get("RESOLVED_AT") or t.get("resolved_at")
-                            or t.get("COMPLETED_AT") or t.get("completed_at")
-                            or t.get("CLOSED_AT") or t.get("closed_at"))
-            if raw_resolved and created_dt:
-                try:
-                    resolved_dt = datetime.fromisoformat(str(raw_resolved).replace("Z", "+00:00").split("+")[0])
-                    diff_h = (resolved_dt - created_dt).total_seconds() / 3600.0
-                    if diff_h >= 0:
-                        duration_hours = round(diff_h, 1)
-                except Exception:
-                    pass
-
-            # Technician work time (effort metric)
-            work_minutes = parse_time_spent_minutes(t.get("TIME_SPENT_MINUTES", t.get("time_spent_minutes")))
-            if work_minutes is None and (t.get("TIME_SPENT_HOURS") or t.get("time_spent_hours")):
-                try:
-                    work_minutes = float(t.get("TIME_SPENT_HOURS") or t.get("time_spent_hours")) * 60.0
-                except Exception:
-                    pass
-            if work_minutes is None:
-                work_minutes = parse_time_spent_minutes(t.get("TIME_SPENT", t.get("time_spent")))
-            if work_minutes is None:
-                work_minutes = extract_time_spent_from_resolution(t.get("RESOLUTION") or t.get("resolution") or "")
-
-            # Sanitize outlier work_minutes (e.g. test string like '(40000) done isuue')
-            if work_minutes is not None and work_minutes > 1440:
-                if duration_hours is not None and duration_hours <= 24:
-                    work_minutes = max(1.0, duration_hours * 60.0)
-                else:
-                    work_minutes = 60.0
-
-            target_hours = sla_targets.get(priority_key.lower(), 24.0)
-
-            if status_val in resolved_statuses:
-                effort_hours = round(work_minutes / 60.0, 1) if work_minutes is not None else None
-                mttr_hours = effort_hours if effort_hours is not None else duration_hours
-                if mttr_hours is None:
-                    mttr_hours = base_priority_mttr.get(priority_key, 12.0)
-
-                total_durations.append(mttr_hours)
-                priority_durations[priority_key].append(mttr_hours)
-
-                if category_val:
-                    category_durations.setdefault(category_val, []).append(mttr_hours)
-
-                if duration_hours is not None:
-                    if duration_hours <= target_hours:
-                        sla_met_count += 1
-                    total_evaluated_sla += 1
-                elif effort_hours is not None:
-                    if effort_hours <= target_hours:
-                        sla_met_count += 1
-                    total_evaluated_sla += 1
-
-                if work_minutes is not None:
-                    work_minutes_total.append(work_minutes)
-                    priority_work[priority_key].append(work_minutes)
-            else:
-                # Active open ticket SLA evaluation
-                total_evaluated_sla += 1
-                if created_dt:
-                    elapsed_hours = max(0.1, (now - created_dt).total_seconds() / 3600.0)
-                    pct_elapsed = elapsed_hours / target_hours
-                    if pct_elapsed < 0.7:
-                        active_on_track += 1
-                        sla_met_count += 1
-                    elif pct_elapsed <= 1.0:
-                        active_approaching += 1
-                        sla_met_count += 1
-                    else:
-                        active_breached += 1
-                else:
-                    active_on_track += 1
-                    sla_met_count += 1
-
-        # 2. Process personal tickets
-        personal_durations = []
-        for t in target_tickets:
-            status_val = str(t.get("STATUS") or t.get("status") or "").strip().lower()
-            if status_val in resolved_statuses:
-                work_mins = parse_time_spent_minutes(t.get("TIME_SPENT_MINUTES", t.get("time_spent_minutes")))
-                if work_mins is None and (t.get("TIME_SPENT_HOURS") or t.get("time_spent_hours")):
-                    try:
-                        work_mins = float(t.get("TIME_SPENT_HOURS") or t.get("time_spent_hours")) * 60.0
-                    except Exception:
-                        pass
-                if work_mins is None:
-                    work_mins = extract_time_spent_from_resolution(t.get("RESOLUTION") or t.get("resolution") or "")
-                
-                raw_c = (
-                    t.get("CREATED_AT") or t.get("created_at") or
-                    t.get("ORIGINAL_CREATED_AT") or t.get("original_created_at") or
-                    t.get("date")
-                )
-                raw_r = (
-                    t.get("RESOLVED_AT") or t.get("resolved_at") or
-                    t.get("COMPLETED_AT") or t.get("completed_at") or
-                    t.get("CLOSED_AT") or t.get("closed_at")
-                )
-                c_dt = None
-                if raw_c:
-                    try:
-                        c_dt = datetime.fromisoformat(str(raw_c).replace("Z", "+00:00").split("+")[0])
-                    except Exception:
-                        pass
-                if not c_dt:
-                    c_dt = parse_created_at_from_ticket_number(t.get("TICKETNUMBER") or t.get("ticket_number"))
-                dur_h = None
-                if raw_r and c_dt:
-                    try:
-                        r_dt = datetime.fromisoformat(str(raw_r).replace("Z", "+00:00").split("+")[0])
-                        d_diff = (r_dt - c_dt).total_seconds() / 3600.0
-                        if d_diff >= 0:
-                            dur_h = round(d_diff, 1)
-                    except Exception:
-                        pass
-
-                if work_mins is not None and work_mins > 1440:
-                    if dur_h is not None and dur_h <= 24:
-                        work_mins = max(1.0, dur_h * 60.0)
-                    else:
-                        work_mins = 60.0
-
-                effort_h = round(work_mins / 60.0, 1) if work_mins is not None else None
-                p_mttr = effort_h if effort_h is not None else dur_h
-                if p_mttr is not None:
-                    personal_durations.append(p_mttr)
-
-        overall_mttr = round(sum(total_durations) / len(total_durations), 1) if total_durations else 6.5
-        personal_mttr = round(sum(personal_durations) / len(personal_durations), 1) if personal_durations else overall_mttr
-
-        avg_work_minutes = round(sum(work_minutes_total) / len(work_minutes_total), 1) if work_minutes_total else None
-        avg_work_hours = round(avg_work_minutes / 60.0, 1) if avg_work_minutes is not None else None
-
-        by_priority_out = {}
-        for p, durs in priority_durations.items():
-            wmins = priority_work[p]
-            by_priority_out[p] = {
-                "mttr_hours": round(sum(durs) / len(durs), 1) if durs else base_priority_mttr.get(p, 12.0),
-                "sla_target_hours": sla_targets.get(p.lower(), 24.0),
-                "resolved_count": len(durs),
-                "avg_work_time_hours": round((sum(wmins) / len(wmins)) / 60.0, 1) if wmins else None
-            }
-
-        by_category_out = {}
-        for c, durs in list(category_durations.items())[:6]:
-            by_category_out[c] = {
-                "mttr_hours": round(sum(durs) / len(durs), 1),
-                "resolved_count": len(durs)
-            }
-
-        sla_compliance_rate = round((sla_met_count / total_evaluated_sla * 100), 1) if total_evaluated_sla else None
+        categories = {}
+        for t, tm in scoped_resolved:
+            c = str(t.get("TICKETCATEGORY") or t.get("ISSUETYPE") or "General").strip() or "General"
+            categories.setdefault(c, []).append((t, tm))
+        by_category_out = {c: {"mttr_hours": mttr_block(rows)["mttr_hours"], "resolved_count": len(rows)}
+                           for c, rows in sorted(categories.items(), key=lambda kv: -len(kv[1]))}
 
         return {
-            "overall_mttr_hours": overall_mttr,
-            "overall_resolved_count": len(total_durations),
-            "personal_mttr_hours": personal_mttr,
-            "personal_resolved_count": len(personal_durations),
-            "avg_work_time_hours": avg_work_hours,
-            "avg_work_time_minutes": avg_work_minutes,
-            "work_time_logged_count": len(work_minutes_total),
-            "resolved_missing_timestamp_count": resolved_missing_timestamp,
-            "sla_compliance_rate": sla_compliance_rate,
-            "sla_targets_hours": {
-                "Critical": 2.0,
-                "High": 8.0,
-                "Medium": 24.0,
-                "Low": 48.0
-            },
-            "by_priority": by_priority_out,
+            "definition": "MTTR = average of (resolved time - created time) for resolved tickets",
+            "window_days": days if days and days > 0 else None,
+            "window_start": data["since"].isoformat() if data["since"] else None,
+            "scope": "technician" if tech_filter else "user" if user_filter else "all",
+            # Backward-compatible top-level fields
+            "overall_mttr_hours": team["mttr_hours"],
+            "overall_resolved_count": team["resolved_count"],
+            "personal_mttr_hours": personal["mttr_hours"],
+            "personal_resolved_count": personal["resolved_count"],
+            "avg_work_time_hours": personal["avg_work_time_hours"],
+            "avg_work_time_minutes": round(personal["avg_work_time_hours"] * 60, 1) if personal["avg_work_time_hours"] is not None else None,
+            "work_time_logged_count": personal["work_time_logged_count"],
+            "sla_compliance_rate": personal["sla_compliance_rate"],
+            "sla_targets_hours": SLA_TARGET_HOURS,
+            "by_priority": by_priority(scoped_resolved),
+            "team_by_priority": by_priority(data["resolved"]),
             "by_category": by_category_out,
-            "active_sla_status": {
-                "on_track": active_on_track,
-                "approaching": active_approaching,
-                "breached": active_breached
-            }
+            "active_sla_status": open_sla_status(scoped_open, now),
+            # Full metric blocks (median, P90, lifecycle stages)
+            "personal": personal,
+            "team": team,
+            # Data quality: tickets left out of MTTR and why
+            "excluded_count": len(scoped_excluded),
+            "excluded": scoped_excluded,
+            "resolved_missing_timestamp_count": sum(1 for e in scoped_excluded if e["reason"] == "missing_timestamp"),
+            "work_time_ignored_count": len(scoped_work_flagged),
+            "work_time_ignored": scoped_work_flagged,
+            "non_ticket_rows_ignored": data["non_ticket_rows"],
         }
     except Exception as e:
         logger.error(f"Failed to get MTTR analytics: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get MTTR analytics: {str(e)}")
 
 @app.get("/debug/snowflake-tables")
-def debug_snowflake_tables():
+def debug_snowflake_tables(current_user: dict = Depends(require_admin)):
     """Debug endpoint to check both Snowflake tables"""
     try:
         if not snowflake_conn:
@@ -1408,7 +1237,7 @@ def debug_snowflake_tables():
         raise HTTPException(status_code=500, detail=f"Failed to query Snowflake tables: {str(e)}")
 
 @app.post("/admin/reset-workloads")
-def reset_technician_workloads():
+def reset_technician_workloads(current_user: dict = Depends(require_admin)):
     """Reset all technician workloads to match actual current tickets"""
     try:
         if not snowflake_conn:
@@ -1432,7 +1261,8 @@ def reset_technician_workloads():
             count_query = f"""
                 SELECT COUNT(*) as actual_workload
                 FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS
-                WHERE TECHNICIAN_ID = %s AND STATUS != 'resolved' AND STATUS != 'closed'
+                WHERE TECHNICIAN_ID = %s
+                  AND LOWER(TRIM(STATUS)) NOT IN ('resolved', 'closed', 'complete', 'completed')
             """
 
             count_result = snowflake_conn.execute_query(count_query, (tech_id,))
@@ -1463,43 +1293,8 @@ def reset_technician_workloads():
         logger.error(f"Failed to reset workloads: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to reset workloads: {str(e)}")
 
-@app.get("/admin/technician-credentials")
-def get_technician_credentials():
-    """Get all technician credentials for testing purposes"""
-    try:
-        if not snowflake_conn:
-            raise HTTPException(status_code=503, detail="Database connection unavailable")
-
-        # Get all technician credentials
-        query = f"""
-            SELECT TECHNICIAN_ID, NAME, EMAIL, TECHNICIAN_PASSWORD
-            FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TECHNICIAN_DATA
-            ORDER BY TECHNICIAN_ID
-        """
-
-        results = snowflake_conn.execute_query(query)
-
-        credentials = []
-        for tech in results:
-            credentials.append({
-                "technician_id": tech.get("TECHNICIAN_ID"),
-                "name": tech.get("NAME"),
-                "email": tech.get("EMAIL"),
-                "password": tech.get("TECHNICIAN_PASSWORD")
-            })
-
-        return {
-            "message": "Technician credentials retrieved",
-            "credentials": credentials,
-            "success": True
-        }
-
-    except Exception as e:
-        logger.error(f"Failed to get technician credentials: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get technician credentials: {str(e)}")
-
 @app.post("/admin/fix-workload-data-types")
-def fix_workload_data_types():
+def fix_workload_data_types(current_user: dict = Depends(require_admin)):
     """Fix workload data types and reset all workloads to correct values"""
     try:
         if not snowflake_conn:
@@ -1658,7 +1453,7 @@ def get_tickets_stats():
             except Exception as e_sf:
                 logger.warning(f"Snowflake stats query error, falling back to local: {e_sf}")
 
-        all_tickets = get_all_tickets_realtime()
+        all_tickets = get_real_tickets()
         by_status = {}
         by_priority = {}
         for t in all_tickets:
@@ -1679,7 +1474,7 @@ def get_tickets_stats():
 def get_technician_analytics(technician_id: Optional[str] = "all"):
     """Get real-time analytics dashboard data for technician performance, weekly charts, categories, and priority trends"""
     try:
-        all_tickets = get_all_tickets_realtime()
+        all_tickets = get_real_tickets()
 
         tech_clean = (technician_id or "all").strip().lower()
 
@@ -1952,7 +1747,7 @@ def get_full_graph_dataset(refresh: bool = False):
 @app.get("/tickets", response_model=List[dict])
 def get_all_tickets(limit: int = Query(100, le=500), offset: int = 0, status: Optional[str] = None, priority: Optional[str] = None, user_email: Optional[str] = None):
     try:
-        all_rows = get_all_tickets_realtime()
+        all_rows = get_real_tickets()
         filtered = []
         status_clean = status.strip().lower() if status else None
         priority_clean = priority.strip().lower() if priority else None
@@ -2087,7 +1882,8 @@ def assign_ticket(ticket_number: str, assignment_data: dict):
         # Update the ticket with the new assigned technician and email directly in Snowflake
         update_ticket_query = f"""
         UPDATE {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS
-        SET TECHNICIAN_ID = %s, TECHNICIANEMAIL = %s, STATUS = 'Assigned'
+        SET TECHNICIAN_ID = %s, TECHNICIANEMAIL = %s, STATUS = 'Assigned',
+            ASSIGNED_AT = COALESCE(ASSIGNED_AT, CURRENT_TIMESTAMP())
         WHERE TICKETNUMBER = %s OR TICKETNUMBER = %s
         """
         snowflake_conn.execute_query(update_ticket_query, (backend_tech_id, technician_email, ticket_dot, ticket_dash))
@@ -2158,9 +1954,9 @@ def update_local_ticket_csv(ticket_number: str, status: Optional[str] = None, pr
                         st_l = str(status).strip().lower()
                         if st_l in ("resolved", "complete", "completed", "closed"):
                             if not nt.get("resolved_at"):
-                                nt["resolved_at"] = datetime.now().isoformat()
+                                nt["resolved_at"] = utc_now().isoformat()
                             if st_l == "closed":
-                                nt["closed_at"] = datetime.now().isoformat()
+                                nt["closed_at"] = utc_now().isoformat()
                         elif old_status_l in ("resolved", "complete", "completed", "closed"):
                             # Reopened: clear resolution timestamps and logged effort so
                             # MTTR reflects the final resolution only.
@@ -2189,7 +1985,7 @@ def update_local_ticket_csv(ticket_number: str, status: Optional[str] = None, pr
                         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
                         note_entry = f"[{timestamp}] {work_note}"
                         nt["resolution_note"] = f"{existing_res}\n{note_entry}" if existing_res else note_entry
-                    nt["updated_at"] = datetime.now().isoformat()
+                    nt["updated_at"] = utc_now().isoformat()
                     updated_record = nt
             with open(kb_path, "w", encoding="utf-8") as f_kb:
                 json.dump(kb_data, f_kb, indent=2)
@@ -2220,9 +2016,9 @@ def update_local_ticket_csv(ticket_number: str, status: Optional[str] = None, pr
                             st_l = str(status).strip().lower()
                             if st_l in ("resolved", "complete", "completed", "closed"):
                                 if not row.get("RESOLVED_AT"):
-                                    row["RESOLVED_AT"] = datetime.now().isoformat()
+                                    row["RESOLVED_AT"] = utc_now().isoformat()
                                 if st_l == "closed":
-                                    row["CLOSED_AT"] = datetime.now().isoformat()
+                                    row["CLOSED_AT"] = utc_now().isoformat()
                             elif old_status_l in ("resolved", "complete", "completed", "closed"):
                                 row["RESOLVED_AT"] = ""
                                 row["CLOSED_AT"] = ""
@@ -2280,7 +2076,10 @@ def sync_ticket_to_closed_table_snowflake(ticket_number: str):
                 CREATED_AT AS ORIGINAL_CREATED_AT,
                 RESOLVED_AT,
                 COALESCE(CLOSED_AT, CURRENT_TIMESTAMP()) AS CLOSED_AT,
-                TIME_SPENT_MINUTES
+                TIME_SPENT_MINUTES,
+                ASSIGNED_AT,
+                ACKNOWLEDGED_AT,
+                ARRIVED_AT
             FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS
             WHERE (TICKETNUMBER = %s OR TICKETNUMBER = %s)
               AND LOWER(STATUS) IN ('closed', 'resolved', 'complete', 'completed')
@@ -2306,18 +2105,22 @@ def sync_ticket_to_closed_table_snowflake(ticket_number: str):
                 target.ORIGINAL_CREATED_AT = source.ORIGINAL_CREATED_AT,
                 target.RESOLVED_AT = source.RESOLVED_AT,
                 target.CLOSED_AT = source.CLOSED_AT,
-                target.TIME_SPENT_MINUTES = source.TIME_SPENT_MINUTES
+                target.TIME_SPENT_MINUTES = source.TIME_SPENT_MINUTES,
+                target.ASSIGNED_AT = source.ASSIGNED_AT,
+                target.ACKNOWLEDGED_AT = source.ACKNOWLEDGED_AT,
+                target.ARRIVED_AT = source.ARRIVED_AT
         WHEN NOT MATCHED THEN
             INSERT (
                 TICKETNUMBER, TITLE, DESCRIPTION, TICKETTYPE, TICKETCATEGORY,
                 ISSUETYPE, SUBISSUETYPE, DUEDATETIME, PRIORITY, STATUS, RESOLUTION,
                 TECHNICIANEMAIL, TECHNICIAN_ID, USEREMAIL, USERID, PHONENUMBER,
-                CLOSED_AT, ORIGINAL_CREATED_AT, RESOLVED_AT, TIME_SPENT_MINUTES
+                CLOSED_AT, ORIGINAL_CREATED_AT, RESOLVED_AT, TIME_SPENT_MINUTES, ASSIGNED_AT, ACKNOWLEDGED_AT, ARRIVED_AT
             ) VALUES (
                 source.TICKETNUMBER, source.TITLE, source.DESCRIPTION, source.TICKETTYPE, source.TICKETCATEGORY,
                 source.ISSUETYPE, source.SUBISSUETYPE, source.DUEDATETIME, source.PRIORITY, source.STATUS, source.RESOLUTION,
                 source.TECHNICIANEMAIL, source.TECHNICIAN_ID, source.USEREMAIL, source.USERID, source.PHONENUMBER,
-                source.CLOSED_AT, source.ORIGINAL_CREATED_AT, source.RESOLVED_AT, source.TIME_SPENT_MINUTES
+                source.CLOSED_AT, source.ORIGINAL_CREATED_AT, source.RESOLVED_AT, source.TIME_SPENT_MINUTES,
+                source.ASSIGNED_AT, source.ACKNOWLEDGED_AT, source.ARRIVED_AT
             )
         """
         snowflake_conn.execute_query(sync_sql, (ticket_dot, ticket_dash))
@@ -2362,9 +2165,26 @@ def update_ticket_status(ticket_number: str, status_data: dict):
                     technician_id = current_ticket.get('TECHNICIAN_ID')
 
                     # Update the ticket status directly in Snowflake
+                    new_st_l = new_status.strip().lower()
+                    stamp_sql = ""
+                    if new_st_l == 'in progress':
+                        stamp_sql = ", ACKNOWLEDGED_AT = COALESCE(ACKNOWLEDGED_AT, CURRENT_TIMESTAMP())"
+                    elif new_st_l == 'on site':
+                        stamp_sql = (", ACKNOWLEDGED_AT = COALESCE(ACKNOWLEDGED_AT, CURRENT_TIMESTAMP())"
+                                     ", ARRIVED_AT = COALESCE(ARRIVED_AT, CURRENT_TIMESTAMP())")
+                    elif new_st_l == 'closed':
+                        stamp_sql = ", RESOLVED_AT = COALESCE(RESOLVED_AT, CURRENT_TIMESTAMP()), CLOSED_AT = CURRENT_TIMESTAMP()"
+                    elif new_st_l in ('resolved', 'complete', 'completed'):
+                        stamp_sql = ", RESOLVED_AT = COALESCE(RESOLVED_AT, CURRENT_TIMESTAMP())"
+                    elif str(current_status or '').strip().lower() in ('resolved', 'closed', 'complete', 'completed'):
+                        stamp_sql = ", RESOLVED_AT = NULL, CLOSED_AT = NULL"
+                    try:
+                        ensure_mttr_columns()
+                    except Exception:
+                        pass
                     update_query = f"""
                     UPDATE {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS
-                    SET STATUS = %s
+                    SET STATUS = %s{stamp_sql}
                     WHERE TICKETNUMBER = %s OR TICKETNUMBER = %s
                     """
                     snowflake_conn.execute_query(update_query, (new_status, ticket_dot, ticket_dash))
@@ -2537,7 +2357,17 @@ def update_ticket_status_priority(ticket_number: str, update_request: TicketUpda
                             ensure_mttr_columns()
                         except Exception:
                             pass
-                        if new_st_l in resolved_set and new_st_l != 'closed':
+                        if new_st_l == 'in progress':
+                            # Technician acknowledged the ticket and started working on it
+                            update_parts.append("ACKNOWLEDGED_AT = COALESCE(ACKNOWLEDGED_AT, CURRENT_TIMESTAMP())")
+                            updated_fields['acknowledged_at'] = 'set (first acknowledgement)'
+                        if new_st_l == 'on site':
+                            # Technician arrived at the customer site (truck roll); arriving
+                            # also counts as acknowledging if In Progress was skipped
+                            update_parts.append("ACKNOWLEDGED_AT = COALESCE(ACKNOWLEDGED_AT, CURRENT_TIMESTAMP())")
+                            update_parts.append("ARRIVED_AT = COALESCE(ARRIVED_AT, CURRENT_TIMESTAMP())")
+                            updated_fields['arrived_at'] = 'set (arrived on site)'
+                        elif new_st_l in resolved_set and new_st_l != 'closed':
                             # First resolution time is preserved even if the ticket is resolved again
                             update_parts.append("RESOLVED_AT = COALESCE(RESOLVED_AT, CURRENT_TIMESTAMP())")
                             updated_fields['resolved_at'] = 'set (first resolution)'
@@ -2944,7 +2774,9 @@ def ensure_mttr_columns():
     Adds to CTTC_MOCK_TICKETS (and mirrors on CTTC_MOCK_CLOSED_TICKETS):
       - RESOLVED_AT        TIMESTAMP_NTZ  (first resolution timestamp — MTTR source)
       - CLOSED_AT          TIMESTAMP_NTZ  (final close timestamp)
-      - ASSIGNED_AT        TIMESTAMP_NTZ  (assignment timestamp)
+      - ASSIGNED_AT        TIMESTAMP_NTZ  (first assignment timestamp — MTTA)
+      - ACKNOWLEDGED_AT    TIMESTAMP_NTZ  (technician first set In Progress — time to acknowledge)
+      - ARRIVED_AT         TIMESTAMP_NTZ  (technician arrived on site — travel / on-site split)
       - TIME_SPENT_MINUTES NUMBER(8,0)    (technician effort in minutes — work-time metric)
       - TIME_SPENT         VARCHAR(255)   (free-text display value, pre-existing)
     """
@@ -2954,6 +2786,8 @@ def ensure_mttr_columns():
         f"ALTER TABLE {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS ADD COLUMN IF NOT EXISTS RESOLVED_AT TIMESTAMP_NTZ",
         f"ALTER TABLE {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS ADD COLUMN IF NOT EXISTS CLOSED_AT TIMESTAMP_NTZ",
         f"ALTER TABLE {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS ADD COLUMN IF NOT EXISTS ASSIGNED_AT TIMESTAMP_NTZ",
+        f"ALTER TABLE {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS ADD COLUMN IF NOT EXISTS ARRIVED_AT TIMESTAMP_NTZ",
+        f"ALTER TABLE {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS ADD COLUMN IF NOT EXISTS ACKNOWLEDGED_AT TIMESTAMP_NTZ",
         f"ALTER TABLE {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS ADD COLUMN IF NOT EXISTS TIME_SPENT_MINUTES NUMBER(8,0)",
         f"ALTER TABLE {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS ADD COLUMN IF NOT EXISTS TIME_SPENT VARCHAR(255)",
         f"ALTER TABLE {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS ADD COLUMN IF NOT EXISTS CREATED_AT TIMESTAMP_NTZ",
@@ -2961,6 +2795,9 @@ def ensure_mttr_columns():
         f"ALTER TABLE {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_CLOSED_TICKETS ADD COLUMN IF NOT EXISTS CLOSED_AT TIMESTAMP_NTZ",
         f"ALTER TABLE {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_CLOSED_TICKETS ADD COLUMN IF NOT EXISTS ORIGINAL_CREATED_AT TIMESTAMP_NTZ",
         f"ALTER TABLE {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_CLOSED_TICKETS ADD COLUMN IF NOT EXISTS TIME_SPENT_MINUTES NUMBER(8,0)",
+        f"ALTER TABLE {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_CLOSED_TICKETS ADD COLUMN IF NOT EXISTS ASSIGNED_AT TIMESTAMP_NTZ",
+        f"ALTER TABLE {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_CLOSED_TICKETS ADD COLUMN IF NOT EXISTS ARRIVED_AT TIMESTAMP_NTZ",
+        f"ALTER TABLE {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_CLOSED_TICKETS ADD COLUMN IF NOT EXISTS ACKNOWLEDGED_AT TIMESTAMP_NTZ",
     ]
     try:
         for stmt in statements:
@@ -3061,6 +2898,245 @@ def extract_time_spent_from_resolution(resolution_text) -> Optional[float]:
     value = float(match.group(1))
     unit = match.group(2).lower()
     return value * 60.0 if unit.startswith("h") else value
+
+
+# ==================== MTTR CORE ====================
+# MTTR (Mean Time To Resolve) = mean(RESOLVED_AT - CREATED_AT) over resolved
+# tickets: the full time the customer waited (assignment + travel + on-site work).
+# Logged technician effort (TIME_SPENT_MINUTES) is a separate "work time" metric.
+# Both /analytics/mttr and /admin/reports/wider-mttr use these helpers so every
+# role sees numbers computed the same way; only the ticket scope differs.
+
+SLA_TARGET_HOURS = {"Critical": 2.0, "High": 8.0, "Medium": 24.0, "Low": 48.0}
+RESOLVED_STATUSES = {"resolved", "complete", "completed", "closed"}
+# Real tickets only: T{YYYYMMDD}.{seq} or legacy T{YYYYMMDDHHMMSS}.
+# Excludes knowledge-base seed rows such as KB-CTTC-0001.
+_REAL_TICKET_RE = re.compile(r"^T\d{8}\.\d{4}$|^T\d{14}$")
+
+
+def _parse_ts(raw) -> Optional[datetime]:
+    """Parse a Snowflake/ISO timestamp into a naive UTC datetime."""
+    if raw is None or raw == "":
+        return None
+    try:
+        dt = raw if isinstance(raw, datetime) else datetime.fromisoformat(str(raw).strip().replace("Z", "+00:00"))
+    except Exception:
+        return None
+    if dt.tzinfo is not None:
+        dt = dt.astimezone(timezone.utc)
+    return dt.replace(tzinfo=None)
+
+
+def _db_now() -> datetime:
+    """Current time (UTC) in the same clock Snowflake uses for CURRENT_TIMESTAMP() writes."""
+    if snowflake_conn and snowflake_conn.is_connected():
+        try:
+            rows = snowflake_conn.execute_query("SELECT CURRENT_TIMESTAMP()::TIMESTAMP_NTZ AS NOW_TS")
+            if rows and rows[0].get("NOW_TS"):
+                return _parse_ts(rows[0]["NOW_TS"])
+        except Exception:
+            pass
+    return utc_now()
+
+
+def normalize_priority(raw) -> str:
+    """Map a stored priority label onto one of the SLA buckets."""
+    p = str(raw or "").strip().lower()
+    if p in ("critical", "desktop/user down", "urgent", "p1"):
+        return "Critical"
+    if p in ("high", "p2"):
+        return "High"
+    if p in ("low", "p4"):
+        return "Low"
+    return "Medium"
+
+
+def is_real_ticket(ticket: dict) -> bool:
+    return bool(_REAL_TICKET_RE.match(str(ticket.get("TICKETNUMBER") or ticket.get("ticket_number") or "").strip()))
+
+
+def is_resolved_ticket(ticket: dict) -> bool:
+    return str(ticket.get("STATUS") or ticket.get("status") or "").strip().lower() in RESOLVED_STATUSES
+
+
+def ticket_work_minutes(ticket: dict) -> Optional[float]:
+    """Technician-logged effort in minutes, from the first field that has it."""
+    minutes = parse_time_spent_minutes(ticket.get("TIME_SPENT_MINUTES", ticket.get("time_spent_minutes")))
+    if minutes is None and (ticket.get("TIME_SPENT_HOURS") or ticket.get("time_spent_hours")):
+        try:
+            minutes = float(ticket.get("TIME_SPENT_HOURS") or ticket.get("time_spent_hours")) * 60.0
+        except Exception:
+            pass
+    if minutes is None:
+        minutes = parse_time_spent_minutes(ticket.get("TIME_SPENT", ticket.get("time_spent")))
+    if minutes is None:
+        minutes = extract_time_spent_from_resolution(ticket.get("RESOLUTION") or ticket.get("resolution") or "")
+    return minutes
+
+
+def compute_ticket_times(ticket: dict) -> dict:
+    """
+    Lifecycle timings for one ticket, in hours:
+      resolution_h = RESOLVED_AT - CREATED_AT   (MTTR input)
+      mtta_h       = ASSIGNED_AT - CREATED_AT   (time to assign)
+      ack_h        = ACKNOWLEDGED_AT - ASSIGNED_AT (time to acknowledge)
+      travel_h     = ARRIVED_AT  - (ACKNOWLEDGED_AT or ASSIGNED_AT) (truck-roll travel)
+      onsite_h     = RESOLVED_AT - ARRIVED_AT   (on-site work, wall clock)
+      work_h       = logged TIME_SPENT          (technician effort)
+    A resolved ticket is `valid` only when its timestamps are consistent; invalid
+    tickets are excluded from MTTR and reported with a reason, never patched.
+    Logged effort longer than the open time is dropped (work_h=None) and flagged.
+    """
+    created = _parse_ts(ticket.get("CREATED_AT") or ticket.get("created_at")
+                        or ticket.get("ORIGINAL_CREATED_AT") or ticket.get("original_created_at"))
+    if not created:
+        created = parse_created_at_from_ticket_number(ticket.get("TICKETNUMBER") or ticket.get("ticket_number"))
+    resolved = _parse_ts(ticket.get("RESOLVED_AT") or ticket.get("resolved_at")
+                         or ticket.get("CLOSED_AT") or ticket.get("closed_at")
+                         or ticket.get("COMPLETED_AT") or ticket.get("completed_at"))
+    assigned = _parse_ts(ticket.get("ASSIGNED_AT") or ticket.get("assigned_at"))
+    acknowledged = _parse_ts(ticket.get("ACKNOWLEDGED_AT") or ticket.get("acknowledged_at"))
+    arrived = _parse_ts(ticket.get("ARRIVED_AT") or ticket.get("arrived_at"))
+    work_min = ticket_work_minutes(ticket)
+
+    def hours(a, b):
+        return (b - a).total_seconds() / 3600.0 if a and b else None
+
+    out = {
+        "created": created,
+        "resolved": resolved,
+        "resolution_h": None,
+        "mtta_h": None,
+        "ack_h": None,
+        "travel_h": None,
+        "onsite_h": None,
+        "work_h": round(work_min / 60.0, 3) if work_min is not None else None,
+        "valid": False,
+        "reason": None,
+    }
+
+    if not created or not resolved:
+        out["reason"] = "missing_timestamp"
+        return out
+    resolution_h = hours(created, resolved)
+    if resolution_h < 0:
+        out["reason"] = "resolved_before_created"
+        return out
+    out["resolution_h"] = resolution_h
+    out["valid"] = True
+    # Logged effort cannot exceed the time the ticket was open (5 min tolerance).
+    # The timestamps are still valid for MTTR; only the effort value is dropped.
+    if out["work_h"] is not None and out["work_h"] > resolution_h + (5 / 60.0):
+        out["work_h"] = None
+        out["reason"] = "work_time_exceeds_open_time"
+
+    if assigned and created <= assigned <= resolved:
+        out["mtta_h"] = hours(created, assigned)
+        start_travel = assigned
+        if acknowledged and assigned <= acknowledged <= resolved:
+            out["ack_h"] = hours(assigned, acknowledged)
+            start_travel = acknowledged
+        if arrived and start_travel <= arrived <= resolved:
+            out["travel_h"] = hours(start_travel, arrived)
+            out["onsite_h"] = hours(arrived, resolved)
+    return out
+
+
+def summarize_hours(values: List[float]) -> dict:
+    """Mean / median / P90 of a list of hour values (None when empty)."""
+    vals = sorted(v for v in values if v is not None)
+    if not vals:
+        return {"mean": None, "median": None, "p90": None, "count": 0}
+    n = len(vals)
+    mid = n // 2
+    median = vals[mid] if n % 2 else (vals[mid - 1] + vals[mid]) / 2.0
+    p90 = vals[min(n - 1, max(0, int(round(0.9 * n + 0.5)) - 1))]  # nearest-rank
+    return {"mean": round(sum(vals) / n, 2), "median": round(median, 2), "p90": round(p90, 2), "count": n}
+
+
+def ticket_technician_keys(ticket: dict) -> set:
+    """Lower-cased identifiers of the technician a ticket is assigned to."""
+    keys = set()
+    for k in ("TECHNICIAN_ID", "technician_id", "TECHNICIANEMAIL", "technician_email",
+              "ASSIGNED_TECHNICIAN", "assigned_technician"):
+        v = str(ticket.get(k) or "").strip().lower()
+        if v:
+            keys.add(v)
+    return keys
+
+
+def build_mttr_dataset(tickets: List[dict], days: Optional[int], now: datetime) -> dict:
+    """
+    Split tickets into valid resolved rows (inside the window), excluded rows and
+    open rows. `days=None` or <= 0 means all time.
+    """
+    since = now - timedelta(days=days) if days and days > 0 else None
+    resolved_rows, excluded, work_flagged, open_rows = [], [], [], []
+    non_ticket_rows = 0
+    for t in tickets:
+        if not is_real_ticket(t):
+            non_ticket_rows += 1
+            continue
+        if not is_resolved_ticket(t):
+            open_rows.append(t)
+            continue
+        times = compute_ticket_times(t)
+        if since and times["resolved"] and times["resolved"] < since:
+            continue
+        if not times["valid"]:
+            excluded.append({"ticket_number": t.get("TICKETNUMBER"), "reason": times["reason"]})
+            continue
+        if times["reason"]:
+            work_flagged.append({"ticket_number": t.get("TICKETNUMBER"), "reason": times["reason"]})
+        resolved_rows.append((t, times))
+    return {"resolved": resolved_rows, "excluded": excluded, "work_flagged": work_flagged,
+            "open": open_rows, "non_ticket_rows": non_ticket_rows, "since": since}
+
+
+def mttr_block(rows: List[tuple]) -> dict:
+    """Aggregate a list of (ticket, times) into the MTTR metric block used by the API."""
+    res = summarize_hours([tm["resolution_h"] for _, tm in rows])
+    work = summarize_hours([tm["work_h"] for _, tm in rows])
+    mtta = summarize_hours([tm["mtta_h"] for _, tm in rows])
+    ack = summarize_hours([tm["ack_h"] for _, tm in rows])
+    travel = summarize_hours([tm["travel_h"] for _, tm in rows])
+    onsite = summarize_hours([tm["onsite_h"] for _, tm in rows])
+    sla_met = sum(1 for t, tm in rows
+                  if tm["resolution_h"] <= SLA_TARGET_HOURS[normalize_priority(t.get("PRIORITY") or t.get("priority"))])
+    return {
+        "mttr_hours": res["mean"],
+        "median_hours": res["median"],
+        "p90_hours": res["p90"],
+        "resolved_count": res["count"],
+        "avg_work_time_hours": work["mean"],
+        "work_time_logged_count": work["count"],
+        "mtta_hours": mtta["mean"],
+        "ack_hours": ack["mean"],
+        "travel_hours": travel["mean"],
+        "onsite_hours": onsite["mean"],
+        "stage_sample_count": travel["count"],
+        "sla_met": sla_met,
+        "sla_compliance_rate": round(sla_met / len(rows) * 100, 1) if rows else None,
+    }
+
+
+def open_sla_status(open_rows: List[dict], now: datetime) -> dict:
+    """On-track / approaching (>=70% of target) / breached counts for open tickets."""
+    status = {"on_track": 0, "approaching": 0, "breached": 0, "unknown": 0}
+    for t in open_rows:
+        created = compute_ticket_times(t)["created"]
+        if not created:
+            status["unknown"] += 1
+            continue
+        target = SLA_TARGET_HOURS[normalize_priority(t.get("PRIORITY") or t.get("priority"))]
+        pct = max(0.0, (now - created).total_seconds() / 3600.0) / target
+        if pct < 0.7:
+            status["on_track"] += 1
+        elif pct <= 1.0:
+            status["approaching"] += 1
+        else:
+            status["breached"] += 1
+    return status
 
 
 def ensure_technician_id_column():
@@ -3303,7 +3379,7 @@ def create_ticket(request: TicketCreateRequest):
             csv_path = os.path.join(parent_dir, "data", "TICKETS.csv")
             if os.path.exists(csv_path):
                 with open(csv_path, "a", newline="", encoding="utf-8") as f_csv:
-                    _now_iso = datetime.now().isoformat()
+                    _now_iso = utc_now().isoformat()
                     field_order = [
                         "TICKETNUMBER", "TITLE", "DESCRIPTION", "TICKETTYPE", "TICKETCATEGORY",
                         "ISSUETYPE", "SUBISSUETYPE", "DUEDATETIME", "PRIORITY", "STATUS", "RESOLUTION",
@@ -3469,7 +3545,7 @@ def get_all_users():
         return []
 
 @app.get("/debug/tickets/{technician_id}")
-def debug_technician_tickets(technician_id: str):
+def debug_technician_tickets(technician_id: str, current_user: dict = Depends(require_admin)):
     """Debug endpoint to check tickets for a technician"""
     try:
         if not snowflake_conn:
@@ -3559,7 +3635,7 @@ def detailed_health_check():
         }
 
 @app.get("/debug/table-structure")
-def get_table_structure():
+def get_table_structure(current_user: dict = Depends(require_admin)):
     """Debug endpoint to check table structure"""
     try:
         if not snowflake_conn:
@@ -4274,7 +4350,7 @@ ADMIN_TECHNICIANS_STORE = [
 ]
 
 @app.get("/admin/users")
-async def get_admin_users(role: Optional[str] = None):
+async def get_admin_users(role: Optional[str] = None, current_user: dict = Depends(require_admin)):
     """Retrieve users directly from Snowflake SF_DATABASE.SF_SCHEMA (CTTC_MOCK_USER_DATA / ADMIN_USERS) with live ticket mappings"""
     db_users = []
     
@@ -4304,7 +4380,7 @@ async def get_admin_users(role: Optional[str] = None):
                             "role": str(a_role).lower(),
                             "permissions_scope": a_perms,
                             "status": str(a_status),
-                            "created_at": str(row.get("CREATED_AT") or "2026-08-15T09:00:00Z"),
+                            "created_at": row.get("CREATED_AT") or "2026-08-15T09:00:00Z",
                             "total_tickets": 0,
                             "active_tickets": 0,
                             "resolved_tickets": 0,
@@ -4388,7 +4464,7 @@ async def get_admin_users(role: Optional[str] = None):
     return {"users": db_users, "total": len(db_users)}
 
 @app.get("/admin/admin-users")
-async def get_enterprise_admin_users():
+async def get_enterprise_admin_users(current_user: dict = Depends(require_admin)):
     """Retrieve all enterprise administrator accounts directly from Snowflake SF_DATABASE.SF_SCHEMA.ADMIN_USERS"""
     admin_users = []
     if snowflake_conn and snowflake_conn.is_connected():
@@ -4406,7 +4482,7 @@ async def get_enterprise_admin_users():
                         "department": row.get("DEPARTMENT") or "IT Operations",
                         "phone_number": row.get("PHONE_NUMBER") or "+1-555-0100",
                         "status": row.get("STATUS") or "ACTIVE",
-                        "created_at": str(row.get("CREATED_AT") or "")
+                        "created_at": row.get("CREATED_AT") or ""
                     })
         except Exception as e:
             logger.error(f"Error querying {SF_DATABASE}.{SF_SCHEMA}.ADMIN_USERS: {e}")
@@ -4443,7 +4519,7 @@ async def get_enterprise_admin_users():
     return {"admin_users": admin_users, "total": len(admin_users)}
 
 @app.post("/admin/admin-users")
-async def create_enterprise_admin_user(admin_data: dict):
+async def create_enterprise_admin_user(admin_data: dict, current_user: dict = Depends(require_admin)):
     """Add a new administrator into Snowflake SF_DATABASE.SF_SCHEMA.ADMIN_USERS"""
     username = admin_data.get("username", "").strip()
     email = admin_data.get("email", "").strip()
@@ -4469,7 +4545,7 @@ async def create_enterprise_admin_user(admin_data: dict):
         "department": dept,
         "phone_number": phone,
         "status": status_val,
-        "created_at": datetime.now().isoformat()
+        "created_at": utc_now().isoformat() + "Z"
     }
 
     if snowflake_conn and snowflake_conn.is_connected():
@@ -4502,7 +4578,7 @@ async def create_enterprise_admin_user(admin_data: dict):
     return {"status": "success", "message": "Administrator created successfully", "admin_user": new_admin}
 
 @app.delete("/admin/admin-users/{admin_id}")
-async def delete_enterprise_admin_user(admin_id: str):
+async def delete_enterprise_admin_user(admin_id: str, current_user: dict = Depends(require_admin)):
     """Remove/deactivate an administrator from Snowflake SF_DATABASE.SF_SCHEMA.ADMIN_USERS"""
     if snowflake_conn and snowflake_conn.is_connected():
         try:
@@ -4517,11 +4593,14 @@ async def delete_enterprise_admin_user(admin_id: str):
     return {"status": "success", "message": f"Administrator {admin_id} removed successfully"}
 
 @app.post("/admin/users")
-async def create_admin_user(user_data: dict):
+async def create_admin_user(user_data: dict, current_user: dict = Depends(require_admin)):
     """Add a new user into Snowflake SF_DATABASE.SF_SCHEMA.CTTC_MOCK_USER_DATA and local store"""
     username = user_data.get("username", "").strip()
     if not username:
         raise HTTPException(status_code=400, detail="Username is required")
+    password = str(user_data.get("password") or "")
+    if len(password) < 6:
+        raise HTTPException(status_code=400, detail="Password is required and must be at least 6 characters")
     
     new_user = {
         "user_id": f"usr-{len(ADMIN_USERS_STORE) + 1:03d}",
@@ -4532,7 +4611,7 @@ async def create_admin_user(user_data: dict):
         "phone_number": user_data.get("phone_number", "+1-555-0000").strip(),
         "role": user_data.get("role", "user"),
         "status": "ACTIVE",
-        "created_at": datetime.now().isoformat()
+        "created_at": utc_now().isoformat() + "Z"
     }
 
     # Insert into Snowflake SF_DATABASE.SF_SCHEMA.CTTC_MOCK_USER_DATA if connected
@@ -4547,7 +4626,7 @@ async def create_admin_user(user_data: dict):
                 new_user["full_name"],
                 new_user["email"],
                 new_user["phone_number"],
-                user_data.get("password", "password123")
+                password
             ))
         except Exception as e:
             logger.warning(f"Could not persist user to Snowflake: {e}")
@@ -4555,7 +4634,7 @@ async def create_admin_user(user_data: dict):
     ADMIN_USERS_STORE.append(new_user)
     DEMO_USERS[username] = {
         "username": username,
-        "password": user_data.get("password", "password123"),
+        "password": password,
         "role": new_user["role"],
         "email": new_user["email"],
         "full_name": new_user["full_name"],
@@ -4564,7 +4643,7 @@ async def create_admin_user(user_data: dict):
     return {"status": "success", "message": "User created successfully", "user": new_user}
 
 @app.delete("/admin/users/{user_id}")
-async def delete_admin_user(user_id: str):
+async def delete_admin_user(user_id: str, current_user: dict = Depends(require_admin)):
     """Remove a user from Snowflake SF_DATABASE.SF_SCHEMA.CTTC_MOCK_USER_DATA and store"""
     global ADMIN_USERS_STORE
     if snowflake_conn and snowflake_conn.is_connected():
@@ -4580,101 +4659,67 @@ async def delete_admin_user(user_id: str):
     return {"status": "success", "message": f"User {user_id} removed successfully"}
 
 @app.get("/admin/technicians")
-async def get_admin_technicians():
-    """Retrieve all technicians directly from Snowflake SF_DATABASE.SF_SCHEMA.CTTC_MOCK_TECHNICIAN_DATA with live workload and shift mapping"""
+async def get_admin_technicians(current_user: dict = Depends(require_admin)):
+    """Technicians from CTTC_MOCK_TECHNICIAN_DATA with live open/resolved ticket counts."""
     db_techs = []
-    
-    # 1. Query Snowflake SF_DATABASE.SF_SCHEMA.CTTC_MOCK_TECHNICIAN_DATA
     if snowflake_conn and snowflake_conn.is_connected():
         try:
-            sf_techs = snowflake_conn.execute_query(f"SELECT * FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TECHNICIAN_DATA")
-            if sf_techs:
-                for row in sf_techs:
-                    t_id = row.get("TECHNICIAN_ID") or row.get("ID") or ""
-                    t_name = row.get("NAME") or row.get("FULL_NAME") or t_id
-                    t_email = row.get("EMAIL") or row.get("TECHNICIAN_EMAIL") or ""
-                    t_phone = row.get("PHONE") or row.get("PHONENUMBER") or "+1-555-0199"
-                    t_role = row.get("ROLE") or "L2 Specialist"
-                    shift_s = row.get("SHIFT_START") or "08:00"
-                    shift_e = row.get("SHIFT_END") or "16:00"
-                    t_shift = row.get("SHIFT") or f"Custom ({shift_s} - {shift_e})"
-                    t_oncall = "Active" if row.get("IS_ON_CALL") else "Standby"
-                    t_skills = row.get("SPECIALIZATIONS") or row.get("SKILLS") or "Network Routing & EVPN, Optical & Fiber Trunks, Hardware Diagnostics"
-                    if isinstance(t_skills, str):
-                        skill_list = [s.strip() for s in t_skills.split(",") if s.strip()]
-                    else:
-                        skill_list = list(t_skills)
-                    
-                    if t_id:
-                        db_techs.append({
-                            "technician_id": str(t_id),
-                            "username": str(t_id),
-                            "full_name": str(t_name),
-                            "email": str(t_email),
-                            "phone_number": str(t_phone),
-                            "technician_role": str(t_role),
-                            "primary_shift": str(t_shift),
-                            "on_call_status": str(t_oncall),
-                            "skill_sets": skill_list or ["Network Routing & EVPN", "Hardware Diagnostics"],
-                            "experience_level": "Senior Specialist",
-                            "status": "ACTIVE",
-                            "current_tickets_load": int(row.get("ACTIVE_TICKETS") or 0),
-                            "resolved_tickets_count": int(row.get("RESOLVED_TICKETS") or 0),
-                            "max_capacity": 10
-                        })
+            sf_techs = snowflake_conn.execute_query(
+                f"SELECT TECHNICIAN_ID, NAME, EMAIL, PHONE, ROLE, SKILLS, SPECIALIZATIONS, SHIFT, SHIFT_START, SHIFT_END, "
+                f"IS_ON_CALL, IS_ON_LEAVE, EXPERIENCE_LEVEL, MAX_CAPACITY, STATUS, TIMEZONE "
+                f"FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TECHNICIAN_DATA"
+            ) or []
+            for row in sf_techs:
+                t_id = str(row.get("TECHNICIAN_ID") or "").strip()
+                if not t_id:
+                    continue
+                skills = row.get("SPECIALIZATIONS") or row.get("SKILLS") or ""
+                skill_list = [x.strip() for x in skills.split(",") if x.strip()] if isinstance(skills, str) else list(skills)
+                shift = row.get("SHIFT") or (
+                    f"Custom ({row.get('SHIFT_START')} - {row.get('SHIFT_END')})" if row.get("SHIFT_START") else "")
+                db_techs.append({
+                    "technician_id": t_id,
+                    "username": t_id,
+                    "full_name": str(row.get("NAME") or t_id),
+                    "email": str(row.get("EMAIL") or ""),
+                    "phone_number": str(row.get("PHONE") or ""),
+                    "technician_role": str(row.get("ROLE") or ""),
+                    "primary_shift": str(shift),
+                    "timezone": str(row.get("TIMEZONE") or ""),
+                    "on_call_status": "Active" if row.get("IS_ON_CALL") else "Standby",
+                    "skill_sets": skill_list,
+                    "experience_level": str(row.get("EXPERIENCE_LEVEL") or ""),
+                    "status": "ON LEAVE" if row.get("IS_ON_LEAVE") else str(row.get("STATUS") or "ACTIVE"),
+                    "max_capacity": int(row.get("MAX_CAPACITY") or 10),
+                    "current_tickets_load": 0,
+                    "resolved_tickets_count": 0,
+                })
         except Exception as e:
             logger.error(f"Error querying {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TECHNICIAN_DATA: {e}")
 
     if not db_techs:
         db_techs = [dict(t) for t in ADMIN_TECHNICIANS_STORE]
 
-    # Live ticket workload cross-referencing from SF_DATABASE.SF_SCHEMA.TICKETS
-    all_tickets = []
-    if snowflake_conn and snowflake_conn.is_connected():
-        try:
-            all_tickets = snowflake_conn.execute_query(f"SELECT TICKETNUMBER, TITLE, PRIORITY, CATEGORY, STATUS, TECHNICIAN_ID, ASSIGNED_TECHNICIAN FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TICKETS WHERE TICKETNUMBER IS NOT NULL") or []
-        except Exception as e:
-            logger.warning(f"Could not load tickets for technician workload: {e}")
-
-    if not all_tickets:
-        import csv
-        csv_path = os.path.join(parent_dir, "data", "TICKETS.csv")
-        if os.path.exists(csv_path):
-            with open(csv_path, "r", encoding="utf-8") as f:
-                all_tickets = list(csv.DictReader(f))
-
+    # Live workload: real tickets (no knowledge-base rows), matched on exact technician ID / email
+    tickets = [t for t in get_all_tickets_realtime() if is_real_ticket(t)]
     for tech in db_techs:
-        t_name = (tech.get("full_name") or "").lower().strip()
-        t_uname = (tech.get("username") or "").lower().strip()
-        t_id = (tech.get("technician_id") or "").lower().strip()
-        
-        assigned_tickets = []
-        resolved_count = 0
-
-        for t in all_tickets:
-            assigned = str(t.get("ASSIGNED_TECHNICIAN") or t.get("assigned_technician") or t.get("TECHNICIAN_ID") or t.get("technician_id") or "").lower().strip()
-            status_lower = str(t.get("STATUS") or t.get("status") or "").lower().strip()
-
-            if (t_name and t_name in assigned) or (t_uname and t_uname in assigned) or (t_id and t_id in assigned) or (assigned and assigned in t_name):
-                if status_lower in ["resolved", "closed"]:
-                    resolved_count += 1
-                else:
-                    assigned_tickets.append({
-                        "ticket_id": t.get("TICKETNUMBER") or t.get("ticket_number"),
-                        "title": t.get("TITLE") or t.get("title"),
-                        "priority": t.get("PRIORITY") or t.get("priority", "Medium"),
-                        "status": t.get("STATUS") or t.get("status", "Open"),
-                        "category": t.get("CATEGORY") or t.get("category", "General")
-                    })
-
-        tech["current_tickets_load"] = len(assigned_tickets) if assigned_tickets else tech.get("current_tickets_load", 0)
-        tech["resolved_tickets_count"] = resolved_count if resolved_count else tech.get("resolved_tickets_count", 0)
-        tech["assigned_tickets_preview"] = assigned_tickets[:5]
+        keys = {k for k in ((tech.get("technician_id") or "").lower(), (tech.get("email") or "").lower()) if k}
+        mine = [t for t in tickets if keys & ticket_technician_keys(t)]
+        active = [t for t in mine if not is_resolved_ticket(t)]
+        tech["current_tickets_load"] = len(active)
+        tech["resolved_tickets_count"] = len(mine) - len(active)
+        tech["assigned_tickets_preview"] = [{
+            "ticket_id": t.get("TICKETNUMBER"),
+            "title": t.get("TITLE"),
+            "priority": t.get("PRIORITY") or "Medium",
+            "status": t.get("STATUS") or "Open",
+            "category": t.get("TICKETCATEGORY") or t.get("ISSUETYPE") or "General",
+        } for t in active[:5]]
 
     return {"technicians": db_techs, "total": len(db_techs)}
 
 @app.post("/admin/technicians")
-async def create_admin_technician(tech_data: dict):
+async def create_admin_technician(tech_data: dict, current_user: dict = Depends(require_admin)):
     """Add a new technician into Snowflake SF_DATABASE.SF_SCHEMA.CTTC_MOCK_TECHNICIAN_DATA"""
     username = tech_data.get("username", "").strip()
     if not username:
@@ -4749,7 +4794,7 @@ async def create_admin_technician(tech_data: dict):
     return {"status": "success", "message": "Technician added successfully", "technician": new_tech}
 
 @app.delete("/admin/technicians/{tech_id}")
-async def delete_admin_technician(tech_id: str):
+async def delete_admin_technician(tech_id: str, current_user: dict = Depends(require_admin)):
     """Remove a technician from Snowflake SF_DATABASE.SF_SCHEMA.CTTC_MOCK_TECHNICIAN_DATA"""
     global ADMIN_TECHNICIANS_STORE
     if snowflake_conn and snowflake_conn.is_connected():
@@ -4765,7 +4810,7 @@ async def delete_admin_technician(tech_id: str):
     return {"status": "success", "message": f"Technician {tech_id} removed successfully"}
 
 @app.put("/admin/technicians/{tech_id}/schedule-skills")
-async def update_technician_schedule_and_skills(tech_id: str, update_data: dict):
+async def update_technician_schedule_and_skills(tech_id: str, update_data: dict, current_user: dict = Depends(require_admin)):
     """Update technician working shift, on-call rotation, capacity, and skillsets in Snowflake"""
     target = None
     for t in ADMIN_TECHNICIANS_STORE:
@@ -4826,10 +4871,10 @@ async def update_technician_schedule_and_skills(tech_id: str, update_data: dict)
     return {"status": "success", "message": "Technician schedule and skills updated", "technician": target}
 
 @app.get("/admin/reports/master-tickets")
-async def get_admin_master_tickets_report():
+async def get_admin_master_tickets_report(current_user: dict = Depends(require_admin)):
     """Master tickets report querying directly from Snowflake SF_DATABASE.SF_SCHEMA.TICKETS and CTTC_MOCK_CLOSED_TICKETS"""
     try:
-        results = get_all_tickets_realtime()
+        results = get_real_tickets()
 
         # Format tickets for master report
         formatted_tickets = []
@@ -4837,18 +4882,18 @@ async def get_admin_master_tickets_report():
             formatted_tickets.append({
                 "ticket_id": t.get("TICKETNUMBER") or t.get("ticket_number") or t.get("id"),
                 "title": t.get("TITLE") or t.get("title") or "Untitled Issue",
-                "category": t.get("CATEGORY") or t.get("ticket_category") or t.get("CLASSIFICATION") or "General",
+                "category": t.get("TICKETCATEGORY") or t.get("ISSUETYPE") or "General",
                 "priority": t.get("PRIORITY") or t.get("priority") or "Medium",
                 "status": t.get("STATUS") or t.get("status") or "Open",
-                "assigned_to": t.get("ASSIGNED_TECHNICIAN") or t.get("assigned_technician") or t.get("TECHNICIAN_ID") or "Unassigned",
-                "requester_name": t.get("USER_ID") or t.get("requester_name") or t.get("USEREMAIL") or "User",
-                "created_at": t.get("CREATED_AT") or t.get("created_at") or "2026-08-30T00:00:00Z"
+                "assigned_to": t.get("TECHNICIAN_ID") or t.get("TECHNICIANEMAIL") or "Unassigned",
+                "requester_name": t.get("USERID") or t.get("USEREMAIL") or "",
+                "created_at": t.get("CREATED_AT") or t.get("ORIGINAL_CREATED_AT")
             })
 
         total = len(formatted_tickets)
-        resolved = len([t for t in formatted_tickets if str(t["status"]).lower() in ["resolved", "closed"]])
+        resolved = len([t for t in formatted_tickets if str(t["status"]).lower() in RESOLVED_STATUSES])
         active = total - resolved
-        rate = round((resolved / total) * 100) if total > 0 else 100
+        rate = round((resolved / total) * 100) if total > 0 else None
 
         return {
             "total_tickets": total,
@@ -4859,300 +4904,159 @@ async def get_admin_master_tickets_report():
         }
     except Exception as e:
         logger.error(f"Error compiling master tickets report: {e}")
-        return {"total_tickets": 0, "resolved_count": 0, "active_count": 0, "resolution_rate": 100, "tickets": []}
+        raise HTTPException(status_code=500, detail=f"Failed to compile master tickets report: {str(e)}")
 
 @app.get("/admin/reports/wider-mttr")
-async def get_admin_wider_mttr_report():
-    """Wider Executive MTTR and SLA Analytics across departments, shifts, categories, and technicians"""
-
+async def get_admin_wider_mttr_report(days: Optional[int] = 30, current_user: dict = Depends(require_admin)):
+    """
+    Fleet MTTR and SLA analytics by priority, shift, category and technician.
+    Uses the same MTTR definition and validity rules as /analytics/mttr
+    (mean of RESOLVED_AT - CREATED_AT over valid resolved tickets in the window).
+    """
     all_tickets = get_all_tickets_realtime()
-    resolved_statuses = {"resolved", "completed", "closed"}
+    now = _db_now()
+    data = build_mttr_dataset(all_tickets, days, now)
+    rows = data["resolved"]
+    fleet = mttr_block(rows)
 
-    # SLA targets per priority (hours)
-    sla_targets = {"critical": 2.0, "high": 8.0, "medium": 24.0, "low": 48.0}
-
-    # Base MTTR benchmarks per priority — same as /analytics/mttr uses
-    base_durations = {"Critical": 1.6, "High": 6.4, "Medium": 18.0, "Low": 36.0}
-
-    # ── Helper: compute a deterministic duration for a single ticket ──────────
-    def compute_duration(ticket: dict) -> float:
-        # Check logged technician work effort first (standard MTTR definition: hands-on resolution effort)
-        work_minutes = parse_time_spent_minutes(ticket.get("TIME_SPENT_MINUTES", ticket.get("time_spent_minutes")))
-        if work_minutes is None and (ticket.get("TIME_SPENT_HOURS") or ticket.get("time_spent_hours")):
-            try:
-                work_minutes = float(ticket.get("TIME_SPENT_HOURS") or ticket.get("time_spent_hours")) * 60.0
-            except Exception:
-                pass
-        if work_minutes is None:
-            work_minutes = parse_time_spent_minutes(ticket.get("TIME_SPENT", ticket.get("time_spent")))
-        if work_minutes is None:
-            work_minutes = extract_time_spent_from_resolution(ticket.get("RESOLUTION") or ticket.get("resolution") or "")
-
-        # Compute wall-clock duration if timestamps exist
-        created_dt = None
-        raw_created = (
-            ticket.get("CREATED_AT") or ticket.get("created_at") or
-            ticket.get("ORIGINAL_CREATED_AT") or ticket.get("original_created_at") or
-            ticket.get("date")
-        )
-        if raw_created:
-            try:
-                created_dt = datetime.fromisoformat(str(raw_created).replace("Z", "+00:00").split("+")[0])
-            except Exception:
-                pass
-        if not created_dt:
-            created_dt = parse_created_at_from_ticket_number(
-                ticket.get("TICKETNUMBER") or ticket.get("ticket_number"))
-
-        raw_resolved = (ticket.get("RESOLVED_AT") or ticket.get("resolved_at")
-                        or ticket.get("COMPLETED_AT") or ticket.get("completed_at")
-                        or ticket.get("CLOSED_AT") or ticket.get("closed_at"))
-        wall_clock_h = None
-        if raw_resolved and created_dt:
-            try:
-                resolved_dt = datetime.fromisoformat(str(raw_resolved).replace("Z", "+00:00").split("+")[0])
-                diff_h = (resolved_dt - created_dt).total_seconds() / 3600.0
-                if diff_h >= 0:
-                    wall_clock_h = round(diff_h, 1)
-            except Exception:
-                pass
-
-        # Sanitize extreme outlier work_minutes (e.g. test string like '(40000) done isuue')
-        if work_minutes is not None and work_minutes > 1440:
-            if wall_clock_h is not None and wall_clock_h <= 24:
-                work_minutes = max(1.0, wall_clock_h * 60.0)
-            else:
-                work_minutes = 60.0
-
-        effort_h = round(work_minutes / 60.0, 1) if work_minutes is not None else None
-
-        # Prioritize hands-on effort; fall back to wall-clock duration (capped if archive anomaly)
-        if effort_h is not None:
-            return effort_h
-        elif wall_clock_h is not None:
-            return min(wall_clock_h, 24.0)
-
-        p_val = str(ticket.get("PRIORITY") or ticket.get("priority") or "Medium").strip().capitalize()
-        return base_durations.get(p_val, 12.0)
-
-    # ── Pass 1: compute global stats and by-priority from ALL resolved tickets ─
-    global_durations = []
-    priority_buckets: dict = {"Critical": [], "High": [], "Medium": [], "Low": []}
-    global_sla_met   = 0
-
-    for t in all_tickets:
-        status = str(t.get("STATUS") or t.get("status") or "").strip().lower()
-        if status not in resolved_statuses:
-            continue
-        p_key = str(t.get("PRIORITY") or t.get("priority") or "Medium").strip().capitalize()
-        if p_key not in priority_buckets:
-            p_key = "Medium"
-
-        dur = compute_duration(t)
-        if dur is not None:
-            global_durations.append(dur)
-            priority_buckets[p_key].append(dur)
-    
-            target = sla_targets.get(p_key.lower(), 24.0)
-            if dur <= target:
-                global_sla_met += 1
-
-    total_resolved = len(global_durations)
-    global_mttr    = round(sum(global_durations) / total_resolved, 1) if global_durations else None
-    total_audited  = total_resolved
-    sla_compliance = round((global_sla_met / total_resolved) * 100, 1) if total_resolved > 0 else None
-
-    # Build by_priority from real data
     by_priority_out = {}
-    priority_targets = {"Critical": 2.0, "High": 8.0, "Medium": 24.0, "Low": 48.0}
-    for p_key, durs in priority_buckets.items():
-        if durs:
-            avg     = round(sum(durs) / len(durs), 1)
-            p_sla_t = priority_targets[p_key]
-            p_met   = sum(1 for d in durs if d <= p_sla_t)
-            comp    = round((p_met / len(durs)) * 100, 1)
-        else:
-            avg = None
-            comp = None
+    for p_key, target in SLA_TARGET_HOURS.items():
+        block = mttr_block([(t, tm) for t, tm in rows
+                            if normalize_priority(t.get("PRIORITY") or t.get("priority")) == p_key])
         by_priority_out[p_key] = {
-            "actual_mttr_hours": avg,
-            "target_hours":      priority_targets[p_key],
-            "compliance_rate":   comp,
-            "tickets_count":     len(priority_buckets[p_key]),
+            "actual_mttr_hours": block["mttr_hours"],
+            "median_hours": block["median_hours"],
+            "target_hours": target,
+            "compliance_rate": block["sla_compliance_rate"],
+            "tickets_count": block["resolved_count"],
         }
 
-    # ── Pass 2: per-technician leaderboard ────────────────────────────────────
-
-    # Load real technician list: Snowflake first, then in-memory store
+    # Technician directory: Snowflake first, then the in-memory admin store
     tech_list = []
     if snowflake_conn and snowflake_conn.is_connected():
         try:
-            rows = snowflake_conn.execute_query(
-                f"SELECT TECHNICIAN_ID, NAME, EMAIL, ROLE, SKILLS, SPECIALIZATIONS, SHIFT_START, SHIFT_END "
+            tech_rows = snowflake_conn.execute_query(
+                f"SELECT TECHNICIAN_ID, NAME, EMAIL, ROLE, SKILLS, SPECIALIZATIONS, SHIFT, SHIFT_START, SHIFT_END "
                 f"FROM {SF_DATABASE}.{SF_SCHEMA}.CTTC_MOCK_TECHNICIAN_DATA"
             )
-            for r in (rows or []):
-                t_id   = str(r.get("TECHNICIAN_ID") or "").strip()
+            for r in (tech_rows or []):
+                t_id = str(r.get("TECHNICIAN_ID") or "").strip()
                 t_name = str(r.get("NAME") or "").strip()
                 if not t_id and not t_name:
                     continue
-                s_start = str(r.get("SHIFT_START") or "08:00")
-                s_end   = str(r.get("SHIFT_END")   or "16:00")
                 tech_list.append({
-                    "id":     t_id,
-                    "name":   t_name,
-                    "email":  str(r.get("EMAIL") or "").strip().lower(),
-                    "shift":  f"{s_start}-{s_end}",
+                    "id": t_id,
+                    "name": t_name,
+                    "email": str(r.get("EMAIL") or "").strip().lower(),
+                    # SHIFT holds the roster label, e.g. "Morning (08:00 - 16:00)" or "On-Call 24/7"
+                    "shift": str(r.get("SHIFT") or f"{r.get('SHIFT_START') or '08:00'}-{r.get('SHIFT_END') or '16:00'}"),
                     "skills": str(r.get("SKILLS") or r.get("SPECIALIZATIONS") or "").strip(),
                 })
         except Exception as e:
             logger.warning(f"Could not load technicians from Snowflake for MTTR: {e}")
-
     if not tech_list:
         for t in ADMIN_TECHNICIANS_STORE:
             raw_shift = t.get("primary_shift", "")
-            shift_str = raw_shift.split("(")[-1].replace(")", "").strip() if "(" in raw_shift else raw_shift
             tech_list.append({
-                "id":     t.get("username", ""),
-                "name":   t.get("full_name", ""),
-                "email":  t.get("email", "").lower(),
-                "shift":  shift_str,
+                "id": t.get("username", ""),
+                "name": t.get("full_name", ""),
+                "email": t.get("email", "").lower(),
+                "shift": raw_shift.split("(")[-1].replace(")", "").strip() if "(" in raw_shift else raw_shift,
                 "skills": ", ".join(t.get("skill_sets", [])),
             })
 
-    def matches_tech_fn(ticket: dict, tech: dict) -> bool:
-        t_id_l    = tech["id"].lower()
-        t_name_l  = tech["name"].lower()
-        t_email_l = tech["email"]
-        fields = [
-            str(ticket.get("ASSIGNED_TECHNICIAN") or ticket.get("assigned_technician") or ""),
-            str(ticket.get("TECHNICIAN_ID")       or ticket.get("technician_id") or ""),
-            str(ticket.get("TECHNICIANEMAIL")     or "")
-        ]
-        assigned = " ".join(f.lower().strip() for f in fields if f)
-        if not assigned:
-            return False
-        if t_id_l and (t_id_l in assigned or assigned in t_id_l):
-            return True
-        if t_email_l and (t_email_l in assigned or assigned in t_email_l):
-            return True
-        if t_name_l and (t_name_l in assigned or assigned in t_name_l):
-            return True
-        name_parts = [p for p in t_name_l.split() if len(p) > 2]
-        if name_parts and all(p in assigned for p in name_parts):
-            return True
-        if t_id_l == "tech-tr-02" and "tech-001" in assigned:
-            return True
-        return False
+    def tech_for(ticket: dict) -> Optional[dict]:
+        keys = ticket_technician_keys(ticket)
+        for tech in tech_list:
+            if {tech["id"].lower(), tech["email"], tech["name"].lower()} & keys:
+                return tech
+        return None
+
+    # Group resolved tickets by technician; tickets whose technician is not in
+    # the directory are kept under their raw ID instead of being dropped.
+    per_tech: dict = {}
+    for t, tm in rows:
+        tech = tech_for(t)
+        if tech is None:
+            raw_id = str(t.get("TECHNICIAN_ID") or t.get("TECHNICIANEMAIL") or "Unassigned").strip() or "Unassigned"
+            tech = {"id": raw_id, "name": f"{raw_id} (not in directory)", "email": "", "shift": "Unknown", "skills": ""}
+        entry = per_tech.setdefault(tech["id"].lower(), {"tech": tech, "rows": []})
+        entry["rows"].append((t, tm))
 
     leaderboard = []
-    for tech in tech_list:
-
-        tech_resolved = [
-            t for t in all_tickets
-            if matches_tech_fn(t, tech)
-            and str(t.get("STATUS") or t.get("status") or "").strip().lower() in resolved_statuses
-            and compute_duration(t) is not None
-        ]
-
-        if not tech_resolved:
-            continue
-
-        durations = [compute_duration(t) for t in tech_resolved]
-        sla_met   = sum(
-            1 for t, d in zip(tech_resolved, durations)
-            if d <= sla_targets.get(
-                str(t.get("PRIORITY") or t.get("priority") or "medium").strip().lower(), 24.0
-            )
-        )
-
-        avg_mttr = round(sum(durations) / len(durations), 1)
-        sla_rate = round((sla_met / len(durations)) * 100, 1)
-
+    shift_rows: dict = {}
+    for entry in per_tech.values():
+        tech, trows = entry["tech"], entry["rows"]
+        block = mttr_block(trows)
         leaderboard.append({
-            "name":       tech["name"],
-            "shift":      tech["shift"],
-            "mttr_hours": avg_mttr,
-            "resolved":   len(tech_resolved),
-            "sla_rate":   sla_rate,
-            "skills":     tech["skills"],
+            "technician_id": tech["id"],
+            "name": tech["name"],
+            "shift": tech["shift"],
+            "mttr_hours": block["mttr_hours"],
+            "median_hours": block["median_hours"],
+            "resolved": block["resolved_count"],
+            "sla_rate": block["sla_compliance_rate"],
+            "avg_work_time_hours": block["avg_work_time_hours"],
+            "skills": tech["skills"],
         })
+        shift_rows.setdefault(tech["shift"], []).extend(trows)
+    leaderboard.sort(key=lambda x: (x["mttr_hours"] is None, x["mttr_hours"] or 0))
 
-    leaderboard.sort(key=lambda x: x["mttr_hours"])
-
-
-
-    # ── by_shift: use real technician shift data when available ───────────────
-    shift_buckets: dict = {}
     shift_tech_count: dict = {}
     for tech in tech_list:
-        sh = tech["shift"]
-        shift_buckets.setdefault(sh, [])
-        shift_tech_count[sh] = shift_tech_count.get(sh, 0) + 1
-    # Map resolved tickets to shifts
-    for t in all_tickets:
-        status = str(t.get("STATUS") or t.get("status") or "").strip().lower()
-        if status not in resolved_statuses:
-            continue
-        dur = compute_duration(t)
-        if dur is None:
-            continue
-        for tech in tech_list:
-            if matches_tech_fn(t, tech):
-                shift_buckets.setdefault(tech["shift"], []).append(dur)
-                break
-
+        shift_tech_count[tech["shift"]] = shift_tech_count.get(tech["shift"], 0) + 1
     by_shift_out = []
-    for sh, durs in shift_buckets.items():
-        if not durs:
-            continue
-        sh_mttr    = round(sum(durs) / len(durs), 1)
-        sh_sla_met = sum(1 for d in durs if d <= 8.0)
-        sh_sla     = round((sh_sla_met / len(durs)) * 100, 1)
+    for sh, srows in shift_rows.items():
+        block = mttr_block(srows)
         by_shift_out.append({
-            "shift":            sh,
-            "active_techs":     shift_tech_count.get(sh, 1),
-            "mttr_hours":       sh_mttr,
-            "tickets_resolved": len(durs),
-            "sla_rate":         sh_sla,
+            "shift": sh,
+            "active_techs": shift_tech_count.get(sh, 0),
+            "mttr_hours": block["mttr_hours"],
+            "tickets_resolved": block["resolved_count"],
+            "sla_rate": block["sla_compliance_rate"],
         })
-    by_shift_out.sort(key=lambda x: x["mttr_hours"])
+    by_shift_out.sort(key=lambda x: x["mttr_hours"] or 0)
 
-    # ── by_category: categorize resolved tickets with domain MTTR and SLA ──────
-    category_buckets: dict = {}
-    for t in all_tickets:
-        status = str(t.get("STATUS") or t.get("status") or "").strip().lower()
-        if status not in resolved_statuses:
-            continue
-        dur = compute_duration(t)
-        if dur is None:
-            continue
-        c = str(t.get("TICKETCATEGORY") or t.get("ISSUETYPE") or t.get("category") or "General").strip()
-        p_key = str(t.get("PRIORITY") or t.get("priority") or "Medium").strip().lower()
-        p_target = sla_targets.get(p_key, 24.0)
-        category_buckets.setdefault(c, []).append((dur, dur <= p_target))
-
+    category_rows: dict = {}
+    for t, tm in rows:
+        c = str(t.get("TICKETCATEGORY") or t.get("ISSUETYPE") or "General").strip() or "General"
+        category_rows.setdefault(c, []).append((t, tm))
     by_category_out = []
-    for c, items in category_buckets.items():
-        if not items:
-            continue
-        durs = [it[0] for it in items]
-        met = sum(1 for it in items if it[1])
+    for c, crows in category_rows.items():
+        block = mttr_block(crows)
         by_category_out.append({
             "category": c,
-            "mttr_hours": round(sum(durs) / len(durs), 1),
-            "tickets": len(durs),
-            "sla_compliance": round((met / len(durs)) * 100, 1)
+            "mttr_hours": block["mttr_hours"],
+            "tickets": block["resolved_count"],
+            "sla_compliance": block["sla_compliance_rate"],
         })
     by_category_out.sort(key=lambda x: x["tickets"], reverse=True)
 
     return {
-        "global_mttr_hours":    global_mttr,
-        "target_mttr_hours":    8.0,
-        "sla_compliance_rate":  min(sla_compliance, 99.9) if sla_compliance is not None else None,
-        "total_audited_tickets": total_audited,
+        "definition": "MTTR = average of (resolved time - created time) for resolved tickets",
+        "window_days": days if days and days > 0 else None,
+        "global_mttr_hours": fleet["mttr_hours"],
+        "median_mttr_hours": fleet["median_hours"],
+        "p90_mttr_hours": fleet["p90_hours"],
+        "target_mttr_hours": SLA_TARGET_HOURS["High"],
+        "sla_compliance_rate": fleet["sla_compliance_rate"],
+        "total_audited_tickets": fleet["resolved_count"],
+        "avg_work_time_hours": fleet["avg_work_time_hours"],
+        "lifecycle": {
+            "mtta_hours": fleet["mtta_hours"],
+            "ack_hours": fleet["ack_hours"],
+            "travel_hours": fleet["travel_hours"],
+            "onsite_hours": fleet["onsite_hours"],
+            "sample_count": fleet["stage_sample_count"],
+        },
+        "active_sla_status": open_sla_status(data["open"], now),
+        "excluded_count": len(data["excluded"]),
+        "excluded": data["excluded"],
+        "work_time_ignored_count": len(data["work_flagged"]),
+        "work_time_ignored": data["work_flagged"],
+        "non_ticket_rows_ignored": data["non_ticket_rows"],
         "by_priority": by_priority_out,
-        "by_shift":    by_shift_out,
+        "by_shift": by_shift_out,
         "by_category": by_category_out,
         "technician_leaderboard": leaderboard,
     }

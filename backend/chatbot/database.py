@@ -501,7 +501,8 @@ def create_snowflake_engine():
         }
 
         # Sensitive / dialect-specific options passed via connect_args=create_engine(...)
-        engine_connect_args = {}
+        # Store and compare all timestamps in UTC (see src/database/snowflake_db.py)
+        engine_connect_args = {'session_parameters': {'TIMEZONE': 'UTC'}}
 
         # Add authentication method
         auth = (settings.snowflake_authenticator or 'keypair').strip().lower()
@@ -528,7 +529,7 @@ def create_snowflake_engine():
 
         engine = create_engine(
             URL(**url_params),
-            connect_args=engine_connect_args or None,
+            connect_args=engine_connect_args,
             echo=settings.debug,
             # Connection pooling settings to reuse connections
             pool_size=10,

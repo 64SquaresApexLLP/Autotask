@@ -123,11 +123,13 @@ class AIProcessor:
         Ticket Title: "{title}"
         Ticket Description: "{description}"
 
-        Guidelines for urgency_level assessment:
-        - "Critical": System down, security breach, data loss, business-critical functions unavailable
-        - "High": Major functionality impaired, multiple users affected, workarounds difficult
-        - "Medium": Single user affected, workarounds available, non-critical functions impaired
-        - "Low": Minor issues, cosmetic problems, feature requests, general questions
+        Guidelines for urgency_level assessment (same scale as ticket PRIORITY):
+        - "Critical": outage affecting many customers or a site (area outage, OLT/PON port down,
+          cabinet damage, core link down), security breach, or a business/medical service fully down
+        - "High": one customer with NO service at all (no internet, red/LOS ONT light, cut fiber,
+          dead ONT or router)
+        - "Medium": service works but is degraded or intermittent (slowness, drops, echo)
+        - "Low": no fault: questions, configuration changes, moves/installs, billing
 
         Guidelines for error_messages extraction:
         - Look for specific error codes, error numbers, or exact error text in quotes
@@ -233,6 +235,10 @@ class AIProcessor:
 
         summary_str = "\nMost common classification values among similar tickets:\n"
         for field, info in summary.items():
+            # Priority is decided from this ticket's impact, not copied from history
+            # (summary["PRIORITY"] is still used by the _resolve_priority fallback).
+            if field == "PRIORITY":
+                continue
             # Similar-ticket values may be Value IDs or Labels; resolve both so
             # the prompt never advertises an "Unknown" label for a valid field.
             resolved = self._resolve_reference(field.lower(), info["Value"])
@@ -270,10 +276,19 @@ class AIProcessor:
            - Recurring architectural vulnerability, SPOF, chronic defects → TICKETTYPE: Problem
            - Scheduled software upgrade, firmware maintenance window → TICKETTYPE: Change Request
 
-        5. **PRIORITY:**
-           - Total service outage, core transport link down, cell tower drops → Critical or High
-           - Intermittent connection, degraded performance, voice echo → Medium
-           - General setup assistance, cosmetic questions → Low
+        5. **PRIORITY:** decide from the impact described in THIS ticket (how many
+           customers are affected and whether service is completely down). Do not
+           copy the priority of similar tickets or the user-given initial priority
+           when the description clearly indicates a different impact.
+           - **Critical:** outage affecting MANY customers or a site: neighborhood/area
+             outage, OLT or PON port down, splitter/cabinet damage, core/transport link
+             down, cell tower down, or a business/medical/emergency service completely down.
+           - **High:** ONE customer with NO service at all: no internet, red/LOS light on
+             the ONT, fiber drop cut, dead ONT or router, no dial tone and no internet.
+           - **Medium:** service works but is degraded or intermittent: slowness, occasional
+             drops, packet loss, voice echo, a single feature not working.
+           - **Low:** no fault: how-to questions, configuration changes, relocation or
+             installation requests, billing questions, scheduled maintenance.
 
         ---
  
@@ -305,7 +320,6 @@ class AIProcessor:
                 SUBISSUE_TYPE: {ticket.get('SUBISSUETYPE', 'N/A')}
                 CATEGORY: {ticket.get('TICKETCATEGORY', 'N/A')}
                 TYPE: {ticket.get('TICKETTYPE', 'N/A')}
-                PRIORITY: {ticket.get('PRIORITY', 'N/A')}
                 """
         else:
             classification_prompt += "\nNo similar historical tickets found to provide additional context."

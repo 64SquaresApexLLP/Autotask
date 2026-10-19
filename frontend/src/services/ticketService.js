@@ -42,7 +42,8 @@ const transformTicketData = (ticket) => {
   const rawAssigned = ticket.assigned_technician || ticket.ASSIGNED_TECHNICIAN || technicianId || ticket.TECHNICIANEMAIL || ticket.technician_email || null;
   let assignedTechnician = rawAssigned;
   if (!assignedTechnician || assignedTechnician === 'IT Manager' || assignedTechnician === 'itmanager@company.com' || assignedTechnician === 'Fallback Support') {
-    assignedTechnician = technicianId ? (TECHNICIAN_DISPLAY_MAP[technicianId] || 'Ray Flores') : 'Ray Flores';
+    // Never attribute an unassigned ticket to a real technician
+    assignedTechnician = technicianId ? (TECHNICIAN_DISPLAY_MAP[technicianId] || technicianId) : 'Unassigned';
   }
   const technicianDisplayName = assignedTechnician ? (TECHNICIAN_DISPLAY_MAP[assignedTechnician] || assignedTechnician) : null;
 

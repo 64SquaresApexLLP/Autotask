@@ -65,28 +65,30 @@ const AdminTicketsReport = () => {
     const headers = ['Ticket ID', 'Title', 'Category', 'Priority', 'Status', 'Assigned To', 'Requester', 'Created At'];
     const csvRows = [headers.join(',')];
 
+    const csvCell = (value) => `"${String(value ?? '').replace(/"/g, '""')}"`;
     filteredTickets.forEach(t => {
       const row = [
-        `"${t.id || t.ticket_id || t.ticket_number || ''}"`,
-        `"${(t.title || '').replace(/"/g, '""')}"`,
-        `"${t.category || t.ticket_category || 'General'}"`,
-        `"${t.priority || 'Medium'}"`,
-        `"${t.status || 'Open'}"`,
-        `"${t.assigned_technician_display || t.assigned_technician || t.assigned_to || t.technician_name || 'Unassigned'}"`,
-        `"${t.requester_name || t.user_email || t.user_id || ''}"`,
-        `"${t.created_at || ''}"`
-      ];
+        t.id || t.ticket_id || t.ticket_number,
+        t.title,
+        t.category || t.ticket_category || 'General',
+        t.priority || 'Medium',
+        t.status || 'Open',
+        t.assigned_technician_display || t.assigned_technician || t.assigned_to || t.technician_name || 'Unassigned',
+        t.requester_name || t.user_email || t.user_id,
+        t.created_at
+      ].map(csvCell);
       csvRows.push(row.join(','));
     });
 
-    const csvContent = 'data:text/csv;charset=utf-8,' + csvRows.join('\n');
-    const encodedUri = encodeURI(csvContent);
+    const blob = new Blob([csvRows.join('\n')], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
+    link.setAttribute('href', url);
     link.setAttribute('download', `Master_Tickets_Report_${new Date().toISOString().slice(0, 10)}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   const filteredTickets = tickets.map(t => ({
@@ -113,9 +115,9 @@ const AdminTicketsReport = () => {
 
   const totalCount = tickets.length;
   const resolvedCount = tickets.filter(t => ['resolved', 'closed'].includes((t.status || '').toLowerCase())).length;
-  const inProgressCount = tickets.filter(t => ['in progress', 'investigating', 'pending', 'assigned'].includes((t.status || '').toLowerCase())).length;
+  const inProgressCount = tickets.filter(t => ['in progress', 'on site', 'investigating', 'pending', 'assigned'].includes((t.status || '').toLowerCase())).length;
   const openCount = totalCount - resolvedCount - inProgressCount;
-  const resolutionRate = totalCount > 0 ? Math.round((resolvedCount / totalCount) * 100) : 100;
+  const resolutionRate = totalCount > 0 ? Math.round((resolvedCount / totalCount) * 100) : null;
 
   return (
     <div className="flex min-h-screen bg-gray-50">
@@ -133,7 +135,7 @@ const AdminTicketsReport = () => {
                 </div>
                 <div>
                   <h1 className="text-xl lg:text-2xl font-bold text-gray-800 tracking-tight">
-                   Exicutive Dashboard
+                   Executive Dashboard
                   </h1>
                   <p className="text-gray-600 text-sm mt-0.5">
                     Centralized system ticket logs, resolution lifecycle auditing, technician assignments, and CSV data exports.
@@ -208,19 +210,21 @@ const AdminTicketsReport = () => {
               <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 flex flex-col justify-between">
                 <div className="flex items-center justify-between">
                   <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Resolution Rate</p>
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
-                    {resolutionRate >= 80 ? 'Target Met' : 'Attention'}
-                  </span>
+                  {resolutionRate !== null && (
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${resolutionRate >= 80 ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
+                      {resolutionRate >= 80 ? 'Target Met' : 'Attention'}
+                    </span>
+                  )}
                 </div>
                 <div className="mt-2">
                   <div className="flex items-baseline justify-between">
-                    <h3 className="text-2xl font-bold text-gray-900">{resolutionRate}%</h3>
+                    <h3 className="text-2xl font-bold text-gray-900">{resolutionRate !== null ? `${resolutionRate}%` : '—'}</h3>
                     <span className="text-xs text-gray-500">Fleet Average</span>
                   </div>
                   <div className="w-full bg-gray-100 rounded-full h-2 mt-2 overflow-hidden">
                     <div
                       className="bg-emerald-500 h-2 rounded-full transition-all duration-500"
-                      style={{ width: `${resolutionRate}%` }}
+                      style={{ width: `${resolutionRate ?? 0}%` }}
                     ></div>
                   </div>
                 </div>

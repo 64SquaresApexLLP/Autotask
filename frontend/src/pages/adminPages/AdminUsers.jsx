@@ -43,7 +43,7 @@ const AdminUsers = () => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [newUserForm, setNewUserForm] = useState({
     username: '',
-    password: 'password123',
+    password: '',
     full_name: '',
     email: '',
     phone_number: '',
@@ -114,6 +114,10 @@ const AdminUsers = () => {
       setError('Username and Full Name are required.');
       return;
     }
+    if (!newUserForm.password || newUserForm.password.length < 6) {
+      setError('Password is required and must be at least 6 characters.');
+      return;
+    }
 
     try {
       setLoading(true);
@@ -122,7 +126,7 @@ const AdminUsers = () => {
       setShowAddModal(false);
       setNewUserForm({
         username: '',
-        password: 'password123',
+        password: '',
         full_name: '',
         email: '',
         phone_number: '',
@@ -376,6 +380,20 @@ const AdminUsers = () => {
                         onChange={(e) => setNewUserForm({ ...newUserForm, username: e.target.value })}
                         className="w-full text-sm border border-gray-300 rounded-lg p-2.5 focus:ring-2 focus:ring-[#00ABE4] focus:outline-none"
                         placeholder="e.g. john_doe"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-700 mb-1">Password *</label>
+                      <input
+                        type="password"
+                        required
+                        minLength={6}
+                        autoComplete="new-password"
+                        value={newUserForm.password}
+                        onChange={(e) => setNewUserForm({ ...newUserForm, password: e.target.value })}
+                        className="w-full text-sm border border-gray-300 rounded-lg p-2.5 focus:ring-2 focus:ring-[#00ABE4] focus:outline-none"
+                        placeholder="At least 6 characters"
                       />
                     </div>
 

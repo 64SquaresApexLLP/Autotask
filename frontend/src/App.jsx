@@ -21,6 +21,7 @@ import AdminTicketsReport from './pages/adminPages/AdminTicketsReport';
 import AdminWiderMttr from './pages/adminPages/AdminWiderMttr';
 import AdminOntTruckRoll from './pages/adminPages/AdminOntTruckRoll';
 import AdminRoute from './components/AdminRoute';
+import TicketTimeGuide from './pages/techPages/TicketTimeGuide';
 
 function App() {
   return (
@@ -125,6 +126,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <MttrReport />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/technician/guide"
+            element={
+              <ProtectedRoute>
+                <TicketTimeGuide />
               </ProtectedRoute>
             }
           />

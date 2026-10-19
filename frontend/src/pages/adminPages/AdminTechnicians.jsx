@@ -24,7 +24,6 @@ import {
 import Header from '../../components/Header';
 import Sidebar from '../../components/Sidebar';
 import { adminService } from '../../services/adminService';
-import { ticketService } from '../../services/ticketService';
 
 const AVAILABLE_SKILLS = [
   'Network Routing & EVPN',
@@ -91,41 +90,9 @@ const AdminTechnicians = () => {
       else setRefreshing(true);
       setError('');
 
-      const [techsRes, allTicketsRes] = await Promise.all([
-        adminService.getTechnicians().catch(() => ({ technicians: [], total: 0 })),
-        ticketService.getAllTickets({ limit: 300 }).catch(() => [])
-      ]);
-
-      const baseTechs = techsRes.technicians || [];
-      const tickets = allTicketsRes || [];
-
-      // Map tickets dynamically to each technician
-      const mappedTechs = baseTechs.map(tech => {
-        const tName = (tech.full_name || '').toLowerCase().trim();
-        const tUname = (tech.username || '').toLowerCase().trim();
-        const tId = (tech.technician_id || '').toLowerCase().trim();
-
-        const techTickets = tickets.filter(ticket => {
-          const assigned = (ticket.assigned_technician_display || ticket.assigned_technician || ticket.assigned_to || ticket.technician_name || ticket.technician_id || '').toLowerCase().trim();
-
-          return (tName && assigned.includes(tName)) ||
-                 (tUname && assigned.includes(tUname)) ||
-                 (tId && assigned.includes(tId)) ||
-                 (assigned && (tName.includes(assigned) || tUname.includes(assigned)));
-        });
-
-        const activeTickets = techTickets.filter(t => !['resolved', 'closed'].includes((t.status || '').toLowerCase()));
-        const resolvedTickets = techTickets.filter(t => ['resolved', 'closed'].includes((t.status || '').toLowerCase()));
-
-        return {
-          ...tech,
-          current_tickets_load: techTickets.length > 0 ? activeTickets.length : (tech.current_tickets_load || 0),
-          resolved_tickets_count: techTickets.length > 0 ? resolvedTickets.length : (tech.resolved_tickets_count || 0),
-          assigned_tickets_preview: activeTickets.slice(0, 4)
-        };
-      });
-
-      setTechnicians(mappedTechs);
+      // Live open / resolved counts are computed by the backend from real tickets
+      const techsRes = await adminService.getTechnicians();
+      setTechnicians(techsRes.technicians || []);
     } catch (err) {
       console.error('Failed to load technicians:', err);
       setError('Unable to load technician roster.');

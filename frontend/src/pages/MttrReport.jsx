@@ -42,6 +42,8 @@ const MttrReport = () => {
   const [mttrData, setMttrData] = useState(null);
   const [tickets, setTickets] = useState([]);
   const [lastUpdated, setLastUpdated] = useState(null);
+  // MTTR reporting window in days (0 = all time)
+  const [windowDays, setWindowDays] = useState(30);
 
   // Filters
   const [searchTerm, setSearchTerm] = useState('');
@@ -62,10 +64,10 @@ const MttrReport = () => {
 
       // Admins request global fleet MTTR without scoping to admin username
       const mttrParams = isAdmin
-        ? {}
+        ? { days: windowDays }
         : isTechnician
-          ? { technician_id: userId || userEmail }
-          : { user_email: userEmail || userId };
+          ? { technician_id: userId || userEmail, days: windowDays }
+          : { user_email: userEmail || userId, days: windowDays };
 
       const [allTickets, analytics] = await Promise.all([
         ticketService.getAllTickets({ limit: 150 }).catch(() => []),
@@ -102,7 +104,7 @@ const MttrReport = () => {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [user, isTechnician, isAdmin]);
+  }, [user, isTechnician, isAdmin, windowDays]);
 
   useEffect(() => {
     loadMttrReportData();
@@ -126,12 +128,12 @@ const MttrReport = () => {
     );
   };
 
-  // Tickets rendered on this report — admins see all tickets; technicians see assigned tickets (fallback to all tickets if none assigned yet); users see their own
-  const myAssignedTickets = tickets.filter(isTicketAssignedToMe);
+  // Tickets rendered on this report — admins see all tickets; technicians see only
+  // their assigned tickets; users see their own (already filtered on load)
   const processedTickets = isAdmin
     ? tickets
     : isTechnician
-      ? (myAssignedTickets.length > 0 ? myAssignedTickets : tickets)
+      ? tickets.filter(isTicketAssignedToMe)
       : tickets;
 
   // Filtered tickets based on search and filters
@@ -223,6 +225,17 @@ const MttrReport = () => {
                     Updated: {lastUpdated.toLocaleTimeString()}
                   </span>
                 )}
+                <select
+                  value={windowDays}
+                  onChange={(e) => setWindowDays(Number(e.target.value))}
+                  className="bg-white text-gray-700 border border-gray-200 px-3 py-2 rounded-lg text-sm font-medium shadow-sm cursor-pointer"
+                  aria-label="MTTR reporting period"
+                >
+                  <option value={7}>Last 7 days</option>
+                  <option value={30}>Last 30 days</option>
+                  <option value={90}>Last 90 days</option>
+                  <option value={0}>All time</option>
+                </select>
                 <button
                   onClick={() => loadMttrReportData()}
                   disabled={loading || refreshing}
@@ -244,18 +257,20 @@ const MttrReport = () => {
             {/* USER EXPERIENCE: 5 Key Resolution & Turnaround Cards */}
             {!isTechnician && (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5 animate-fadeIn">
-                {/* 0. Avg Work Time (technician effort metric) */}
+                {/* 0. Avg Resolution Time (MTTR: created -> resolved for this user's tickets) */}
                 <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 flex items-center justify-between">
                   <div>
-                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Avg Work Time</p>
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Avg Resolution Time</p>
                     <h3 className="text-2xl font-bold text-purple-600 mt-1">
                       {(() => {
-                        const fmt = formatMttrValue(mttrData?.avg_work_time_hours);
+                        const fmt = formatMttrValue(mttrData?.personal_mttr_hours);
                         return fmt ? `${fmt.value} ${fmt.unitLabel}` : '—';
                       })()}
                     </h3>
                     <p className="text-xs text-purple-600 font-medium mt-0.5">
-                      {mttrData?.work_time_logged_count > 0 ? `${mttrData.work_time_logged_count} tickets logged` : 'Hands-on effort per ticket'}
+                      {mttrData?.personal_resolved_count > 0
+                        ? `From ticket created to resolved • ${mttrData.personal_resolved_count} resolved`
+                        : 'No resolved tickets in this period'}
                     </p>
                   </div>
                   <div className="w-11 h-11 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center">
@@ -308,7 +323,7 @@ const MttrReport = () => {
                   <div className="flex items-center justify-between">
                     <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Resolution Rate</p>
                     <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
-                      {processedTickets.length === 0 ? 'N/A' : 'High Efficiency'}
+                      {processedTickets.length === 0 ? 'N/A' : `${processedTickets.length} tickets`}
                     </span>
                   </div>
                   <div className="mt-2">
@@ -316,7 +331,7 @@ const MttrReport = () => {
                       <h3 className="text-2xl font-bold text-gray-900">
                         {processedTickets.length > 0
                           ? `${Math.round((processedTickets.filter(t => ['resolved', 'closed'].includes(t.status?.toLowerCase())).length / processedTickets.length) * 100)}%`
-                          : '100%'}
+                          : '—'}
                       </h3>
                       <span className="text-xs text-gray-500">Success Ratio</span>
                     </div>
@@ -324,7 +339,7 @@ const MttrReport = () => {
                       <div
                         className="bg-emerald-500 h-2 rounded-full transition-all duration-500"
                         style={{
-                          width: `${processedTickets.length > 0 ? (processedTickets.filter(t => ['resolved', 'closed'].includes(t.status?.toLowerCase())).length / processedTickets.length) * 100 : 100}%`
+                          width: `${processedTickets.length > 0 ? (processedTickets.filter(t => ['resolved', 'closed'].includes(t.status?.toLowerCase())).length / processedTickets.length) * 100 : 0}%`
                         }}
                       ></div>
                     </div>

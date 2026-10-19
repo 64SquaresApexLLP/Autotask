@@ -10,7 +10,7 @@ Date: 2025-08-15
 """
 
 import logging
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 from datetime import datetime
 
 # Configure logging

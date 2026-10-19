@@ -8,7 +8,7 @@ import os
 import re
 import sys
 import threading
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
 
 if hasattr(sys.stdout, 'reconfigure'):
@@ -137,7 +137,7 @@ class IntakeClassificationAgent:
         Returns:
             str: Unique ticket number in format TYYYYMMDD.NNNN
         """
-        now = datetime.now()
+        now = datetime.now(timezone.utc)  # ticket-number date in UTC, same clock as CREATED_AT
         date_part = now.strftime("%Y%m%d")
 
         # Get next sequential number for today by checking database
@@ -626,7 +626,7 @@ class IntakeClassificationAgent:
         """
         print(f"\n--- Processing New Ticket: '{ticket_title}' ---")
 
-        creation_time = datetime.now()
+        creation_time = datetime.now(timezone.utc).replace(tzinfo=None)
         ticket_date = creation_time.strftime("%Y-%m-%d")
         ticket_time = creation_time.strftime("%H:%M:%S")
 

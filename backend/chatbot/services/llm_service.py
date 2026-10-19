@@ -82,6 +82,7 @@ class LLMService:
             # makes the CLIENT cancel the query with 000604 (57014).
             self.snowflake_connection = snowflake.connector.connect(
                 **connection_params,
+                session_parameters={'TIMEZONE': 'UTC'},
                 login_timeout=15,
                 network_timeout=settings.cortex_query_timeout
             )

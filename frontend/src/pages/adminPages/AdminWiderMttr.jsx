@@ -2,8 +2,6 @@ import { useState, useEffect } from 'react';
 import { 
   Timer, 
   ShieldCheck, 
-  TrendingDown, 
-  TrendingUp,
   BarChart3, 
   Clock, 
   Award, 
@@ -33,6 +31,8 @@ const AdminWiderMttr = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
+  // MTTR reporting window in days (0 = all time)
+  const [windowDays, setWindowDays] = useState(30);
 
   const loadWiderMttr = async (isSilent = false) => {
     try {
@@ -40,7 +40,7 @@ const AdminWiderMttr = () => {
       else setRefreshing(true);
       setError('');
 
-      const res = await adminService.getWiderMttrReport();
+      const res = await adminService.getWiderMttrReport(windowDays);
       setMttrData(res);
     } catch (err) {
       console.error('Failed to load wider MTTR data:', err);
@@ -53,11 +53,13 @@ const AdminWiderMttr = () => {
 
   useEffect(() => {
     loadWiderMttr();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [windowDays]);
 
   // Derived values — computed from API data only, no hardcoded fallbacks
   const globalMttr    = mttrData?.global_mttr_hours ?? null;
-  const targetMttr    = mttrData?.target_mttr_hours ?? null;
+  const medianMttr    = mttrData?.median_mttr_hours ?? null;
+  const p90Mttr       = mttrData?.p90_mttr_hours ?? null;
   const slaRate       = mttrData?.sla_compliance_rate ?? null;
   const auditedCount  = mttrData?.total_audited_tickets ?? null;
 
@@ -77,9 +79,6 @@ const AdminWiderMttr = () => {
     : null;
 
   // How much faster than target (only show when we have real data)
-  const fasterPct = (globalMttr !== null && targetMttr)
-    ? Math.round(((targetMttr - globalMttr) / targetMttr) * 100)
-    : null;
 
   // Priority chart — only use API values, no inline fallbacks
   const priorityChartData = [
@@ -114,7 +113,8 @@ Generated on: ${new Date().toLocaleString()}
 =====================================================
 
 1. GLOBAL FLEET METRICS
-- Global Fleet MTTR: ${fmtMttrText(mttrData.global_mttr_hours)} (SLA Target: ${mttrData.target_mttr_hours} Hours)
+- Global Fleet MTTR: ${fmtMttrText(mttrData.global_mttr_hours)} (median ${fmtMttrText(mttrData.median_mttr_hours)}, P90 ${fmtMttrText(mttrData.p90_mttr_hours)})
+- Period: ${mttrData.window_days ? `last ${mttrData.window_days} days` : 'all time'}
 - SLA Compliance Rate: ${mttrData.sla_compliance_rate}%
 - Audited Operational Tickets: ${mttrData.total_audited_tickets}
 
@@ -186,6 +186,17 @@ ${(mttrData.technician_leaderboard || []).map((t, idx) => `  #${idx + 1} ${t.nam
               </div>
 
               <div className="flex items-center space-x-3">
+                <select
+                  value={windowDays}
+                  onChange={(e) => setWindowDays(Number(e.target.value))}
+                  className="bg-white text-gray-700 border border-gray-200 px-3 py-2.5 rounded-lg text-sm font-medium shadow-sm cursor-pointer"
+                  aria-label="MTTR reporting period"
+                >
+                  <option value={7}>Last 7 days</option>
+                  <option value={30}>Last 30 days</option>
+                  <option value={90}>Last 90 days</option>
+                  <option value={0}>All time</option>
+                </select>
                 <button
                   onClick={handleExportExecutiveReport}
                   disabled={!mttrData}
@@ -223,16 +234,11 @@ ${(mttrData.technician_leaderboard || []).map((t, idx) => `  #${idx + 1} ${t.nam
                   <h3 className="text-2xl font-bold text-gray-900 mt-1">
                     {globalMttr !== null ? fmtMttrText(globalMttr) : '—'}
                   </h3>
-                  {fasterPct !== null ? (
-                    <p className={`text-xs font-medium mt-0.5 flex items-center gap-1 ${fasterPct >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
-                      {fasterPct >= 0
-                        ? <><TrendingDown className="w-3.5 h-3.5" /> {fasterPct}% Faster than Target ({targetMttr}h)</>
-                        : <><TrendingUp className="w-3.5 h-3.5" /> {Math.abs(fasterPct)}% Slower than Target ({targetMttr}h)</>
-                      }
-                    </p>
-                  ) : (
-                    <p className="text-xs text-gray-400 mt-0.5">SLA Target: {targetMttr}h</p>
-                  )}
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    {globalMttr !== null
+                      ? `Median ${fmtMttrShort(medianMttr)} • P90 ${fmtMttrShort(p90Mttr)} • created → resolved`
+                      : 'No resolved tickets in this period'}
+                  </p>
                 </div>
                 <div className="w-11 h-11 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center">
                   <Timer className="w-5 h-5" />
@@ -264,7 +270,9 @@ ${(mttrData.technician_leaderboard || []).map((t, idx) => `  #${idx + 1} ${t.nam
                   <h3 className="text-2xl font-bold text-gray-900 mt-1">
                     {auditedCount !== null ? auditedCount : '—'}
                   </h3>
-                  <p className="text-xs text-gray-500 mt-0.5">Historical resolution cycles</p>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    Resolved in period{mttrData?.excluded_count ? ` • ${mttrData.excluded_count} excluded (bad timestamps)` : ''}
+                  </p>
                 </div>
                 <div className="w-11 h-11 rounded-xl bg-blue-50 text-[#00ABE4] flex items-center justify-center">
                   <Zap className="w-5 h-5" />

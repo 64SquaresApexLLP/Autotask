@@ -28,6 +28,7 @@ const statusColors = {
   new: 'bg-yellow-100 text-yellow-800',
   'in-progress': 'bg-blue-100 text-blue-800',
   'in progress': 'bg-blue-100 text-blue-800',
+  'on site': 'bg-indigo-100 text-indigo-800',
   resolved: 'bg-green-100 text-green-800',
   closed: 'bg-gray-100 text-gray-800',
 };
@@ -554,6 +555,7 @@ function ViewTicket() {
                       <option value="">Select new status</option>
                       <option value="Open">{wasResolvedLike ? 'Reopen - Open' : 'Open'}</option>
                       <option value="In Progress">{wasResolvedLike ? 'Reopen - In Progress' : 'In Progress'}</option>
+                      <option value="On Site">On Site (arrived at customer)</option>
                       <option value="Resolved">Resolved</option>
                       <option value="Closed">Closed</option>
                     </select>

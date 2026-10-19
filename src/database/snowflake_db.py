@@ -130,6 +130,9 @@ class SnowflakeConnection:
                 'database': self.sf_database,
                 'schema': self.sf_schema,
                 'role': self.sf_role,
+                # All timestamps are stored and compared in UTC, whatever the
+                # account/user TIMEZONE default is (Snowflake's is America/Los_Angeles).
+                'session_parameters': {'TIMEZONE': 'UTC'},
             }
 
             if use_keypair:

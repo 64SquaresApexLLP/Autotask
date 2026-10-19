@@ -50,7 +50,7 @@ export const adminService = {
     return await apiService.get('/admin/reports/master-tickets');
   },
 
-  async getWiderMttrReport() {
-    return await apiService.get('/admin/reports/wider-mttr');
+  async getWiderMttrReport(days = 30) {
+    return await apiService.get('/admin/reports/wider-mttr', { days });
   }
 };

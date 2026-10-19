@@ -1,5 +1,5 @@
 import React from 'react';
-import { Timer, Zap, CheckCircle2, Clock } from 'lucide-react';
+import { Timer, Zap, CheckCircle2, Clock, Truck, AlertTriangle } from 'lucide-react';
 
 /**
  * Priority SLA standard thresholds in hours
@@ -143,7 +143,12 @@ const MttrCard = ({ mttrData, isTechnician = true, className = '' }) => {
     personal_mttr_hours = null,
     avg_work_time_hours = null,
     work_time_logged_count = 0,
-    by_priority = {}
+    by_priority = {},
+    personal = {},
+    team = {},
+    window_days = null,
+    excluded_count = 0,
+    work_time_ignored_count = 0
   } = mttrData;
 
   const priorities = [
@@ -164,6 +169,17 @@ const MttrCard = ({ mttrData, isTechnician = true, className = '' }) => {
   const overallMttr = formatMttrValue(overall_mttr_hours);
   const criticalMttr = formatMttrValue(by_priority.Critical?.mttr_hours);
   const workTimeMttr = formatMttrValue(avg_work_time_hours);
+  const short = (h) => formatMttrValue(h)?.short ?? '—';
+  const periodLabel = window_days ? `last ${window_days} days` : 'all time';
+
+  // Lifecycle split of MTTR: waiting for assignment -> travel -> on-site work
+  const stages = [
+    { key: 'mtta_hours', label: 'Waiting for assignment', color: 'bg-sky-400' },
+    { key: 'ack_hours', label: 'Time to acknowledge', color: 'bg-amber-400' },
+    { key: 'travel_hours', label: 'Travel to site', color: 'bg-indigo-400' },
+    { key: 'onsite_hours', label: 'On-site work', color: 'bg-emerald-500' }
+  ];
+  const stageTotal = stages.reduce((sum, st) => sum + (Number(personal[st.key]) || 0), 0);
 
   return (
     <div className={`bg-white rounded-xl shadow-sm border border-gray-200 p-5 lg:p-6 ${className}`}>
@@ -178,9 +194,7 @@ const MttrCard = ({ mttrData, isTechnician = true, className = '' }) => {
               Mean Time to Resolution (MTTR)
             </h2>
             <p className="text-xs text-gray-500">
-              {isTechnician
-                ? 'Average ticket resolution speed by priority tier'
-                : 'Expected turnaround times and historical resolution speed'}
+              Time from ticket created to resolved, averaged over resolved tickets ({periodLabel})
             </p>
           </div>
         </div>
@@ -192,7 +206,7 @@ const MttrCard = ({ mttrData, isTechnician = true, className = '' }) => {
         <div className="p-4 rounded-xl bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-100">
           <div className="text-xs font-semibold uppercase tracking-wider text-blue-700 mb-1 flex items-center gap-1.5">
             <Zap className="w-3.5 h-3.5" />
-            {isTechnician ? 'Your Avg Resolution' : 'Personal MTTR'}
+            {isTechnician ? 'Your MTTR' : 'Personal MTTR'}
           </div>
           <div className="flex items-baseline space-x-2">
             <span className="text-3xl font-extrabold text-blue-900">
@@ -200,12 +214,17 @@ const MttrCard = ({ mttrData, isTechnician = true, className = '' }) => {
             </span>
             {personalMttr && <span className="text-sm font-semibold text-blue-700">{personalMttr.unitLabel}</span>}
           </div>
+          <p className="text-xs text-blue-600/80 mt-1">
+            {personal.resolved_count
+              ? `Median ${short(personal.median_hours)} • P90 ${short(personal.p90_hours)} • ${personal.resolved_count} resolved`
+              : 'No resolved tickets in this period'}
+          </p>
         </div>
 
         <div className="p-4 rounded-xl bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-100">
           <div className="text-xs font-semibold uppercase tracking-wider text-emerald-700 mb-1 flex items-center gap-1.5">
             <CheckCircle2 className="w-3.5 h-3.5" />
-            {isTechnician ? 'Overall MTTR' : 'Overall Turnaround'}
+            {isTechnician ? 'Team MTTR' : 'Overall Turnaround'}
           </div>
           <div className="flex items-baseline space-x-2">
             <span className="text-3xl font-extrabold text-emerald-900">
@@ -214,7 +233,9 @@ const MttrCard = ({ mttrData, isTechnician = true, className = '' }) => {
             {overallMttr && <span className="text-sm font-semibold text-emerald-700">{overallMttr.unitLabel}</span>}
           </div>
           <p className="text-xs text-emerald-600/80 mt-1">
-            {isTechnician ? 'Average resolution time across all tickets' : 'Average turnaround across all your tickets'}
+            {team.resolved_count
+              ? `All technicians • median ${short(team.median_hours)} • ${team.resolved_count} resolved`
+              : 'No resolved tickets in this period'}
           </p>
         </div>
 
@@ -244,10 +265,45 @@ const MttrCard = ({ mttrData, isTechnician = true, className = '' }) => {
             {workTimeMttr && <span className="text-sm font-semibold text-amber-700">{workTimeMttr.unitLabel}</span>}
           </div>
           <p className="text-xs text-amber-600/80 mt-1">
-            {isTechnician ? 'Hands-on effort per ticket' : 'Technician effort per ticket'}
+            Logged hands-on effort (not MTTR)
             {work_time_logged_count > 0 ? ` • ${work_time_logged_count} logged` : ''}
           </p>
         </div>
+      </div>
+
+      {/* Where the time goes: assignment -> travel -> on-site work */}
+      <div className="border-t border-gray-100 pt-5 mb-6">
+        <h4 className="text-xs font-bold uppercase tracking-wider text-gray-600 flex items-center gap-1.5 mb-3">
+          <Truck className="w-3.5 h-3.5 text-[#00ABE4]" />
+          Where the resolution time goes
+        </h4>
+        {personal.stage_sample_count > 0 && stageTotal > 0 ? (
+          <>
+            <div className="flex h-3 w-full rounded-full overflow-hidden bg-gray-100">
+              {stages.map(st => (
+                <div
+                  key={st.key}
+                  className={st.color}
+                  style={{ width: `${((Number(personal[st.key]) || 0) / stageTotal) * 100}%` }}
+                  title={`${st.label}: ${short(personal[st.key])}`}
+                />
+              ))}
+            </div>
+            <div className="flex flex-wrap gap-x-5 gap-y-1 mt-2 text-xs text-gray-600">
+              {stages.map(st => (
+                <span key={st.key} className="flex items-center gap-1.5">
+                  <span className={`w-2.5 h-2.5 rounded-sm ${st.color}`} />
+                  {st.label}: <strong className="text-gray-900">{short(personal[st.key])}</strong>
+                </span>
+              ))}
+              <span className="text-gray-400">Based on {personal.stage_sample_count} tickets with arrival time recorded</span>
+            </div>
+          </>
+        ) : (
+          <p className="text-xs text-gray-500">
+            Not enough data yet. Recorded once tickets have an assignment time and the technician marks "On Site".
+          </p>
+        )}
       </div>
 
       {/* Breakdown by Priority with Radial Gauge Speedometers */}
@@ -311,6 +367,7 @@ const MttrCard = ({ mttrData, isTechnician = true, className = '' }) => {
                       {hours !== null ? formatMttrValue(hours)?.short : '—'}
                     </span>
                     <span className="text-[9px] font-semibold text-gray-400 uppercase">MTTR</span>
+                    <span className="text-[9px] text-gray-400">target {SLA_TARGETS[key.toLowerCase()]}h</span>
                   </div>
                 </div>
 
@@ -332,6 +389,16 @@ const MttrCard = ({ mttrData, isTechnician = true, className = '' }) => {
           })}
         </div>
       </div>
+
+      {(excluded_count > 0 || work_time_ignored_count > 0) && (
+        <p className="mt-5 text-[11px] text-gray-500 flex items-start gap-1.5">
+          <AlertTriangle className="w-3.5 h-3.5 text-amber-500 flex-shrink-0 mt-px" />
+          <span>
+            Data quality: {excluded_count > 0 && `${excluded_count} ticket(s) left out because they were resolved before they were created or have no timestamps. `}
+            {work_time_ignored_count > 0 && `${work_time_ignored_count} ticket(s) logged more work time than they were open, so their work time is ignored.`}
+          </span>
+        </p>
+      )}
     </div>
   );
 };

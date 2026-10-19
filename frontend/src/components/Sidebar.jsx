@@ -1,5 +1,5 @@
 import React from 'react';
-import { Settings, Wrench, FileText, Users, BarChart3, CheckSquare, AlertCircle, List, Timer, Network, ShieldCheck, Truck } from 'lucide-react';
+import { Settings, Wrench, FileText, Users, BarChart3, CheckSquare, AlertCircle, List, Timer, Network, ShieldCheck, Truck, BookOpen } from 'lucide-react';
 import useAuth from '../hooks/useAuth';
 import { NavLink } from 'react-router-dom';
 
@@ -17,6 +17,7 @@ const Sidebar = () => {
     { icon: List, label: 'My Tickets', path: '/technician/my-tickets' },
     { icon: Network, label: 'Network Ontology', path: '/technician/ontology' },
     { icon: Timer, label: 'MTTR Report', path: '/technician/mttr-report' },
+    { icon: BookOpen, label: 'Ticket Time Guide', path: '/technician/guide' },
   ];
 
   const adminMenuItems = [

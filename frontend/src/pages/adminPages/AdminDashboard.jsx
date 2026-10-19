@@ -56,7 +56,7 @@ const AdminDashboard = () => {
       const resT = allTicketsRes.length > 0 
         ? allTicketsRes.filter(t => ['resolved', 'closed'].includes((t.status || '').toLowerCase())).length 
         : (masterTicketsRes?.resolved_count || 0);
-      const rate = totalT > 0 ? Math.round((resT / totalT) * 100) : 100;
+      const rate = totalT > 0 ? Math.round((resT / totalT) * 100) : null;
 
       setUsersCount(usersRes.total || (usersRes.users?.length || 0));
       setTechsCount(techsRes.total || (techsRes.technicians?.length || 0));
@@ -141,7 +141,7 @@ const AdminDashboard = () => {
                   <p className="text-xs text-emerald-600 font-medium mt-0.5 flex items-center gap-1">
                     <span>{ticketsData?.resolved_count ?? 0} Resolved</span>
                     <span className="text-gray-400">•</span>
-                    <span className="text-blue-600">{ticketsData?.resolution_rate ?? 0}% Rate</span>
+                    <span className="text-blue-600">{ticketsData?.resolution_rate != null ? `${ticketsData.resolution_rate}%` : '—'} Rate</span>
                   </p>
                 </div>
                 <div className="w-12 h-12 rounded-xl bg-blue-50 text-[#00ABE4] flex items-center justify-center group-hover:scale-110 transition-transform">
