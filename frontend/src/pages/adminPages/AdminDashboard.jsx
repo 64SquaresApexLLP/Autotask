@@ -24,10 +24,8 @@ import Sidebar from '../../components/Sidebar';
 import { formatMttrValue } from '../../components/MttrCard';
 import { adminService } from '../../services/adminService';
 import { ticketService } from '../../services/ticketService';
-import useAuth from '../../hooks/useAuth';
 
 const AdminDashboard = () => {
-  const { user } = useAuth();
   const navigate = useNavigate();
 
   const [loading, setLoading] = useState(true);

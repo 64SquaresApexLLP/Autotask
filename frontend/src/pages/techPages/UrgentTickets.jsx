@@ -9,7 +9,6 @@ import { technicianService } from '../../services/technicianService';
 
 const UrgentTickets = () => {
   const { user } = useAuth();
-  const [selectedTicket, setSelectedTicket] = useState(null);
   const [toastMessage, setToastMessage] = useState(null);
 
   // Real data state
@@ -257,7 +256,7 @@ const UrgentTickets = () => {
       const technicianId = currentUser?.username || currentUser?.id || 'Unknown';
 
       // Escalate ticket with notification to manager
-      const escalationResult = await ticketService.escalateTicket(ticketNumber, {
+      await ticketService.escalateTicket(ticketNumber, {
         escalation_reason: 'Due date exceeded - urgent ticket requires management attention',
         technician_id: technicianId
       });

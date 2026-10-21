@@ -3,14 +3,12 @@ import { useSearchParams } from 'react-router-dom';
 import Header from '../../components/Header';
 import Sidebar from '../../components/Sidebar';
 import ChatButton from '../../components/ChatButton';
-import { Search, Filter, Download, UserCheck, RotateCcw, AlertTriangle, Calendar, User, Loader2, Clock, CheckCircle, AlertCircle, Tag, X } from 'lucide-react';
+import { Search, Filter, Download, UserCheck, RotateCcw, AlertTriangle, Calendar, User, Loader2, AlertCircle, Tag, X } from 'lucide-react';
 import { ticketService } from '../../services/ticketService.js';
 import { technicianService } from '../../services/technicianService.js';
 import { ApiError } from '../../services/api.js';
-import useAuth from '../../hooks/useAuth';
 
 const AllTickets = () => {
-  const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const [tickets, setTickets] = useState([]);
   const [technicians, setTechnicians] = useState([]);
@@ -126,20 +124,6 @@ const AllTickets = () => {
 
     return matchesSearch && matchesStatus && matchesPriority && matchesAssigned && matchesCategory;
   });
-
-  const getStatusIcon = (status) => {
-    switch (status?.toLowerCase()) {
-      case 'completed':
-      case 'resolved':
-        return <CheckCircle className="w-5 h-5 text-green-600" />;
-      case 'in_progress':
-      case 'progress':
-      case 'assigned':
-        return <Clock className="w-5 h-5 text-blue-600" />;
-      default:
-        return <AlertCircle className="w-5 h-5 text-yellow-600" />;
-    }
-  };
 
   const getPriorityColor = (priority) => {
     switch (priority?.toLowerCase()) {
@@ -369,7 +353,7 @@ const AllTickets = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredTickets.map((ticket, idx) => (
+                    {filteredTickets.map((ticket) => (
                       <tr key={ticket.id} className="border-b hover:bg-gray-50">
                         <td className="p-3 font-mono text-xs font-bold text-slate-700">#{ticket.id}</td>
                         <td className="p-3">

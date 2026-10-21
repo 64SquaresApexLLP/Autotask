@@ -278,8 +278,6 @@ export default function GoogleNetworkMap({
       );
     }
 
-    const alarmsList = graphData.alarms || [];
-    const subsList = graphData.subs || [];
     const ponsList = graphData.pons || [];
 
     const result = [];
@@ -955,7 +953,6 @@ export default function GoogleNetworkMap({
         if (node.type === 'Site' && onSelectSite) onSelectSite(node);
 
         if (infoWindowRef.current) {
-          const isSite = node.type === 'Site';
           const isDevice = node.type === 'Device';
           const isAlarm = node.type === 'Alarm';
           const isSub = node.type === 'Subscriber';
@@ -1045,7 +1042,7 @@ export default function GoogleNetworkMap({
         left: isDirectoryOpen ? 340 : 50,
         right: 50
       });
-      const listener = window.google.maps.event.addListenerOnce(map, 'idle', () => {
+      window.google.maps.event.addListenerOnce(map, 'idle', () => {
         if (map.getZoom() > 14) map.setZoom(14);
       });
     }

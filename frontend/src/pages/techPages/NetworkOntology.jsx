@@ -4,12 +4,7 @@ import Sidebar from '../../components/Sidebar';
 import ChatButton from '../../components/ChatButton';
 import Neo4jGraphCanvas from '../../components/Neo4jGraphCanvas';
 import GoogleNetworkMap from '../../components/GoogleNetworkMap';
-import {
-  normalizeGraphData,
-  getNodeType,
-  getNodeDisplayLabel,
-  getNodeTypeColor
-} from '../../utils/graphNormalizer';
+import { normalizeGraphData } from '../../utils/graphNormalizer';
 import {
   Terminal,
   Play,
@@ -55,7 +50,6 @@ import {
   User
 } from 'lucide-react';
 import { ontologyService } from '../../services/ontologyService.js';
-import useAuth from '../../hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
 
 // Defect & Incident Quick-Filter Badges (Technician 1-Click Investigation)
@@ -197,7 +191,6 @@ const AURA_TABS = [
 
 export default function NetworkOntology() {
   const navigate = useNavigate();
-  const { user } = useAuth();
   const fitRef = useRef(null);
 
   // Active Defect Filter Badge

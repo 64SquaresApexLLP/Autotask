@@ -263,45 +263,6 @@ export default function Neo4jGraphCanvas({
     return { nodes: finalNodes, links: finalLinks };
   }, [nodes, relationships, hiddenNodeTypes, hiddenRelTypes]);
 
-  // Handle Resize and Auto-Fit
-  const handleFit = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas || !nodesRef.current.length) return;
-    const rect = canvas.getBoundingClientRect();
-    if (rect.width === 0 || rect.height === 0) return;
-
-    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-    nodesRef.current.forEach(n => {
-      if (n.x < minX) minX = n.x;
-      if (n.x > maxX) maxX = n.x;
-      if (n.y < minY) minY = n.y;
-      if (n.y > maxY) maxY = n.y;
-    });
-
-    const graphWidth = Math.max(maxX - minX, 500) + 260; // Padding for tier labels on left
-    const graphHeight = Math.max(maxY - minY, 500) + 140;
-
-    const scaleX = (rect.width * 0.88) / graphWidth;
-    const scaleY = (rect.height * 0.88) / graphHeight;
-    const scale = Math.max(0.2, Math.min(scaleX, scaleY, 1.15));
-
-    const centerX = (minX + maxX) / 2;
-    const centerY = (minY + maxY) / 2;
-
-    transformRef.current = {
-      scale,
-      x: rect.width / 2 - centerX * scale,
-      y: rect.height / 2 - centerY * scale
-    };
-    renderFrame();
-  }, []);
-
-  useEffect(() => {
-    if (onFitRequested) {
-      onFitRequested.current = handleFit;
-    }
-  }, [onFitRequested, handleFit]);
-
   // Master Render Frame
   const renderFrame = useCallback(() => {
     const canvas = canvasRef.current;
@@ -496,7 +457,6 @@ export default function Neo4jGraphCanvas({
     // Draw Rectangular Nodes
     simNodes.forEach(node => {
       const isSelected = selectedNode && node.id === selectedNode.id;
-      const isHovered = hoveredNodeRef.current && node.id === hoveredNodeRef.current.id;
       const isPathNode = activePathNodeIds.has(node.id);
       
       const searchMatch = searchQuery && (
@@ -613,6 +573,45 @@ export default function Neo4jGraphCanvas({
     ctx.restore();
   }, [selectedNode, searchQuery, activeDefectFilter]);
 
+  // Handle Resize and Auto-Fit
+  const handleFit = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || !nodesRef.current.length) return;
+    const rect = canvas.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return;
+
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    nodesRef.current.forEach(n => {
+      if (n.x < minX) minX = n.x;
+      if (n.x > maxX) maxX = n.x;
+      if (n.y < minY) minY = n.y;
+      if (n.y > maxY) maxY = n.y;
+    });
+
+    const graphWidth = Math.max(maxX - minX, 500) + 260; // Padding for tier labels on left
+    const graphHeight = Math.max(maxY - minY, 500) + 140;
+
+    const scaleX = (rect.width * 0.88) / graphWidth;
+    const scaleY = (rect.height * 0.88) / graphHeight;
+    const scale = Math.max(0.2, Math.min(scaleX, scaleY, 1.15));
+
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2;
+
+    transformRef.current = {
+      scale,
+      x: rect.width / 2 - centerX * scale,
+      y: rect.height / 2 - centerY * scale
+    };
+    renderFrame();
+  }, [renderFrame]);
+
+  useEffect(() => {
+    if (onFitRequested) {
+      onFitRequested.current = handleFit;
+    }
+  }, [onFitRequested, handleFit]);
+
   // Load Graph Deterministically (No Physics)
   useEffect(() => {
     nodesRef.current = visibleData.nodes;
@@ -628,8 +627,7 @@ export default function Neo4jGraphCanvas({
 
   // Pulse animation loop
   useEffect(() => {
-    let lastTime = performance.now();
-    const loop = (now) => {
+    const loop = () => {
       pulseOffsetRef.current = (pulseOffsetRef.current + 0.018) % 1;
       if (selectedNode || activeDefectFilter) {
         renderFrame();

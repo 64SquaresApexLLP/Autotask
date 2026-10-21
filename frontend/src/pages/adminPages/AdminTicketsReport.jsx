@@ -20,7 +20,6 @@ import Header from '../../components/Header';
 import Sidebar from '../../components/Sidebar';
 import { adminService } from '../../services/adminService';
 import { ticketService } from '../../services/ticketService';
-import { calculateTicketSla } from '../../components/MttrCard';
 
 const AdminTicketsReport = () => {
   const [reportData, setReportData] = useState(null);
@@ -116,7 +115,6 @@ const AdminTicketsReport = () => {
   const totalCount = tickets.length;
   const resolvedCount = tickets.filter(t => ['resolved', 'closed'].includes((t.status || '').toLowerCase())).length;
   const inProgressCount = tickets.filter(t => ['in progress', 'on site', 'investigating', 'pending', 'assigned'].includes((t.status || '').toLowerCase())).length;
-  const openCount = totalCount - resolvedCount - inProgressCount;
   const resolutionRate = totalCount > 0 ? Math.round((resolvedCount / totalCount) * 100) : null;
 
   return (

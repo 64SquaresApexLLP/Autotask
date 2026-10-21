@@ -1324,6 +1324,7 @@ Date: 2025-07-10
 
 import json
 import logging
+import re
 import time
 import os
 from datetime import datetime, timedelta, timezone
@@ -1384,6 +1385,7 @@ class SkillAnalysis:
     required_skills: List[str]
     complexity_level: int
     specialized_knowledge: List[str]
+    primary_skill: Optional[str] = None  # the one skill that matters most (one of CTTC_SKILLS)
 
 @dataclass
 class SkillMatchResult:
@@ -1392,6 +1394,8 @@ class SkillMatchResult:
     classification: str  # "Strong", "Mid", "Weak"
     matched_skills: List[str]
     missing_skills: List[str]
+    core_score: int = 0  # primary + secondary skill points, before bonuses
+    bonus: int = 0       # specialization + role bonus (tie-break only)
 
 @dataclass
 class AssignmentCandidate:
@@ -1405,6 +1409,53 @@ class AssignmentCandidate:
 class AssignmentError(Exception):
     """Custom exception for assignment issues"""
     pass
+
+# The CTTC skill catalog. Technician SKILLS in CTTC_MOCK_TECHNICIAN_DATA use exactly these names,
+# and ticket skill analysis (Cortex or fallback) is restricted to them so matching is exact.
+CTTC_SKILLS = [
+    'Optical & Fiber Trunks',
+    'Hardware Diagnostics',
+    'Core MX960 Architecture',
+    'Network Routing & EVPN',
+    'Emergency Triage',
+]
+
+# Keywords used when Cortex is unavailable to pick the ticket's skills.
+CTTC_SKILL_KEYWORDS = {
+    'Optical & Fiber Trunks': ['fiber', 'fibre', 'optical', 'los', 'pon', 'gpon', 'ont', 'dbm', 'light level',
+                               'attenuation', 'splice', 'splitter', 'drop cable', 'trunk'],
+    'Hardware Diagnostics': ['hardware', 'cpe', 'modem', 'router', 'power supply', 'wall wart', 'controller',
+                             'wiring', 'phone', 'dial tone', 'device', 'replacement', 'printer', 'cabinet'],
+    'Core MX960 Architecture': ['mx960', 'juniper', 'core', 'olt', 'line card', 'chassis', 'backbone',
+                                'uplink', '400g', 'zr'],
+    'Network Routing & EVPN': ['routing', 'route', 'evpn', 'bgp', 'ospf', 'mpls', 'gateway', 'subnet', 'vlan',
+                               'latency', 'jitter', 'packet loss', 'slow', 'speed', 'dns', 'network', 'vpn'],
+    'Emergency Triage': ['emergency', 'outage', 'triage', 'alarm', 'monitoring', 'noc', 'offline', 'homes',
+                         'customers down', 'critical'],
+}
+
+# Points for the skill score. Holding the primary skill alone is a Strong (>=70) match.
+PRIMARY_SKILL_POINTS = 70
+SECONDARY_SKILL_POINTS = 10
+MAX_BONUS_POINTS = 10
+
+
+def _norm_skill(name: str) -> str:
+    return re.sub(r'[^a-z0-9]+', ' ', str(name or '').lower()).strip()
+
+
+def canonical_skill(name: str) -> Optional[str]:
+    """Map a free-text skill name to one of CTTC_SKILLS, or None if it isn't one."""
+    n = _norm_skill(name)
+    for skill in CTTC_SKILLS:
+        if n == _norm_skill(skill):
+            return skill
+    return None
+
+
+def has_keyword(text: str, keyword: str) -> bool:
+    """Whole-word / whole-phrase match, so 'ont' does not match 'front' or 'month'."""
+    return re.search(r'(?<![a-z0-9])' + re.escape(keyword.lower()) + r'(?![a-z0-9])', text) is not None
 
 class AssignmentAgentIntegration:
     """
@@ -1440,40 +1491,13 @@ class AssignmentAgentIntegration:
         if GOOGLE_CALENDAR_AVAILABLE and google_calendar_credentials_path:
             self._initialize_calendar_service()
 
-        # Enhanced fallback skill mapping with related skills for better matching
+        # Fallback: issue type -> default CTTC skill, used when no ticket keywords match
         self.fallback_skill_mapping = {
-            'Hardware': [
-                'Hardware Troubleshooting', 'PC Repair', 'Desktop Support', 'Laptop Repair',
-                'Printer Support', 'Device Configuration', 'Hardware Installation'
-            ],
-            'Software/SaaS': [
-                'Software Installation', 'Application Support', 'Troubleshooting',
-                'Software Configuration', 'SaaS Administration', 'User Training'
-            ],
-            'Network': [
-                'Network Troubleshooting', 'Router Configuration', 'WiFi Setup',
-                'TCP/IP', 'DNS Configuration', 'Network Security', 'VPN Support'
-            ],
-            'Security': [
-                'Security Analysis', 'Antivirus Support', 'Access Control',
-                'Firewall Configuration', 'Threat Detection', 'Security Monitoring'
-            ],
-            'Database': [
-                'SQL Database', 'Database Administration', 'Data Recovery',
-                'MySQL', 'PostgreSQL', 'Database Backup', 'Query Optimization'
-            ],
-            'Email': [
-                'Email Configuration', 'Outlook Support', 'Exchange Server',
-                'SMTP Configuration', 'Mail Server', 'Calendar Management'
-            ],
-            'Server': [
-                'Windows Server', 'Linux Server', 'Server Administration',
-                'Active Directory', 'System Administration', 'Server Monitoring'
-            ],
-            'General': [
-                'General IT Support', 'Help Desk', 'User Support',
-                'Basic Troubleshooting', 'Technical Support'
-            ]
+            'Hardware': ['Hardware Diagnostics'],
+            'Network': ['Network Routing & EVPN'],
+            'Telephony': ['Hardware Diagnostics'],
+            'Software/SaaS': ['Emergency Triage'],
+            'General': ['Emergency Triage'],
         }
 
         # Role to issue type mapping for better technician matching
@@ -1548,7 +1572,7 @@ class AssignmentAgentIntegration:
             logger.error(f"Error extracting required skills: {str(e)}")
             # Fallback to basic skill mapping
             issue_type = ticket_data.get('issue_type', 'General')
-            return self.fallback_skill_mapping.get(issue_type, ['General IT Support'])
+            return self.fallback_skill_mapping.get(issue_type, self.fallback_skill_mapping['General'])
 
     def get_technician_data(self) -> List[Dict]:
         """
@@ -2068,11 +2092,13 @@ class AssignmentAgentIntegration:
             logger.warning("No candidates provided for selection")
             return None
 
-        # Sort candidates by priority tier first, then by current workload (ascending), then by skill match percentage (descending)
+        # Skill decides first; workload only breaks ties between equally skilled technicians,
+        # and the specialization/role bonus only breaks ties after that.
         sorted_candidates = sorted(candidates, key=lambda c: (
             c.priority_tier,
+            -c.skill_match.core_score,
             c.technician.current_workload,
-            -c.skill_match.match_percentage
+            -c.skill_match.bonus
         ))
 
         best_candidate = sorted_candidates[0]
@@ -2440,14 +2466,25 @@ class AssignmentAgentIntegration:
             - Ticket Category: {ticket.ticket_category}
             - Priority: {ticket.priority}
 
-            Provide your analysis in JSON format:
+            Pick the skills ONLY from this exact list (copy the names exactly):
+            {json.dumps(CTTC_SKILLS)}
+
+            - "primary_skill": the ONE skill that most directly resolves the ticket. For on-site physical
+              work (damaged cabinets, cut cables, drop repairs, device swaps) prefer the field skill
+              (Optical & Fiber Trunks or Hardware Diagnostics) over Emergency Triage.
+            - Faults on OLT or core-router equipment (OLT chassis, line cards, uplinks, core optics,
+              Juniper MX960) are Core MX960 Architecture, even when the fault is hardware or temperature.
+              Hardware Diagnostics is for customer-premises equipment (ONT, CPE, routers, power, wiring).
+            - "secondary_skills": 0 to 2 other skills from the list that would also help. Do not repeat
+              the primary skill and do not list a skill just to cover every domain.
+
+            Respond with JSON only:
             {{
-                "required_skills": ["primary_skill1", "primary_skill2", "related_skill1", "related_skill2"],
+                "primary_skill": "<one name from the list>",
+                "secondary_skills": ["<name from the list>"],
                 "complexity_level": 3,
                 "specialized_knowledge": ["specific_area1", "specific_area2"]
             }}
-
-            Focus on skills that match telecommunications field and NOC engineers.
             """
 
             # Execute Cortex LLM query
@@ -2474,22 +2511,27 @@ class AssignmentAgentIntegration:
                         json_text = response_text[json_start:json_end]
                         analysis_json = json.loads(json_text)
 
-                        # Validate and clean the skills list
-                        required_skills = analysis_json.get('required_skills', [])
-                        if isinstance(required_skills, list):
-                            # Remove duplicates and clean skill names
-                            cleaned_skills = []
-                            for skill in required_skills:
-                                if isinstance(skill, str) and skill.strip():
-                                    cleaned_skill = skill.strip().title()
-                                    if cleaned_skill not in cleaned_skills:
-                                        cleaned_skills.append(cleaned_skill)
-                            required_skills = cleaned_skills[:8]  # Limit to 8 skills max
+                        # Keep only names from the CTTC skill catalog
+                        primary = canonical_skill(analysis_json.get('primary_skill', ''))
+                        secondary_raw = analysis_json.get('secondary_skills') or []
+                        if not isinstance(secondary_raw, list):
+                            secondary_raw = [secondary_raw]
+                        secondary = []
+                        for name in secondary_raw:
+                            skill = canonical_skill(name)
+                            if skill and skill != primary and skill not in secondary:
+                                secondary.append(skill)
+                        if not primary and secondary:
+                            primary = secondary.pop(0)
+                        if not primary:
+                            logger.warning(f"Cortex returned no valid CTTC skill: {analysis_json}")
+                            return self._fallback_skill_analysis(ticket)
 
                         return SkillAnalysis(
-                            required_skills=required_skills,
+                            required_skills=[primary] + secondary[:2],
                             complexity_level=int(analysis_json.get('complexity_level', 3)),
-                            specialized_knowledge=analysis_json.get('specialized_knowledge', [])
+                            specialized_knowledge=analysis_json.get('specialized_knowledge', []),
+                            primary_skill=primary
                         )
                     else:
                         logger.warning("No valid JSON found in Cortex LLM response")
@@ -2526,43 +2568,17 @@ class AssignmentAgentIntegration:
         """
         logger.info("Using enhanced fallback skill analysis")
 
-        # Start with base skills from issue type
-        base_skills = self.fallback_skill_mapping.get(ticket.issue_type,
-                                                     self.fallback_skill_mapping.get('General', []))
+        description_lower = f"{ticket.issue} {ticket.description} {ticket.sub_issue_type}".lower()
 
-        # Analyze description and issue for additional relevant skills
-        additional_skills = []
-        description_lower = (ticket.description + " " + ticket.issue).lower()
-
-        # Keyword-based skill detection
-        skill_keywords = {
-            'Optical & Fiber Trunks': ['fiber', 'optical', 'los', 'pon', 'ont', 'light', 'signal', 'attenuation', 'splice'],
-            'Hardware Diagnostics': ['hardware', 'cpe', 'modem', 'power supply', 'wall wart', 'controller', 'wiring', 'phone', 'device'],
-            'Core MX960 Architecture': ['mx960', 'juniper', 'core', 'olt', 'backbone', 'chassis'],
-            'Network Routing & EVPN': ['routing', 'route', 'evpn', 'bgp', 'ospf', 'gateway', 'subnet', 'vlan', 'network', 'wifi'],
-            'Emergency Triage': ['emergency', 'outage', 'triage', 'incident', 'alarm', 'monitoring', 'noc'],
-            'Email Configuration': ['email', 'outlook', 'exchange', 'mail', 'smtp'],
-            'Network Troubleshooting': ['network', 'wifi', 'internet', 'connectivity', 'router'],
-            'Hardware Troubleshooting': ['hardware', 'computer', 'pc', 'laptop', 'device'],
-            'Software Installation': ['software', 'install', 'application', 'program', 'app'],
-            'Security Analysis': ['security', 'virus', 'malware', 'firewall', 'antivirus']
-        }
-
-        for skill, keywords in skill_keywords.items():
-            if any(keyword in description_lower for keyword in keywords):
-                if skill not in base_skills and skill not in additional_skills:
-                    additional_skills.append(skill)
-
-        # Combine base skills with detected additional skills
-        required_skills = base_skills + additional_skills[:4]  # Limit additional skills
-
-        # Remove duplicates while preserving order
-        seen = set()
-        unique_skills = []
-        for skill in required_skills:
-            if skill not in seen:
-                seen.add(skill)
-                unique_skills.append(skill)
+        # Rank CTTC skills by how many of their keywords (whole words) appear in the ticket
+        hits = {skill: sum(1 for kw in kws if has_keyword(description_lower, kw))
+                for skill, kws in CTTC_SKILL_KEYWORDS.items()}
+        ranked = [sk for sk in sorted(CTTC_SKILLS, key=lambda sk: -hits[sk]) if hits[sk] > 0]
+        if not ranked:
+            ranked = list(self.fallback_skill_mapping.get(ticket.issue_type,
+                                                          self.fallback_skill_mapping['General']))
+        primary_skill = ranked[0]
+        unique_skills = ranked[:3]
 
         # Determine complexity based on priority, issue type, and keywords
         complexity_mapping = {
@@ -2620,7 +2636,8 @@ class AssignmentAgentIntegration:
         return SkillAnalysis(
             required_skills=unique_skills,
             complexity_level=final_complexity,
-            specialized_knowledge=specialized_knowledge
+            specialized_knowledge=specialized_knowledge,
+            primary_skill=primary_skill
         )
 
     def _get_available_technicians(self) -> List[TechnicianData]:
@@ -2686,28 +2703,24 @@ class AssignmentAgentIntegration:
 
         for technician in technicians:
             try:
-                # Calculate enhanced skill match using similarity-based matching
-                skill_match = self.calculate_skill_match(skill_analysis.required_skills, technician.skills)
+                # Skill score: the primary skill decides, secondary skills add a little
+                skill_match = self._score_skills(skill_analysis, technician.skills)
 
-                # Calculate specialization match bonus
+                # Specialization / role bonus: small, and only used to separate equal matches
                 specialization_bonus = self._calculate_specialization_match(
                     ticket, technician.specializations
                 )
-
-                # Calculate role alignment bonus
                 role_bonus = self._calculate_role_alignment(ticket, technician.role)
+                bonus = min(MAX_BONUS_POINTS, specialization_bonus + role_bonus)
 
-                # Apply bonuses to skill match percentage (max 100%)
-                enhanced_match_percentage = min(100,
-                    skill_match.match_percentage + specialization_bonus + role_bonus
-                )
-
-                # Update skill match with enhanced percentage
+                enhanced_match_percentage = min(100, skill_match.core_score + bonus)
                 enhanced_skill_match = SkillMatchResult(
                     match_percentage=enhanced_match_percentage,
                     classification=self._get_classification_from_percentage(enhanced_match_percentage),
                     matched_skills=skill_match.matched_skills,
-                    missing_skills=skill_match.missing_skills
+                    missing_skills=skill_match.missing_skills,
+                    core_score=skill_match.core_score,
+                    bonus=bonus
                 )
 
                 # Check shift schedule availability
@@ -2724,7 +2737,8 @@ class AssignmentAgentIntegration:
 
                 # Create detailed reasoning string
                 reasoning = (f"Technician: {technician.name}, "
-                           f"Base Skill Match: {skill_match.match_percentage}%, "
+                           f"Primary Skill: {skill_analysis.primary_skill}, "
+                           f"Base Skill Match: {skill_match.core_score}%, "
                            f"Specialization Bonus: +{specialization_bonus}%, "
                            f"Role Bonus: +{role_bonus}%, "
                            f"Final Match: {enhanced_skill_match.classification} ({enhanced_match_percentage}%), "
@@ -2751,93 +2765,85 @@ class AssignmentAgentIntegration:
         logger.info(f"Evaluated {len(candidates)} candidates for ticket {ticket.ticket_id}")
         return candidates
 
+    def _score_skills(self, skill_analysis: SkillAnalysis, technician_skills: List[str]) -> SkillMatchResult:
+        """
+        Score a technician against the ticket's skills using the CTTC skill catalog.
+
+        Holding the primary skill is worth PRIMARY_SKILL_POINTS (a Strong match on its own);
+        each secondary skill held adds SECONDARY_SKILL_POINTS. Names are compared exactly
+        (after normalising case/punctuation), so no fuzzy matching inflates the score.
+        """
+        held = {canonical_skill(sk) or sk for sk in (technician_skills or [])}
+        required = [canonical_skill(sk) or sk for sk in (skill_analysis.required_skills or [])]
+        primary = canonical_skill(skill_analysis.primary_skill or '') or (required[0] if required else None)
+
+        if not primary:
+            return SkillMatchResult(match_percentage=50, classification="Weak",
+                                    matched_skills=[], missing_skills=[], core_score=50)
+
+        secondary = [sk for sk in required if sk != primary]
+        matched, missing, core = [], [], 0
+        if primary in held:
+            core += PRIMARY_SKILL_POINTS
+            matched.append(primary)
+        else:
+            missing.append(primary)
+        for sk in secondary:
+            if sk in held:
+                core += SECONDARY_SKILL_POINTS
+                matched.append(sk)
+            else:
+                missing.append(sk)
+
+        core = min(100, core)
+        return SkillMatchResult(match_percentage=core,
+                                classification=self._get_classification_from_percentage(core),
+                                matched_skills=matched, missing_skills=missing, core_score=core)
+
+    @staticmethod
+    def _ticket_text(ticket: TicketData) -> str:
+        return (f"{ticket.ticket_category or ''} {ticket.issue_type or ''} {ticket.sub_issue_type or ''} "
+                f"{ticket.issue or ''} {ticket.description or ''}").lower()
+
     def _calculate_specialization_match(self, ticket: TicketData,
                                        technician_specializations: List[str]) -> int:
         """
-        Calculate specialization match bonus based on full ticket context and technician specializations
-
-        Args:
-            ticket (TicketData): Validated ticket data with category, issue type, title, description
-            technician_specializations (List[str]): Technician's specializations
+        Bonus when the technician's specialization tags appear in the ticket (whole words only).
 
         Returns:
-            int: Bonus percentage (0-25%)
+            int: 3 points per matching tag, capped at 6
         """
         if not technician_specializations:
             return 0
-
-        bonus = 0
-        text_corpus = f"{ticket.ticket_category or ''} {ticket.issue_type or ''} {ticket.sub_issue_type or ''} {ticket.issue or ''} {ticket.description or ''}".lower()
-
-        for specialization in technician_specializations:
-            spec_lower = specialization.lower().strip()
-            if not spec_lower:
-                continue
-
-            # Exact specialization keyword in ticket corpus
-            if spec_lower in text_corpus:
-                if spec_lower in ['ont', 'optical', 'provisioning', 'tr-069', 'bgp', 'evpn', 'olt', 'core infrastructure', 'phone eqpt', 'power supply', 'wall wart', 'wiring', 'controller', 'optical monitoring', 'incident triage']:
-                    bonus += 12
-                else:
-                    bonus += 8
-            # Substring / partial match (e.g. 'phone' in 'phone eqpt')
-            elif any(part in text_corpus for part in spec_lower.split() if len(part) >= 4):
-                bonus += 6
-
-        return min(bonus, 25)  # Cap at 25% bonus
+        text = self._ticket_text(ticket)
+        matches = sum(1 for spec in technician_specializations
+                      if spec and spec.strip() and has_keyword(text, spec.strip()))
+        return min(3 * matches, 6)
 
     def _calculate_role_alignment(self, ticket: TicketData, technician_role: str) -> int:
         """
-        Calculate role alignment bonus based on ticket context and technician role
-
-        Args:
-            ticket (TicketData): Validated ticket data
-            technician_role (str): Technician's role
+        Bonus when the ticket describes the kind of work the technician's role does (whole words only).
 
         Returns:
-            int: Bonus percentage (0-15%)
+            int: 5 if the role fits the ticket, otherwise 0
         """
         if not technician_role:
             return 0
-
-        role_lower = technician_role.lower()
-        text_corpus = f"{ticket.ticket_category or ''} {ticket.issue_type or ''} {ticket.sub_issue_type or ''} {ticket.issue or ''} {ticket.description or ''}".lower()
-
-        # Telecommunications & ISP Specific Roles
-        if 'ont' in role_lower:
-            if any(k in text_corpus for k in ['ont', 'optical', 'fiber', 'pon', 'tr-069', 'signal', 'attenuation', 'los', 'red light', 'broadband']):
-                return 15
-        elif 'truck roll' in role_lower:
-            if any(k in text_corpus for k in ['truck roll', 'hardware', 'wiring', 'cpe', 'drop', 'on-site', 'physical', 'wall wart', 'power supply', 'controller', 'phone', 'dial tone', 'cable', 'modem', 'install']):
-                return 15
-        elif 'olt' in role_lower or 'network engineer' in role_lower:
-            if any(k in text_corpus for k in ['core', 'olt', 'bgp', 'evpn', 'routing', 'mx960', 'switch', 'transit', 'backbone', 'subnet', 'vlan', 'latency', 'gateway', 'dns', 'packet loss', 'outage']):
-                return 15
-        elif 'noc' in role_lower or 'office' in role_lower:
-            if any(k in text_corpus for k in ['noc', 'monitoring', 'triage', 'incident', 'alarm', 'outage', 'telemetry', 'support', 'escalation']):
-                return 12
-
-        # Enterprise IT generic alignment
-        role_alignments = {
-            'network': ['network', 'wifi', 'router', 'connectivity', 'vpn'],
-            'security': ['security', 'antivirus', 'firewall', 'threat', 'malware'],
-            'database': ['database', 'sql', 'data', 'mysql', 'oracle'],
-            'email': ['email', 'outlook', 'exchange', 'mail'],
-            'hardware': ['hardware', 'pc', 'printer', 'device', 'laptop'],
-            'software': ['software', 'application', 'app', 'saas'],
-            'system': ['server', 'system', 'admin', 'windows', 'linux'],
-            'support': ['general', 'help', 'desk', 'user']
-        }
-
-        for role_key, issue_keywords in role_alignments.items():
-            if role_key in role_lower:
-                for keyword in issue_keywords:
-                    if keyword in text_corpus:
-                        return 10
-
-        if any(term in role_lower for term in ['support', 'technician', 'it']):
-            return 4
-
+        role = technician_role.lower()
+        text = self._ticket_text(ticket)
+        role_keywords = [
+            ('truck roll', ['truck roll', 'on-site', 'onsite', 'field', 'cabinet', 'splitter', 'cut', 'damaged',
+                            'drop', 'wiring', 'cable', 'install', 'replacement', 'wall wart', 'power supply',
+                            'controller', 'dial tone', 'modem', 'cpe']),
+            ('ont', ['ont', 'provisioning', 'tr-069', 'optical power', 'dbm', 'los', 'pon', 'gpon']),
+            ('olt', ['olt', 'core', 'mx960', 'juniper', 'bgp', 'evpn', 'line card', 'chassis', 'uplink',
+                     'backbone', 'routing', 'latency', 'packet loss']),
+            ('network engineer', ['core', 'bgp', 'evpn', 'routing', 'latency', 'packet loss', 'vlan', 'subnet']),
+            ('noc', ['noc', 'monitoring', 'triage', 'alarm', 'telemetry', 'escalation', 'outage']),
+        ]
+        for role_key, keywords in role_keywords:
+            if has_keyword(role, role_key) and any(has_keyword(text, kw) for kw in keywords):
+                return 5
         return 0
 
     def _get_classification_from_percentage(self, percentage: int) -> str:

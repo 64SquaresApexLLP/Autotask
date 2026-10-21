@@ -123,209 +123,131 @@ export const ticketService = {
    * Get all tickets with optional filters
    */
   async getAllTickets(filters = {}) {
-    try {
-      const params = {};
+    const params = {};
 
-      // Add filters to params
-      if (filters.status) params.status = filters.status;
-      if (filters.priority) params.priority = filters.priority;
-      if (filters.limit) params.limit = filters.limit;
-      if (filters.offset) params.offset = filters.offset;
-      if (filters.assigned_technician) params.assigned_technician = filters.assigned_technician;
-      if (filters.user_email) params.user_email = filters.user_email;
+    // Add filters to params
+    if (filters.status) params.status = filters.status;
+    if (filters.priority) params.priority = filters.priority;
+    if (filters.limit) params.limit = filters.limit;
+    if (filters.offset) params.offset = filters.offset;
+    if (filters.assigned_technician) params.assigned_technician = filters.assigned_technician;
+    if (filters.user_email) params.user_email = filters.user_email;
 
-      const tickets = await apiService.get(API_ENDPOINTS.TICKETS.GET_ALL, params);
+    const tickets = await apiService.get(API_ENDPOINTS.TICKETS.GET_ALL, params);
 
-      // Transform the data to match frontend expectations
-      return Array.isArray(tickets) ? tickets.map(transformTicketData) : [];
-    } catch (error) {
-      throw error;
-    }
+    // Transform the data to match frontend expectations
+    return Array.isArray(tickets) ? tickets.map(transformTicketData) : [];
   },
 
   /**
    * Get ticket by ID
    */
   async getTicketById(ticketId) {
-    try {
-      const ticket = await apiService.get(API_ENDPOINTS.TICKETS.GET_BY_ID(ticketId));
-      return transformTicketData(ticket);
-    } catch (error) {
-      throw error;
-    }
+    const ticket = await apiService.get(API_ENDPOINTS.TICKETS.GET_BY_ID(ticketId));
+    return transformTicketData(ticket);
   },
 
   /**
    * Create new ticket with extended timeout for agentic workflow
    */
   async createTicket(ticketData) {
-    try {
-      // Use extended timeout for ticket creation due to agentic workflow
-      const ticket = await apiService.post(API_ENDPOINTS.TICKETS.CREATE, ticketData, {
-        timeout: 120000 // 2 minutes timeout for agentic workflow
-      });
-      return transformTicketData(ticket);
-    } catch (error) {
-      throw error;
-    }
-  },
-
-  /**
-   * Update existing ticket (status, priority, and/or work note)
-   */
-  async updateTicket(ticketId, updateData) {
-    try {
-      return await apiService.patch(API_ENDPOINTS.TICKETS.UPDATE(ticketId), updateData);
-    } catch (error) {
-      throw error;
-    }
-  },
-
-  /**
-   * Append a work note to the ticket's resolution log
-   */
-  async addWorkNote(ticketId, workNote) {
-    try {
-      return await apiService.patch(API_ENDPOINTS.TICKETS.UPDATE(ticketId), { work_note: workNote });
-    } catch (error) {
-      throw error;
-    }
+    // Use extended timeout for ticket creation due to agentic workflow
+    const ticket = await apiService.post(API_ENDPOINTS.TICKETS.CREATE, ticketData, {
+      timeout: 120000 // 2 minutes timeout for agentic workflow
+    });
+    return transformTicketData(ticket);
   },
 
   /**
    * Send an update email to the ticket's customer
    */
   async emailCustomer(ticketId, message) {
-    try {
-      return await apiService.post(API_ENDPOINTS.TICKETS.EMAIL_CUSTOMER(ticketId), { message });
-    } catch (error) {
-      throw error;
-    }
+    return await apiService.post(API_ENDPOINTS.TICKETS.EMAIL_CUSTOMER(ticketId), { message });
   },
 
   /**
    * Delete ticket
    */
   async deleteTicket(ticketId) {
-    try {
-      return await apiService.delete(API_ENDPOINTS.TICKETS.DELETE(ticketId));
-    } catch (error) {
-      throw error;
-    }
+    return await apiService.delete(API_ENDPOINTS.TICKETS.DELETE(ticketId));
   },
 
   /**
    * Assign ticket to technician
    */
   async assignTicket(ticketId, technicianId) {
-    try {
-      return await apiService.post(`/tickets/${ticketId}/assign`, {
-        technician_id: technicianId
-      });
-    } catch (error) {
-      throw error;
-    }
+    return await apiService.post(`/tickets/${ticketId}/assign`, {
+      technician_id: technicianId
+    });
   },
 
   /**
    * Get ticket statistics
    */
   async getTicketStatistics() {
-    try {
-      return await apiService.get(API_ENDPOINTS.TICKETS.STATISTICS);
-    } catch (error) {
-      throw error;
-    }
+    return await apiService.get(API_ENDPOINTS.TICKETS.STATISTICS);
   },
 
   /**
    * Get tickets assigned to current user (for technicians)
    */
   async getMyTickets() {
-    try {
-      return await apiService.get(API_ENDPOINTS.TICKETS.GET_ALL, {
-        assigned_to_me: true
-      });
-    } catch (error) {
-      throw error;
-    }
+    return await apiService.get(API_ENDPOINTS.TICKETS.GET_ALL, {
+      assigned_to_me: true
+    });
   },
 
   /**
    * Get urgent tickets (high and critical priority)
    */
   async getUrgentTickets() {
-    try {
-      return await apiService.get(API_ENDPOINTS.TICKETS.GET_ALL, {
-        priority: 'high,critical'
-      });
-    } catch (error) {
-      throw error;
-    }
+    return await apiService.get(API_ENDPOINTS.TICKETS.GET_ALL, {
+      priority: 'high,critical'
+    });
   },
 
   /**
    * Update ticket fields (status, priority, work note, time spent)
    */
   async updateTicket(ticketId, updateData = {}) {
-    try {
-      const cleanId = String(ticketId).replace('.', '-');
-      return await apiService.patch(`/tickets/${cleanId}`, updateData);
-    } catch (error) {
-      throw error;
-    }
+    const cleanId = String(ticketId).replace('.', '-');
+    return await apiService.patch(`/tickets/${cleanId}`, updateData);
   },
 
   /**
    * Update ticket status (with optional time spent)
    */
   async updateTicketStatus(ticketId, status, timeSpent = null) {
-    try {
-      const cleanId = String(ticketId).replace('.', '-');
-      const payload = { status };
-      if (timeSpent) payload.time_spent = timeSpent;
-      return await apiService.patch(`/tickets/${cleanId}`, payload);
-    } catch (error) {
-      throw error;
-    }
+    const cleanId = String(ticketId).replace('.', '-');
+    const payload = { status };
+    if (timeSpent) payload.time_spent = timeSpent;
+    return await apiService.patch(`/tickets/${cleanId}`, payload);
   },
 
   /**
    * Add work note (with optional time spent)
    */
   async addWorkNote(ticketId, workNote, timeSpent = null) {
-    try {
-      const cleanId = String(ticketId).replace('.', '-');
-      const payload = { work_note: workNote };
-      if (timeSpent) payload.time_spent = timeSpent;
-      return await apiService.patch(`/tickets/${cleanId}`, payload);
-    } catch (error) {
-      throw error;
-    }
+    const cleanId = String(ticketId).replace('.', '-');
+    const payload = { work_note: workNote };
+    if (timeSpent) payload.time_spent = timeSpent;
+    return await apiService.patch(`/tickets/${cleanId}`, payload);
   },
 
   /**
    * Add comment to ticket
    */
   async addTicketComment(ticketId, comment) {
-    try {
-      return await apiService.post(`${API_ENDPOINTS.TICKETS.GET_BY_ID(ticketId)}/comments`, {
-        comment: comment
-      });
-    } catch (error) {
-      throw error;
-    }
+    return await apiService.post(`${API_ENDPOINTS.TICKETS.GET_BY_ID(ticketId)}/comments`, {
+      comment: comment
+    });
   },
 
   /**
    * Escalate ticket to management
    */
   async escalateTicket(ticketId, escalationData = {}) {
-    try {
-      return await apiService.post(`/tickets/${ticketId}/escalate`, escalationData);
-    } catch (error) {
-      throw error;
-    }
+    return await apiService.post(`/tickets/${ticketId}/escalate`, escalationData);
   },
 
   /**
@@ -337,34 +259,26 @@ export const ticketService = {
   async getSimilarTickets(ticket, limit = 5) {
     if (!ticket) return [];
 
-    try {
-      const allTickets = await this.getAllTickets({ limit: 100 });
+    const allTickets = await this.getAllTickets({ limit: 100 });
 
-      const scored = allTickets
-        .filter((t) => t.id && t.id !== ticket.id)
-        .map((t) => {
-          let score = 0;
-          if (ticket.issue_type && t.issue_type && ticket.issue_type === t.issue_type) score += 3;
-          if (ticket.sub_issue_type && t.sub_issue_type && ticket.sub_issue_type === t.sub_issue_type) score += 2;
-          if (ticket.ticket_category && t.ticket_category && ticket.ticket_category === t.ticket_category) score += 2;
-          if (ticket.priority && t.priority && ticket.priority.toLowerCase() === t.priority.toLowerCase()) score += 1;
-          return { ticket: t, score };
-        })
-      return scored.slice(0, limit).map((entry) => entry.ticket);
-    } catch (error) {
-      throw error;
-    }
+    const scored = allTickets
+      .filter((t) => t.id && t.id !== ticket.id)
+      .map((t) => {
+        let score = 0;
+        if (ticket.issue_type && t.issue_type && ticket.issue_type === t.issue_type) score += 3;
+        if (ticket.sub_issue_type && t.sub_issue_type && ticket.sub_issue_type === t.sub_issue_type) score += 2;
+        if (ticket.ticket_category && t.ticket_category && ticket.ticket_category === t.ticket_category) score += 2;
+        if (ticket.priority && t.priority && ticket.priority.toLowerCase() === t.priority.toLowerCase()) score += 1;
+        return { ticket: t, score };
+      })
+    return scored.slice(0, limit).map((entry) => entry.ticket);
   },
 
   /**
    * Get MTTR (Mean Time to Resolution) analytics and SLA metrics
    */
   async getMttrAnalytics(params = {}) {
-    try {
-      return await apiService.get(API_ENDPOINTS.ANALYTICS.MTTR, params);
-    } catch (error) {
-      throw error;
-    }
+    return await apiService.get(API_ENDPOINTS.ANALYTICS.MTTR, params);
   }
 };
 

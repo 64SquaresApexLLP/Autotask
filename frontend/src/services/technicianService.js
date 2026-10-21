@@ -11,55 +11,35 @@ export const technicianService = {
    * Get all technicians
    */
   async getAllTechnicians() {
-    try {
-      return await apiService.get(API_ENDPOINTS.TECHNICIANS.GET_ALL);
-    } catch (error) {
-      throw error;
-    }
+    return await apiService.get(API_ENDPOINTS.TECHNICIANS.GET_ALL);
   },
 
   /**
    * Get technician by ID
    */
   async getTechnicianById(technicianId) {
-    try {
-      return await apiService.get(API_ENDPOINTS.TECHNICIANS.GET_BY_ID(technicianId));
-    } catch (error) {
-      throw error;
-    }
+    return await apiService.get(API_ENDPOINTS.TECHNICIANS.GET_BY_ID(technicianId));
   },
 
   /**
    * Get technician assignments
    */
   async getTechnicianAssignments(technicianId) {
-    try {
-      return await apiService.get(API_ENDPOINTS.TECHNICIANS.ASSIGNMENTS(technicianId));
-    } catch (error) {
-      throw error;
-    }
+    return await apiService.get(API_ENDPOINTS.TECHNICIANS.ASSIGNMENTS(technicianId));
   },
 
   /**
    * Get technician workload statistics
    */
   async getTechnicianWorkload() {
-    try {
-      return await apiService.get(`${API_ENDPOINTS.TECHNICIANS.BASE}/workload`);
-    } catch (error) {
-      throw error;
-    }
+    return await apiService.get(`${API_ENDPOINTS.TECHNICIANS.BASE}/workload`);
   },
 
   /**
    * Get available technicians for assignment
    */
   async getAvailableTechnicians() {
-    try {
-      return await apiService.get(`${API_ENDPOINTS.TECHNICIANS.BASE}/available`);
-    } catch (error) {
-      throw error;
-    }
+    return await apiService.get(`${API_ENDPOINTS.TECHNICIANS.BASE}/available`);
   }
 };
 

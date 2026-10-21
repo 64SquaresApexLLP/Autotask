@@ -9,8 +9,6 @@ export { default as ticketService } from './ticketService.js';
 export { default as technicianService } from './technicianService.js';
 
 // Re-export for convenience
-export {
-  authService as auth,
-  ticketService as tickets,
-  technicianService as technicians
-};
+export { default as auth } from './authService.js';
+export { default as tickets } from './ticketService.js';
+export { default as technicians } from './technicianService.js';

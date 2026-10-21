@@ -166,7 +166,7 @@ class ApiService {
             return await retryResponse.json();
           }
           return await retryResponse.text();
-        } catch (refreshError) {
+        } catch {
           // Refresh itself failed – clear auth state, fire event so AuthContext
           // can redirect the user to the login page.
           this.removeAuthToken();

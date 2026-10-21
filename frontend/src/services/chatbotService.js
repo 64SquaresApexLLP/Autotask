@@ -56,73 +56,53 @@ export const chatbotService = {
    * Get detailed information for a specific ticket
    */
   async getTicketDetails(ticketId) {
-    try {
-      return await this.makeRequest(`/chatbot/tickets/${ticketId}`, {
-        method: 'GET'
-      });
-    } catch (error) {
-      throw error;
-    }
+    return await this.makeRequest(`/chatbot/tickets/${ticketId}`, {
+      method: 'GET'
+    });
   },
 
   /**
    * Search for tickets based on criteria
    */
   async searchTickets(searchParams) {
-    try {
-      const queryString = new URLSearchParams(searchParams).toString();
-      return await this.makeRequest(`/chatbot/tickets/search?${queryString}`, {
-        method: 'GET'
-      });
-    } catch (error) {
-      throw error;
-    }
+    const queryString = new URLSearchParams(searchParams).toString();
+    return await this.makeRequest(`/chatbot/tickets/search?${queryString}`, {
+      method: 'GET'
+    });
   },
 
   /**
    * Find tickets similar to the specified ticket number
    */
   async getSimilarTickets(ticketNumber) {
-    try {
-      return await this.makeRequest(`/chatbot/tickets/similar/${ticketNumber}`, {
-        method: 'GET'
-      });
-    } catch (error) {
-      throw error;
-    }
+    return await this.makeRequest(`/chatbot/tickets/similar/${ticketNumber}`, {
+      method: 'GET'
+    });
   },
 
   /**
    * Send a chat message to the chatbot (no authentication required)
    */
   async sendChatMessage(message, context = {}) {
-    try {
-      return await this.makeRequest('/chatbot/chat', {
-        method: 'POST',
-        body: JSON.stringify({
-          message: message,
-          session_id: `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-          message_type: context.type || 'user',
-          timestamp: new Date().toISOString()
-        })
-      });
-    } catch (error) {
-      throw error;
-    }
+    return await this.makeRequest('/chatbot/chat', {
+      method: 'POST',
+      body: JSON.stringify({
+        message: message,
+        session_id: `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        message_type: context.type || 'user',
+        timestamp: new Date().toISOString()
+      })
+    });
   },
 
   /**
    * Get FAQ information
    */
   async getFAQ() {
-    try {
-      // Use the chat endpoint to get FAQ
-      return await this.sendChatMessage('Show me frequently asked questions and help topics', {
-        type: 'faq_request'
-      });
-    } catch (error) {
-      throw error;
-    }
+    // Use the chat endpoint to get FAQ
+    return await this.sendChatMessage('Show me frequently asked questions and help topics', {
+      type: 'faq_request'
+    });
   }
 };
 

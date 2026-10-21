@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Header from '../../components/Header';
 import Sidebar from '../../components/Sidebar';
@@ -48,6 +48,7 @@ const Analytics = () => {
   const [error, setError] = useState('');
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [lastUpdated, setLastUpdated] = useState(null);
+  const hasDataRef = useRef(false);
 
   // Load analytics data for current technician or all
   const loadAnalytics = useCallback(async (isSilent = false) => {
@@ -68,10 +69,11 @@ const Analytics = () => {
 
       const data = await response.json();
       setAnalyticsData(data);
+      hasDataRef.current = true;
       setLastUpdated(new Date());
     } catch (err) {
       console.error('Failed to load analytics:', err);
-      if (!analyticsData) {
+      if (!hasDataRef.current) {
         setError('Unable to load real-time analytics. Please check your backend connection.');
       }
     } finally {
